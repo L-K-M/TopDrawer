@@ -76,6 +76,15 @@ final class TabController {
     /// A more generous reveal margin used while a *file drag* nears a concealed tab's
     /// edge, so spring-loading has a real pill to target rather than a 3 pt sliver.
     private static let peekSlop: CGFloat = 60
+    /// The drag pasteboard's `changeCount` stamped at the latest observed mouse-down.
+    /// A drag only counts as a *file* drag when the count has advanced past this —
+    /// the pasteboard retains the previous drag's files, so content alone would
+    /// false-positive the peek on every plain window drag / text selection.
+    private var dragPasteboardCountAtPress = NSPasteboard(name: .drag).changeCount
+    /// Cached "does the drag pasteboard hold file URLs" answer for a given
+    /// `changeCount`, so the out-of-process read runs once per drag session rather
+    /// than once per mouse-moved event.
+    private var dragPasteboardCanReadFiles: (count: Int, canRead: Bool)?
     /// The guide the dragged tab is currently magnetized to, so the alignment haptic
     /// fires once per snap rather than every mouse-move while snapped.
     private var lastSnapGuide: Double?
@@ -463,13 +472,31 @@ final class TabController {
         wc.restingFrame.insetBy(dx: -Self.peekSlop, dy: -Self.peekSlop)
     }
 
-    /// Whether a file drag is currently in progress (left button down with file URLs
-    /// on the drag pasteboard) — gates the drag-over peek. The button check avoids a
-    /// false positive from the drag pasteboard retaining the last drag's contents.
+    /// Whether a file drag is currently in progress — gates the drag-over peek.
+    /// A real drag session writes the drag pasteboard *after* the mouse-down, so a
+    /// file drag is: left button down, AND the drag pasteboard's `changeCount` has
+    /// advanced past the value stamped at the press. The pasteboard *retaining* the
+    /// previous drag's files proves nothing — without the stamp, any window drag or
+    /// text selection after the session's first file drag false-positived the peek.
+    /// The (out-of-process) content read happens once per drag session, cached by
+    /// `changeCount`, not once per mouse-moved event.
     private func fileBeingDragged() -> Bool {
         guard NSEvent.pressedMouseButtons & 0x1 != 0 else { return false }
-        return NSPasteboard(name: .drag).canReadObject(forClasses: [NSURL.self],
-                                                       options: [.urlReadingFileURLsOnly: true])
+        let pasteboard = NSPasteboard(name: .drag)
+        let count = pasteboard.changeCount
+        guard count != dragPasteboardCountAtPress else { return false }
+        if let cached = dragPasteboardCanReadFiles, cached.count == count { return cached.canRead }
+        let canRead = pasteboard.canReadObject(forClasses: [NSURL.self],
+                                               options: [.urlReadingFileURLsOnly: true])
+        dragPasteboardCanReadFiles = (count, canRead)
+        return canRead
+    }
+
+    /// Stamps the drag pasteboard's `changeCount` at a mouse-down, so a subsequent
+    /// drag counts as a *file* drag only if the pasteboard was rewritten after the
+    /// press (i.e. a real drag session started).
+    private func stampDragPasteboardAtPress() {
+        dragPasteboardCountAtPress = NSPasteboard(name: .drag).changeCount
     }
 
     /// Applies one tab's reveal decision: reveal it, or — when it should hide —
@@ -536,13 +563,24 @@ final class TabController {
             // `.leftMouseDragged` (in addition to `.mouseMoved`) so a file drag from
             // Finder toward a concealed tab triggers the peek even though the cursor
             // isn't "moving" in the plain sense while the button is held.
-            revealMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
-                self?.handleRevealMouseMoved()
+            // `.leftMouseDown` stamps the drag pasteboard's changeCount at the press,
+            // which is what lets `fileBeingDragged` tell a real file drag apart from
+            // a window drag over the previous drag's leftover pasteboard.
+            revealMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseDown]) { [weak self] event in
+                if event.type == .leftMouseDown {
+                    self?.stampDragPasteboardAtPress()
+                } else {
+                    self?.handleRevealMouseMoved()
+                }
             }
         }
         if revealMonitorLocal == nil {
-            revealMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-                self?.handleRevealMouseMoved()
+            revealMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { [weak self] event in
+                if event.type == .leftMouseDown {
+                    self?.stampDragPasteboardAtPress()
+                } else {
+                    self?.handleRevealMouseMoved()
+                }
                 return event
             }
         }
