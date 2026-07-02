@@ -230,6 +230,13 @@ final class DrawerWindowController {
         panel.setFrame(openFrame, display: true)
     }
 
+    /// Shows or clears the undo toast, inside `withAnimation` so the banner's
+    /// declared move-and-fade transition actually plays (a bare `@Published` write
+    /// from AppKit code pops it in with no animation).
+    func setUndoToast(_ toast: DrawerUndo?) {
+        withAnimation(.easeOut(duration: 0.2)) { model.undoToast = toast }
+    }
+
     /// Hides the drawer over `duration` seconds with a fade + small inward slide.
     func hide(duration: TimeInterval) {
         guard isVisible else { return }
@@ -239,6 +246,8 @@ final class DrawerWindowController {
             panel.alphaValue = 1
             model.items = []
             model.clearSearch()
+            model.undoToast = nil
+            model.ejectingItemIDs = []
             return
         }
         let end = EdgeLayout.nudgedDrawerFrame(edge: currentEdge, openFrame: openFrame, by: Self.nudge)
@@ -254,6 +263,8 @@ final class DrawerWindowController {
             self.panel.alphaValue = 1   // reset while hidden, ready for next open
             self.model.items = []
             self.model.clearSearch()
+            self.model.undoToast = nil
+            self.model.ejectingItemIDs = []
         })
     }
 
@@ -277,6 +288,15 @@ final class DrawerWindowController {
         model.slotFrames = [:]
         model.itemsTruncated = false
         model.sparklingItemIDs = []
+        if !preserveLiveNotes {
+            // A fresh open (or a switch to another tab) must not inherit the previous
+            // drawer session's transients: its undo toast — whose Undo would act on
+            // another tab's files — or its in-flight eject spinners. A refresh of the
+            // already-open tab (`preserveLiveNotes`) keeps both: the toast belongs to
+            // this session, and Eject All refreshes the listing mid-flight.
+            model.undoToast = nil
+            model.ejectingItemIDs = []
+        }
         model.title = tab.title
         model.colorHex = tab.colorHex
         model.columns = max(1, tab.gridColumns)
