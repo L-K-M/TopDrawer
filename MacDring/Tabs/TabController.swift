@@ -1031,8 +1031,8 @@ final class TabController {
     /// a few seconds (cancelling any previous one).
     private func showUndoToast(_ message: String, action: @escaping () -> Void) {
         undoToastClearItem?.cancel()
-        drawer.model.undoToast = DrawerUndo(message: message, action: action)
-        let clear = DispatchWorkItem { [weak self] in self?.drawer.model.undoToast = nil }
+        drawer.setUndoToast(DrawerUndo(message: message, action: action))
+        let clear = DispatchWorkItem { [weak self] in self?.drawer.setUndoToast(nil) }
         undoToastClearItem = clear
         DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: clear)
     }
