@@ -42,6 +42,25 @@ final class DrawerGroupingTests: XCTestCase {
         XCTAssertNil(DrawerGrouping.grouped([group, a], draggedID: group.id, ontoTargetID: a.id))
     }
 
+    func testNonLaunchableItemsCannotBeGrouped() {
+        // The Trash (and disks / cloud roots) keep their dedicated slot: they can be
+        // neither the dragged item nor the target of a group.
+        let app = app("Safari", slot: 0)
+        let trash = DrawerItem(kind: .trash, displayName: "Trash", slot: 1)
+        XCTAssertNil(DrawerGrouping.grouped([app, trash], draggedID: app.id, ontoTargetID: trash.id),
+                     "grouping onto the Trash must be rejected")
+        XCTAssertNil(DrawerGrouping.grouped([app, trash], draggedID: trash.id, ontoTargetID: app.id),
+                     "grouping the Trash onto an app must be rejected")
+    }
+
+    func testIsGroupableGate() {
+        XCTAssertTrue(DrawerGrouping.isGroupable(app("A")))
+        XCTAssertTrue(DrawerGrouping.isGroupable(DrawerItem(kind: .url, displayName: "L", url: URL(string: "https://x.example"))))
+        XCTAssertFalse(DrawerGrouping.isGroupable(DrawerItem(kind: .trash, displayName: "Trash")))
+        XCTAssertFalse(DrawerGrouping.isGroupable(DrawerItem(kind: .disk, displayName: "Disk")))
+        XCTAssertFalse(DrawerGrouping.isGroupable(DrawerItem(kind: .group, displayName: "G", children: [app("A"), app("B")])))
+    }
+
     // MARK: Removing / dissolving
 
     func testRemovingFromAThreeChildGroupPopsToTopLevelAndKeepsTheGroup() {

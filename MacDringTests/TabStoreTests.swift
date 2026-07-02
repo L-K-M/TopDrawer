@@ -432,4 +432,118 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(onDisk.version, 1)
         XCTAssertEqual(onDisk.tabs.map(\.title), ["Imported"])
     }
+
+    // MARK: Groups (iOS-folder-like)
+
+    /// Adds a tab holding two loose file items (A at slot 0, B at slot 1) and returns
+    /// their ids for the group tests.
+    private func tabWithTwoItems() -> (tab: Tab, a: UUID, b: UUID) {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let a = DrawerItem(kind: .file, displayName: "A")
+        let b = DrawerItem(kind: .file, displayName: "B")
+        store.addItem(a, toTab: tab.id)   // slot 0
+        store.addItem(b, toTab: tab.id)   // slot 1
+        self.groupStore = store
+        return (tab, a.id, b.id)
+    }
+    /// Retains the store built by `tabWithTwoItems` for the duration of a test.
+    private var groupStore: TabStore!
+
+    func testGroupItemsFormsAGroupAtTheTargetSlot() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+
+        let items = store.tab(id: tab.id)!.items
+        XCTAssertEqual(items.count, 1)                       // A + B collapsed into one group
+        let group = items.first!
+        XCTAssertEqual(group.kind, .group)
+        XCTAssertEqual(group.slot, 1)                        // takes the target's slot
+        XCTAssertEqual(Set(group.children.map(\.id)), [a, b])
+        XCTAssertEqual(Set(group.children.map(\.slot)), [0, 1])
+    }
+
+    func testGroupItemsIntoExistingGroupAppendsChild() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        let c = DrawerItem(kind: .file, displayName: "C")
+        store.addItem(c, toTab: tab.id)                      // slot 2
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)   // group A+B
+        let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
+
+        store.groupItems(draggedID: c, ontoTargetID: groupID, inTab: tab.id)   // drop C into it
+        let group = store.tab(id: tab.id)!.items.first { $0.kind == .group }!
+        XCTAssertEqual(Set(group.children.map(\.id)), [a, b, c])
+        XCTAssertEqual(store.tab(id: tab.id)!.items.count, 1)   // only the group remains
+    }
+
+    func testRenameGroup() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
+
+        store.renameGroup(groupID: groupID, to: "Work", inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)!.items.first!.displayName, "Work")
+    }
+
+    func testRemoveFromGroupDissolvesWhenBelowTwo() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
+
+        // Popping one child leaves a single item, so the group dissolves back to loose
+        // items — both A and B at the top level, none a group.
+        store.removeFromGroup(childID: a, groupID: groupID, inTab: tab.id)
+        let items = store.tab(id: tab.id)!.items
+        XCTAssertEqual(Set(items.map(\.id)), [a, b])
+        XCTAssertTrue(items.allSatisfy { $0.kind != .group })
+    }
+
+    func testRemoveFromGroupKeepsGroupWhenTwoRemain() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        let c = DrawerItem(kind: .file, displayName: "C")
+        store.addItem(c, toTab: tab.id)
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
+        store.groupItems(draggedID: c, ontoTargetID: groupID, inTab: tab.id)   // group of 3
+
+        store.removeFromGroup(childID: c, groupID: groupID, inTab: tab.id)     // → group of 2
+        let items = store.tab(id: tab.id)!.items
+        let group = items.first { $0.kind == .group }
+        XCTAssertNotNil(group)
+        XCTAssertEqual(Set(group!.children.map(\.id)), [a, b])
+        XCTAssertTrue(items.contains { $0.id == c && $0.kind != .group })      // C back at top level
+    }
+
+    func testPlaceItemInGroupSwapsChildSlots() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let group = store.tab(id: tab.id)!.items.first { $0.kind == .group }!
+        // B is slot 0 (the target came first), A is slot 1.
+        let bSlot0 = group.children.first { $0.slot == 0 }!.id
+
+        store.placeItemInGroup(bSlot0, atSlot: 1, groupID: group.id, inTab: tab.id)
+        let after = store.tab(id: tab.id)!.items.first { $0.kind == .group }!
+        XCTAssertEqual(after.children.first { $0.id == bSlot0 }?.slot, 1)      // moved
+        XCTAssertEqual(after.children.first { $0.id != bSlot0 }?.slot, 0)      // the other swapped in
+    }
+
+    func testGroupingAGroupIsRejected() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        let c = DrawerItem(kind: .file, displayName: "C")
+        store.addItem(c, toTab: tab.id)
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
+
+        // Dragging a group onto another item must not nest — a no-op.
+        store.groupItems(draggedID: groupID, ontoTargetID: c, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)!.items.count, 2)   // group + C, unchanged
+        XCTAssertTrue(store.tab(id: tab.id)!.items.contains { $0.id == c && $0.kind != .group })
+    }
 }
