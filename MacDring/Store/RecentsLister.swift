@@ -20,9 +20,13 @@ enum RecentsLister {
     }
 
     /// Pure: maps recent records to launchable items, in order, with sequential slots.
+    /// Ids are stable (target-derived), so a re-list after a launch or Spotlight merge
+    /// preserves each row's identity. The list is de-duplicated by URL upstream, so
+    /// stable ids stay unique within it.
     static func items(from recents: [RecentItem]) -> [DrawerItem] {
         recents.prefix(RecentsStore.limit).enumerated().map { index, recent in
-            DrawerItem(kind: recent.kind, displayName: recent.name, url: recent.url,
+            DrawerItem(id: DrawerItem.stableID(kind: recent.kind, url: recent.url),
+                       kind: recent.kind, displayName: recent.name, url: recent.url,
                        slot: index, date: recent.date)   // last used — shown by the list layout
         }
     }

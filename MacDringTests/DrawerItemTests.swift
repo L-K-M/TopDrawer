@@ -37,4 +37,35 @@ final class DrawerItemTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.displayName, "Example")
     }
+
+    // MARK: Stable transient ids
+
+    func testStableIDIsDeterministicPerKindAndTarget() {
+        let url = URL(fileURLWithPath: "/Users/x/Downloads/report.pdf")
+        XCTAssertEqual(DrawerItem.stableID(kind: .file, url: url),
+                       DrawerItem.stableID(kind: .file, url: url))
+        XCTAssertNotEqual(DrawerItem.stableID(kind: .file, url: url),
+                          DrawerItem.stableID(kind: .folder, url: url))
+        XCTAssertNotEqual(DrawerItem.stableID(kind: .file, url: url),
+                          DrawerItem.stableID(kind: .file, url: URL(fileURLWithPath: "/Users/x/Downloads/other.pdf")))
+    }
+
+    func testStableIDNormalizesEquivalentFileURLs() {
+        let plain = URL(fileURLWithPath: "/usr/bin")
+        let dotted = URL(fileURLWithPath: "/usr/./bin")
+        XCTAssertEqual(DrawerItem.stableID(kind: .folder, url: plain),
+                       DrawerItem.stableID(kind: .folder, url: dotted))
+    }
+
+    func testStableIDWorksForWebURLs() {
+        let a = URL(string: "https://example.com/x")!
+        XCTAssertEqual(DrawerItem.stableID(kind: .url, url: a), DrawerItem.stableID(kind: .url, url: a))
+        XCTAssertNotEqual(DrawerItem.stableID(kind: .url, url: a),
+                          DrawerItem.stableID(kind: .url, url: URL(string: "https://example.com/y")!))
+    }
+
+    func testTransientFileItemKeepsIdentityAcrossRelistings() {
+        let url = URL(fileURLWithPath: "/usr/bin", isDirectory: true)
+        XCTAssertEqual(DrawerItem.transientFileItem(url).id, DrawerItem.transientFileItem(url).id)
+    }
 }
