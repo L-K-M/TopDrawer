@@ -405,4 +405,31 @@ final class TabStoreTests: XCTestCase {
         XCTAssertFalse(store.importData(Data(futureJSON.utf8)))
         XCTAssertEqual(store.tabs.map(\.title), ["Existing"])
     }
+
+    func testImportAdoptsTheImportedVersionSoTheLayoutCanPersistAgain() throws {
+        // Load a document written by a "newer" build — saves are (rightly) disabled…
+        let futureJSON = """
+        { "version": 99,
+          "tabs": [ { "title": "Future",
+                      "anchor": { "displayUUID": "D1", "edge": "right", "position": 0.5 } } ] }
+        """
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(futureJSON.utf8).write(to: storeURL)
+        let store = TabStore(storeURL: storeURL)
+
+        // …then importing a current-version layout must adopt its version too,
+        // so the imported tabs aren't silently unpersistable.
+        let importedJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Imported",
+                      "anchor": { "displayUUID": "D1", "edge": "right", "position": 0.5 } } ] }
+        """
+        XCTAssertTrue(store.importData(Data(importedJSON.utf8)))
+        store.saveNow()
+
+        let onDisk = try JSONDecoder().decode(LauncherDocument.self, from: Data(contentsOf: storeURL))
+        XCTAssertEqual(onDisk.version, 1)
+        XCTAssertEqual(onDisk.tabs.map(\.title), ["Imported"])
+    }
 }
