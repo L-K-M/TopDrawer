@@ -13,6 +13,9 @@ final class DrawerModel: ObservableObject {
     @Published var squareInnerStart: Bool = false
     @Published var squareInnerEnd: Bool = false
     @Published var items: [DrawerItem] = []
+    /// The id of the group whose expanded sub-grid is currently open, or `nil` at the
+    /// top level. Cleared automatically when that group no longer exists (dissolved).
+    @Published var openGroupID: UUID?
     @Published var isDropTargeted: Bool = false
     /// The grid slot a file drag is currently hovering over (drives the per-slot
     /// drop highlight while spring-loaded). `nil` when no slot is targeted.
@@ -78,12 +81,20 @@ final class DrawerModel: ObservableObject {
     /// The keyboard-selected result while searching (Up/Down/Return nav).
     @Published var selectedItemID: UUID?
 
+    /// The group whose sub-grid is expanded (nil at the top level; nil too once that
+    /// group is dissolved, so the view falls back to the top level automatically).
+    var openGroup: DrawerItem? { openGroupID.flatMap { id in items.first { $0.id == id && $0.kind == .group } } }
+    /// The items the drawer body shows: an open group's children, else the top level.
+    var visibleItems: [DrawerItem] { openGroup?.children ?? items }
+
     /// Whether this drawer offers search — a non-notes listing with enough items to
-    /// be worth filtering. Gates both the search bar and keystroke capture.
-    var isSearchable: Bool { kind != .notes && items.count >= DrawerSearch.minItemsToShow }
+    /// be worth filtering (counting items inside groups too). Gates both the search
+    /// bar and keystroke capture.
+    var isSearchable: Bool { kind != .notes && items.flattenedLaunchable().count >= DrawerSearch.minItemsToShow }
     var isSearching: Bool { !searchQuery.isEmpty }
-    /// The items matching the current query (prefix matches first; see `DrawerSearch`).
-    var searchResults: [DrawerItem] { DrawerSearch.filter(items, query: searchQuery) }
+    /// The items matching the current query — groups flattened to their children so
+    /// type-to-find reaches inside them (prefix matches first; see `DrawerSearch`).
+    var searchResults: [DrawerItem] { DrawerSearch.filter(items.flattenedLaunchable(), query: searchQuery) }
 
     /// Clears the query and selection (the search bar's ✕, or Esc while searching).
     func clearSearch() {

@@ -445,7 +445,9 @@ struct DrawerView: View {
             layout: layout ?? model.layout,
             listColumns: columns,
             launchOnSingleClick: preferences.launchOnSingleClick,
-            onLaunch: { model.onLaunch?(item) },
+            onLaunch: {
+                if item.isGroup { model.openGroupID = item.id } else { model.onLaunch?(item) }
+            },
             onReveal: { model.onRevealItem?(item) },
             onRemove: editable ? { model.onRemoveItem?(item) } : nil,
             onRename: editable ? { model.onRenameItem?(item) } : nil,

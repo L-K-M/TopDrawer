@@ -48,6 +48,8 @@ struct ItemView: View {
     @State private var trashCount = 0
     /// Drives the one-shot sparkle fade for a newly-arrived Fresh item.
     @State private var sparkleOpacity: Double = 0
+    /// Up to four child icons for a `.group`'s mini-preview (resolved off the render path).
+    @State private var groupPreviewIcons: [NSImage] = []
 
     /// Finder-style small icon for the list layout, regardless of the grid's icon size.
     static let listIconSize: CGFloat = 16
@@ -69,16 +71,16 @@ struct ItemView: View {
             .contentShape(Rectangle())
             // ⌘-click reveals the target in Finder instead of opening it (Finder-style).
             .onTapGesture(count: launchOnSingleClick ? 1 : 2) {
-                if NSEvent.modifierFlags.contains(.command), item.kind != .url {
+                if NSEvent.modifierFlags.contains(.command), item.kind != .url, !item.isGroup {
                     onReveal()
                 } else {
-                    onLaunch()
+                    onLaunch()   // a group opens instead of launching
                 }
             }
             .help(broken ? "\(item.displayName) — can’t find this item" : item.displayName)
             .contextMenu {
-                Button(item.kind == .disk ? "Open Disk" : "Open", action: onLaunch)
-                if item.kind != .url {
+                Button(groupOrKindOpenTitle, action: onLaunch)
+                if item.kind != .url, !item.isGroup {
                     Button("Reveal in Finder", action: onReveal)
                 }
                 if let onEject {
@@ -90,7 +92,11 @@ struct ItemView: View {
                     Button("Empty Trash…", action: onEmptyTrash)
                         .disabled(TrashInspector.trashIsEmpty())
                 }
-                if onRename != nil || onChangeIcon != nil || onCustomizeIcon != nil {
+                // Groups get rename but no icon customization (their icon is a preview).
+                if let onRename, item.isGroup {
+                    Divider()
+                    Button("Rename…", action: onRename)
+                } else if !item.isGroup, onRename != nil || onChangeIcon != nil || onCustomizeIcon != nil {
                     Divider()
                     if let onRename { Button("Rename…", action: onRename) }
                     if let onCustomizeIcon { Button("Customize Icon…", action: onCustomizeIcon) }
@@ -101,7 +107,7 @@ struct ItemView: View {
                 }
                 if let onRemove {
                     Divider()
-                    Button("Remove", role: .destructive, action: onRemove)
+                    Button(item.isGroup ? "Delete Group" : "Remove", role: .destructive, action: onRemove)
                 }
             }
             // Keyed by the item — a reorder swap into this (slot-keyed, reused) cell,
@@ -109,6 +115,16 @@ struct ItemView: View {
             // `iconNonce` (bumped when the Trash's contents change). Other kinds pass
             // a constant nonce so a Trash event doesn't re-resolve the whole drawer.
             .task(id: ResolveKey(item: item, nonce: item.kind == .trash ? iconNonce : 0, list: layout == .list)) {
+                if item.isGroup {
+                    // A group renders a mini-preview of its children, not a single icon.
+                    // Resolve them off the main actor too (bounded to the first four).
+                    let children = Array(item.children.prefix(4))
+                    groupPreviewIcons = await Task.detached(priority: .userInitiated) {
+                        children.map { ItemView.resolveIcon($0) }
+                    }.value
+                    broken = false
+                    return
+                }
                 // Everything below does filesystem work (bookmark resolution, stat,
                 // icon decode; a per-volume sweep for the Trash count). `.task`
                 // inherits the view's MainActor context, so hop to a detached task —
@@ -159,7 +175,9 @@ struct ItemView: View {
 
     @ViewBuilder
     private var cell: some View {
-        if layout == .grid {
+        if item.isGroup {
+            groupCell
+        } else if layout == .grid {
             VStack(spacing: 5) {
                 iconImage
                 Text(item.displayName)
@@ -186,6 +204,68 @@ struct ItemView: View {
                 }
             }
             .font(.system(size: 12))
+        }
+    }
+
+    // MARK: Group cell
+
+    private var groupOrKindOpenTitle: String {
+        if item.isGroup { return "Open Group" }
+        return item.kind == .disk ? "Open Disk" : "Open"
+    }
+
+    @ViewBuilder
+    private var groupCell: some View {
+        if layout == .grid {
+            VStack(spacing: 5) {
+                groupPreview
+                Text(item.displayName.isEmpty ? "Group" : item.displayName)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: iconSize + 28)
+            }
+        } else {
+            HStack(spacing: 8) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .resizable()
+                    .frame(width: Self.listIconSize, height: Self.listIconSize)
+                    .foregroundStyle(.secondary)
+                Text(item.displayName.isEmpty ? "Group" : item.displayName)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                metaColumn("\(item.children.count) items", width: 96, alignment: .trailing)
+            }
+            .font(.system(size: 12))
+        }
+    }
+
+    /// An iOS-folder-style mini preview: up to four child icons on a rounded, tinted
+    /// tile the same footprint as a normal grid icon.
+    private var groupPreview: some View {
+        let tile = effectiveIconSize
+        let inner = tile * 0.36
+        let gap = tile * 0.08
+        return RoundedRectangle(cornerRadius: tile * 0.22)
+            .fill(.white.opacity(0.16))
+            .frame(width: tile, height: tile)
+            .overlay {
+                VStack(spacing: gap) {
+                    HStack(spacing: gap) { previewSlot(0, inner); previewSlot(1, inner) }
+                    HStack(spacing: gap) { previewSlot(2, inner); previewSlot(3, inner) }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func previewSlot(_ index: Int, _ size: CGFloat) -> some View {
+        if index < groupPreviewIcons.count {
+            Image(nsImage: groupPreviewIcons[index])
+                .resizable()
+                .interpolation(.high)
+                .frame(width: size, height: size)
+        } else {
+            Color.clear.frame(width: size, height: size)
         }
     }
 
@@ -322,6 +402,9 @@ struct ItemView: View {
     // MARK: Icon resolution
 
     static func resolveIcon(_ item: DrawerItem) -> NSImage {
+        // A group renders a child preview, not a single icon; this is only a fallback
+        // (e.g. if a group ever appears where a plain icon is expected).
+        if item.kind == .group { return symbol("square.grid.2x2.fill") }
         // A user-chosen icon override wins over the target's own icon.
         if let data = item.customIconBookmark,
            let resolved = BookmarkResolver.resolve(data),
