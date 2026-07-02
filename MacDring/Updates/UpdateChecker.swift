@@ -140,7 +140,8 @@ final class UpdateChecker: ObservableObject {
 
                 guard let remote = SemanticVersion(release.tagName),
                       let current = SemanticVersion(self.configuration.currentVersion) else {
-                    if userInitiated { self.presentUpToDate() }
+                    // "You're up to date" would be a guess: nothing was compared.
+                    if userInitiated { self.presentVersionsNotComparable(release: release) }
                     return
                 }
                 if remote > current {
@@ -205,6 +206,22 @@ final class UpdateChecker: ObservableObject {
                 NSLog("UpdateChecker: download failed (\(error.localizedDescription)); opening release page")
                 NSWorkspace.shared.open(release.htmlURL)
             }
+        }
+    }
+
+    /// Shown when the release tag or the app's own version string couldn't be
+    /// parsed for comparison — an honest "couldn't tell" instead of the misleading
+    /// "you're up to date", with the release page as the manual way out.
+    @MainActor
+    private func presentVersionsNotComparable(release: GitHubRelease) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Couldn't compare versions"
+        alert.informativeText = "The latest release is tagged “\(release.tagName)”, which couldn't be compared with this build (\(configuration.currentVersion)). You can check the releases page yourself."
+        alert.addButton(withTitle: "Open Releases Page")
+        alert.addButton(withTitle: "Cancel")
+        if runModal(alert) == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(release.htmlURL)
         }
     }
 
