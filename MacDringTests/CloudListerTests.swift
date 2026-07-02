@@ -56,6 +56,9 @@ final class CloudListerTests: XCTestCase {
         XCTAssertEqual(CloudLister.providerIconStyle(forName: "Dropbox")?.symbol, "shippingbox.fill")
         // Unknown provider keeps the generic cloud icon (nil style).
         XCTAssertNil(CloudLister.providerIconStyle(forName: "Mystery Cloud"))
+        // A provider merely *named* "* Drive" must not get Google's branding.
+        XCTAssertNil(CloudLister.providerIconStyle(forName: "Proton Drive"))
+        XCTAssertNil(CloudLister.providerIconStyle(forName: "pCloud Drive"))
     }
 
     func testProviderIconStyleAttachedToItems() {
