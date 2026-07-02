@@ -10,6 +10,11 @@ final class TabStripModel: ObservableObject {
     @Published var glyph: TabGlyph
     @Published var edge: Edge
     @Published var acceptsWebURLDrops: Bool
+    /// Whether this pill takes *file* drops at all. Only items and folder tabs do —
+    /// the live listings (notes/disks/network/cloud/recents/fresh) are read-only,
+    /// and advertising a drop that would be silently discarded is a lie told in
+    /// drop-highlight form.
+    @Published var acceptsFileDrops: Bool
     /// The drawer for this tab is currently open (drives the pill highlight).
     @Published var isOpen: Bool = false
     /// A file/app is being dragged over the pill (drives the drop highlight).
@@ -33,11 +38,13 @@ final class TabStripModel: ObservableObject {
     /// Move the tab to a different screen edge (pill context menu).
     var onMoveToEdge: ((Edge) -> Void)?
 
-    init(title: String, colorHex: String, glyph: TabGlyph, edge: Edge, acceptsWebURLDrops: Bool) {
+    init(title: String, colorHex: String, glyph: TabGlyph, edge: Edge,
+         acceptsWebURLDrops: Bool, acceptsFileDrops: Bool) {
         self.title = title
         self.colorHex = colorHex
         self.glyph = glyph
         self.edge = edge
         self.acceptsWebURLDrops = acceptsWebURLDrops
+        self.acceptsFileDrops = acceptsFileDrops
     }
 }
