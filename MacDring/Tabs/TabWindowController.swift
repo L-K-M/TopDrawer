@@ -167,12 +167,18 @@ final class TabWindowController {
 
     func update(tab: Tab) {
         anchor = tab.anchor
-        model.title = tab.title
-        model.colorHex = tab.colorHex
-        model.glyph = tab.glyph
-        model.edge = tab.anchor.edge
-        model.acceptsWebURLDrops = tab.kind == .items
-        model.acceptsFileDrops = TabWindowController.takesFileDrops(tab.kind)
+        // Equality-guard each @Published write: update(tab:) runs for every tab on
+        // every reconcile, and an unguarded assignment emits objectWillChange even
+        // for an identical value — six spurious pill invalidations per tab per
+        // store mutation.
+        if model.title != tab.title { model.title = tab.title }
+        if model.colorHex != tab.colorHex { model.colorHex = tab.colorHex }
+        if model.glyph != tab.glyph { model.glyph = tab.glyph }
+        if model.edge != tab.anchor.edge { model.edge = tab.anchor.edge }
+        let acceptsWebURLDrops = tab.kind == .items
+        if model.acceptsWebURLDrops != acceptsWebURLDrops { model.acceptsWebURLDrops = acceptsWebURLDrops }
+        let acceptsFileDrops = TabWindowController.takesFileDrops(tab.kind)
+        if model.acceptsFileDrops != acceptsFileDrops { model.acceptsFileDrops = acceptsFileDrops }
 
         // On a concealment-style change, re-seed the concealed flag: a concealable
         // style starts concealed (so the next `place` doesn't flash it onto the edge
