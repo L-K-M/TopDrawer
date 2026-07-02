@@ -198,7 +198,16 @@ final class TabController {
                                                           edge: key.edge, gap: EdgeLayout.minTabGap, in: visible)
                 entry.wc.setRestingFrame(snapped)
                 placed.append(snapped)
-                persistSettledPosition(snapped, was: incoming, edge: key.edge, in: visible, tab: entry.tab)
+                // Persist the settled position only while the tab is sitting on its
+                // *own* anchored display. A pill displaced here by the move-to-main
+                // policy is a guest: its anchor still names the disconnected display,
+                // and writing this screen's settled fraction into it would corrupt
+                // the spot it must restore to when that display returns ("stable
+                // restore is sacred"). Guests are de-overlapped on screen only.
+                if let anchored = registry.screen(for: entry.tab.anchor.displayUUID),
+                   screenNumber(anchored) == key.screen {
+                    persistSettledPosition(snapped, was: incoming, edge: key.edge, in: visible, tab: entry.tab)
+                }
             }
         }
     }
