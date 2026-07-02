@@ -46,7 +46,8 @@ enum CloudLister {
     /// A brand-flavored generated icon (color + glyph) for a recognized cloud
     /// provider, keyed loosely off its Finder display name; `nil` for an unknown
     /// provider, which keeps the generic cloud icon. Order matters — "Dropbox"
-    /// before "Box", "OneDrive" before the generic "Drive". Pure / unit-tested.
+    /// before "Box". Matching is by brand name only: a bare "drive" match would
+    /// paint every "* Drive" provider (Proton Drive, pCloud Drive, …) as Google.
     static func providerIconStyle(forName name: String) -> IconStyle? {
         let n = name.lowercased()
         func style(_ hex: String, _ symbol: String) -> IconStyle {
@@ -55,7 +56,7 @@ enum CloudLister {
         if n.contains("icloud") { return style("#3B9EFF", "icloud.fill") }
         if n.contains("dropbox") { return style("#0061FF", "shippingbox.fill") }
         if n.contains("onedrive") || n.contains("one drive") { return style("#0078D4", "cloud.fill") }
-        if n.contains("google") || n.contains("drive") { return style("#1FA463", "triangle.fill") }
+        if n.contains("google") { return style("#1FA463", "triangle.fill") }
         if n.contains("box") { return style("#0061D5", "square.stack.3d.up.fill") }
         return nil
     }
