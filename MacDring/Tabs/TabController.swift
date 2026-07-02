@@ -54,6 +54,12 @@ final class TabController {
     /// One-shot Spotlight lookup backing the open **Fresh** tab and the **system**
     /// source of a Recents tab; cancelled when the drawer closes or another tab opens.
     private let spotlight = SpotlightQuery()
+    /// The tab the `spotlight` query is currently gathering for, so an unrelated
+    /// reconcile doesn't cancel-and-restart (and thereby starve) an in-flight gather.
+    private var spotlightWatchTabID: UUID?
+    /// A dedicated Spotlight lookup for the Fresh pill dot, so the badge never
+    /// competes with (or restarts) the open drawer's query.
+    private let freshBadgeSpotlight = SpotlightQuery()
 
     /// Observers for app launch/terminate, so application items show a live "running"
     /// dot. Torn down in `saveAndTeardown`.
@@ -1092,37 +1098,40 @@ final class TabController {
         pendingFolderRefresh = nil
     }
 
-    /// Keeps the Fresh "just landed" pill dot in sync: scans now and, while any Fresh
-    /// tab exists, keeps a 60 s timer alive so the dot lights within a minute of a
-    /// file arriving and fades on its own once it's older than `freshRecentWindow`.
+    /// Keeps the Fresh "just landed" pill dot in sync. While any Fresh tab exists a
+    /// 60 s timer re-checks, so the dot lights within a minute of a file arriving and
+    /// fades on its own once it's older than `freshRecentWindow`. The check runs only
+    /// when the timer is first armed and on its beats — **not** on every reconcile,
+    /// which used to mean one landing-zone sweep per store mutation.
     private func updateFreshBadgeTimer() {
         guard store.tabs.contains(where: { $0.kind == .fresh }) else {
             freshBadgeTimer?.invalidate()
             freshBadgeTimer = nil
+            freshBadgeSpotlight.cancel()
             return
         }
+        guard freshBadgeTimer == nil else { return }   // armed — the timer drives the re-checks
         refreshFreshBadges()
-        if freshBadgeTimer == nil {
-            freshBadgeTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-                self?.refreshFreshBadges()
-            }
+        let timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.refreshFreshBadges()
         }
+        timer.tolerance = 10   // a badge dot doesn't need punctual wakeups
+        freshBadgeTimer = timer
     }
 
     /// Lights every Fresh tab pill's dot when the newest item in the (shared) Fresh
-    /// scopes landed within `freshRecentWindow`. One scan covers all Fresh tabs; it
-    /// runs off the main thread and applies the result on it.
+    /// scopes landed within `freshRecentWindow`. Asks **Spotlight** (index-only, so it
+    /// can never trigger a folder-access prompt — unlike a direct directory scan, see
+    /// fable-is-awesome.md FB1); one lookup covers all Fresh tabs.
     private func refreshFreshBadges() {
         let freshTabIDs = store.tabs.filter { $0.kind == .fresh }.map(\.id)
         guard !freshTabIDs.isEmpty else { return }
         let now = Date()
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let results = FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit, now: now)
+        freshBadgeSpotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(),
+                                  limit: FreshLister.limit) { [weak self] results in
+            guard let self else { return }
             let recent = results.contains { now.timeIntervalSince($0.date) <= Self.freshRecentWindow }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                for id in freshTabIDs { self.tabWindows[id]?.model.hasRecentArrival = recent }
-            }
+            for id in freshTabIDs { self.tabWindows[id]?.model.hasRecentArrival = recent }
         }
     }
 
@@ -1162,15 +1171,23 @@ final class TabController {
     /// `applySpotlightItems`. The async sibling of `updateFolderWatch`.
     private func updateSpotlightWatch() {
         guard let id = openTabID, let tab = store.tab(id: id) else { stopSpotlightWatch(); return }
+        // A reconcile that didn't change the open tab must not cancel-and-restart a
+        // gather that's still running for it — a burst of mutations (e.g. per-keystroke
+        // tab edits) would otherwise starve the query so results never land.
+        let restartable = !(spotlightWatchTabID == id && spotlight.isGathering)
         switch tab.kind {
         case .fresh:
-            // The direct scan already populated the drawer synchronously (works with
-            // Spotlight off); fold the Spotlight results in for deeper sub-folder hits.
-            let scanned = FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
+            // Spotlight-only: reading the index can never trigger a folder-access
+            // (TCC) prompt, unlike a direct scan of ~/Downloads & co. — the reason
+            // the FreshScanner path was retired from the live app (FB1).
+            guard restartable else { return }
+            spotlightWatchTabID = id
             spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightItems(FreshLister.items(from: FreshLister.merge(scanned, results)), forTab: id)
+                self?.applySpotlightItems(FreshLister.items(from: results), forTab: id)
             }
         case .recents where tab.recentsSource.includesSystem:
+            guard restartable else { return }
+            spotlightWatchTabID = id
             let includeMacDring = tab.recentsSource.includesMacDring
             let home = FileManager.default.homeDirectoryForCurrentUser
             spotlight.start(mode: .lastUsed, scopes: [home], limit: RecentsStore.limit) { [weak self] results in
@@ -1186,6 +1203,7 @@ final class TabController {
 
     private func stopSpotlightWatch() {
         spotlight.cancel()
+        spotlightWatchTabID = nil
     }
 
     /// Applies an async live listing to the open drawer — only if the same tab is
@@ -1302,6 +1320,8 @@ final class TabController {
         stopRunningAppMonitoring()
         freshBadgeTimer?.invalidate()
         freshBadgeTimer = nil
+        freshBadgeSpotlight.cancel()
+        stopSpotlightWatch()
         drawer.hide(duration: 0)     // instant on quit, no animation
         openTabID = nil
         for (_, wc) in tabWindows { wc.close() }

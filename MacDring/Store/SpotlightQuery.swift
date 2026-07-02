@@ -46,6 +46,11 @@ final class SpotlightQuery {
     private var attribute = ""
     private var limit = 0
 
+    /// Whether a lookup is currently gathering (started and not yet finished or
+    /// cancelled). Lets callers avoid restarting — and thereby starving — a query
+    /// that is already collecting the results they want.
+    var isGathering: Bool { query != nil }
+
     /// Starts a fresh lookup, cancelling any in-flight one. `scopes` are the directory
     /// URLs to search under. `completion` fires once on the main queue with the newest
     /// `limit` results (most-recent first), after which the query stops.
