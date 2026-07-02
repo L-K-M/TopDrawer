@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private var launchAtLoginItem: NSMenuItem?
+    /// The menu rows for the live tab list (plus their trailing separator),
+    /// rebuilt each time the menu opens so it tracks adds/removes/renames.
+    private var tabMenuItems: [NSMenuItem] = []
 
     // MARK: NSApplicationDelegate
 
@@ -175,6 +178,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         preferences.refreshLaunchAtLoginStatus()
         launchAtLoginItem?.state = preferences.launchAtLogin ? .on : .off
+        rebuildTabSection(in: menu)
+    }
+
+    /// Lists every tab at the top of the status menu — click toggles its drawer.
+    /// This is the one way to reach a drawer that works even when every pill is
+    /// auto-hidden, faded, or parked on a disconnected display.
+    private func rebuildTabSection(in menu: NSMenu) {
+        tabMenuItems.forEach { menu.removeItem($0) }
+        tabMenuItems = []
+        let tabs = store.tabs
+        guard !tabs.isEmpty else { return }
+
+        for (index, tab) in tabs.enumerated() {
+            let item = NSMenuItem(title: tab.title.isEmpty ? "Untitled" : tab.title,
+                                  action: #selector(toggleTabDrawer(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = tab.id
+            item.image = Self.menuSwatch(hex: tab.colorHex)
+            menu.insertItem(item, at: index)
+            tabMenuItems.append(item)
+        }
+        let separator = NSMenuItem.separator()
+        menu.insertItem(separator, at: tabs.count)
+        tabMenuItems.append(separator)
+    }
+
+    @objc private func toggleTabDrawer(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        controller.toggle(tabID: id)
+    }
+
+    /// A small filled circle in the tab's color, as the tab's menu-row badge.
+    private static func menuSwatch(hex: String) -> NSImage {
+        let image = NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+            (NSColor(hex: hex) ?? .systemBlue).setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+        return image
     }
 
     // MARK: Actions

@@ -302,6 +302,12 @@ final class TabController {
 
     // MARK: Drawer open / close
 
+    /// Toggles a tab's drawer from outside its pill — the status-item menu's tab
+    /// list. The same path a pill click takes.
+    func toggle(tabID: UUID) {
+        toggleDrawer(tabID)
+    }
+
     private func toggleDrawer(_ id: UUID) {
         if openTabID == id { closeDrawer() } else { openDrawer(id) }
     }
