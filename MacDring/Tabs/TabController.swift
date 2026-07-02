@@ -784,7 +784,8 @@ final class TabController {
     // MARK: Hotkeys
 
     private func registerHotkeyIfNeeded(for tab: Tab) {
-        guard let spec = tab.hotkey, KeyCodes.hasModifier(spec.carbonModifiers) else {
+        guard let spec = tab.hotkey,
+              KeyCodes.isUsableHotkey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) else {
             unregisterHotkey(tab.id)
             return
         }

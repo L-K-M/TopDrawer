@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 
 /// A small control that records a global hotkey: click it, then press a key
-/// combination (which must include a modifier). Used in the Tabs pane to set a
-/// tab's optional toggle shortcut.
+/// combination — ⌘/⌃/⌥ plus a key, or a bare function key (F1–F20). Shift-only
+/// combos are rejected (they'd swallow ordinary typing). Used in the Tabs pane to
+/// set a tab's optional toggle shortcut.
 struct HotkeyRecorderView: View {
     @Binding var hotkey: HotkeySpec?
 
@@ -41,7 +42,9 @@ struct HotkeyRecorderView: View {
                 return nil
             }
             let modifiers = KeyCodes.carbonModifiers(from: event.modifierFlags)
-            if KeyCodes.hasModifier(modifiers) {
+            // ⌘/⌃/⌥ combos and bare function keys are accepted; Shift-only combos
+            // are not — they'd swallow ordinary typing system-wide (⇧A vs "A").
+            if KeyCodes.isUsableHotkey(keyCode: UInt32(event.keyCode), modifiers: modifiers) {
                 hotkey = HotkeySpec(keyCode: UInt32(event.keyCode), carbonModifiers: modifiers)
                 stop()
             }
