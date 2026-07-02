@@ -60,8 +60,11 @@ final class RecentsStore: ObservableObject {
     }
 
     private static func load(from defaults: UserDefaults) -> [RecentItem] {
-        guard let data = defaults.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([RecentItem].self, from: data) else { return [] }
-        return decoded
+        guard let data = defaults.data(forKey: key) else { return [] }
+        // Decode each record failably: one unreadable element must not nil the whole
+        // history — the next `record()` would persist the wipe. Mirrors the launcher
+        // document's `FailableTab` / `FailableDrawerItem` lenient-decode policy.
+        guard let wrapped = try? JSONDecoder().decode([FailableRecentItem].self, from: data) else { return [] }
+        return wrapped.compactMap(\.item)
     }
 }

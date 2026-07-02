@@ -67,4 +67,39 @@ final class RecentsStoreTests: XCTestCase {
         store.clear()
         XCTAssertTrue(store.items.isEmpty)
     }
+
+    // MARK: Lenient loading (one bad record must not wipe the history)
+
+    /// Writes raw JSON into the store's UserDefaults key, bypassing the encoder.
+    private func writeRaw(_ json: String, to defaults: UserDefaults) {
+        defaults.set(Data(json.utf8), forKey: "recentItems")
+    }
+
+    func testUnknownKindDegradesToFileInsteadOfWipingHistory() {
+        let defaults = freshDefaults()
+        writeRaw("""
+        [{"url":"file:///a","kind":"hologram","name":"A","date":0},
+         {"url":"file:///b","kind":"file","name":"B","date":0}]
+        """, to: defaults)
+        let store = RecentsStore(defaults: defaults)
+        XCTAssertEqual(store.items.map(\.name), ["A", "B"])   // both survive
+        XCTAssertEqual(store.items.first?.kind, .file)        // unknown kind degraded
+    }
+
+    func testRecordMissingItsURLIsDroppedAloneNotTheWholeHistory() {
+        let defaults = freshDefaults()
+        writeRaw("""
+        [{"kind":"file","name":"no-url","date":0},
+         {"url":"file:///b","kind":"file","name":"B","date":0}]
+        """, to: defaults)
+        let store = RecentsStore(defaults: defaults)
+        XCTAssertEqual(store.items.map(\.name), ["B"])
+    }
+
+    func testMissingNameFallsBackToLastPathComponent() {
+        let defaults = freshDefaults()
+        writeRaw(#"[{"url":"file:///deep/Report.pdf","kind":"file","date":0}]"#, to: defaults)
+        let store = RecentsStore(defaults: defaults)
+        XCTAssertEqual(store.items.first?.name, "Report.pdf")
+    }
 }
