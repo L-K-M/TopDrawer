@@ -68,4 +68,19 @@ final class DrawerItemTests: XCTestCase {
         let url = URL(fileURLWithPath: "/usr/bin", isDirectory: true)
         XCTAssertEqual(DrawerItem.transientFileItem(url).id, DrawerItem.transientFileItem(url).id)
     }
+
+    func testGroupRoundTripsThroughCodableAndPlainItemOmitsChildren() throws {
+        let a = DrawerItem(kind: .application, displayName: "A", url: URL(string: "https://a"), slot: 0)
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b"), slot: 1)
+        let group = DrawerItem(kind: .group, displayName: "Work", slot: 3, children: [a, b])
+
+        let data = try JSONEncoder().encode(group)
+        let decoded = try JSONDecoder().decode(DrawerItem.self, from: data)
+        XCTAssertEqual(decoded, group)
+        XCTAssertEqual(decoded.children.count, 2)
+
+        // A plain item's on-disk shape is unchanged — no "children" key.
+        let plain = try JSONEncoder().encode(a)
+        XCTAssertFalse(String(decoding: plain, as: UTF8.self).contains("children"))
+    }
 }

@@ -23,6 +23,8 @@ enum ItemLauncher {
             return true
         case .file, .folder, .url, .trash, .disk, .cloud:
             return NSWorkspace.shared.open(url)   // trash → Trash folder; disk → the volume; cloud → the folder, in Finder
+        case .group:
+            return false   // a group isn't launchable — clicking it opens the group; unreachable (it has no URL)
         }
     }
 

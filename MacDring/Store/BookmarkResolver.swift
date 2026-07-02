@@ -46,9 +46,9 @@ enum BookmarkResolver {
     }
 
     /// Whether a file/app/folder item no longer points at anything on disk.
-    /// `.url` items are never considered broken here.
+    /// `.url` items and `.group` containers are never considered broken here.
     static func isBroken(_ item: DrawerItem) -> Bool {
-        guard item.kind != .url else { return false }
+        guard item.kind != .url, item.kind != .group else { return false }
         guard let url = url(for: item) else { return true }
         return !FileManager.default.fileExists(atPath: url.path)
     }

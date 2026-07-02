@@ -1,8 +1,10 @@
 import CryptoKit
 import Foundation
 
-/// What a drawer item points at.
-enum ItemKind: String, Codable { case application, file, folder, url, trash, disk, cloud }
+/// What a drawer item points at. `.group` is a container of other items (an
+/// iOS-folder-like group), not a launchable target — its `children` hold the group's
+/// contents.
+enum ItemKind: String, Codable { case application, file, folder, url, trash, disk, cloud, group }
 
 /// A single launchable entry inside a drawer: an app, file, folder, or URL.
 ///
@@ -38,6 +40,14 @@ struct DrawerItem: Codable, Identifiable, Equatable {
     /// live items so the list layout can show it; `nil` for persisted `.items`.
     var date: Date?
 
+    /// The contained items for a `.group` — each with its own `slot` within the
+    /// group's sub-grid. Empty for every non-group kind. Groups don't nest, so a
+    /// child is never itself a `.group`.
+    var children: [DrawerItem]
+
+    /// Whether this item is a group container (its `children` hold the contents).
+    var isGroup: Bool { kind == .group }
+
     init(id: UUID = UUID(),
          kind: ItemKind,
          displayName: String,
@@ -46,7 +56,8 @@ struct DrawerItem: Codable, Identifiable, Equatable {
          customIconBookmark: Data? = nil,
          iconStyle: IconStyle? = nil,
          slot: Int = -1,
-         date: Date? = nil) {
+         date: Date? = nil,
+         children: [DrawerItem] = []) {
         self.id = id
         self.kind = kind
         self.displayName = displayName
@@ -56,6 +67,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         self.iconStyle = iconStyle
         self.slot = slot
         self.date = date
+        self.children = children
     }
 
     /// Decodes forward-compatibly: an unknown `kind` raw value (written by a
@@ -75,10 +87,29 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         iconStyle = c.decodeLenient(IconStyle?.self, forKey: .iconStyle, fallback: nil)
         slot = try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1
         date = try c.decodeIfPresent(Date.self, forKey: .date)
+        children = try c.decodeIfPresent([DrawerItem].self, forKey: .children) ?? []
+    }
+
+    /// Encodes explicitly so `children` is written only for groups — keeping a plain
+    /// item's on-disk shape byte-identical to before groups existed (so unchanged
+    /// documents aren't rewritten, and old builds see nothing new). Optionals are
+    /// omitted when nil, matching the previous synthesized encoding.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(displayName, forKey: .displayName)
+        try c.encodeIfPresent(bookmark, forKey: .bookmark)
+        try c.encodeIfPresent(url, forKey: .url)
+        try c.encodeIfPresent(customIconBookmark, forKey: .customIconBookmark)
+        try c.encodeIfPresent(iconStyle, forKey: .iconStyle)
+        try c.encode(slot, forKey: .slot)
+        try c.encodeIfPresent(date, forKey: .date)
+        if !children.isEmpty { try c.encode(children, forKey: .children) }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, displayName, bookmark, url, customIconBookmark, iconStyle, slot, date
+        case id, kind, displayName, bookmark, url, customIconBookmark, iconStyle, slot, date, children
     }
 }
 
@@ -90,6 +121,10 @@ extension Array where Element == DrawerItem {
         var used = Set<Int>()
         var result = self
         for i in result.indices {
+            // A group's own sub-grid keeps the same slot invariant, one level down.
+            if result[i].kind == .group {
+                result[i].children = result[i].children.assigningMissingSlots()
+            }
             let slot = result[i].slot
             if slot >= 0, used.insert(slot).inserted { continue }
             result[i].slot = -1   // unassigned or a duplicate
@@ -115,6 +150,13 @@ extension Array where Element == DrawerItem {
             item.iconStyle = style
             return item
         }
+    }
+
+    /// A flat list of launchable items with groups replaced by their children — so
+    /// type-to-find reaches inside groups. Children are never groups, so one level of
+    /// flattening suffices.
+    func flattenedLaunchable() -> [DrawerItem] {
+        flatMap { $0.kind == .group ? $0.children : [$0] }
     }
 
     /// Appends `item` unless this array already contains an item pointing at the same
