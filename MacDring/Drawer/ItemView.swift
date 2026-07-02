@@ -30,9 +30,10 @@ struct ItemView: View {
     /// This item just arrived (a Fresh listing) — plays a one-shot sparkle.
     var sparkle: Bool = false
 
-    // Icon and broken-ness are resolved off the render path (in `.task`, once per
-    // item/nonce change) and cached here, so `body` does no disk I/O on every
-    // re-render — important for a large or network-volume folder tab. See ANALYSIS.md I2.
+    // Icon and broken-ness are resolved in `.task` (once per item change) on a
+    // *detached* task and cached here, so neither `body` nor the main thread does
+    // disk I/O per cell — important for a large or network-volume folder tab.
+    // See ANALYSIS.md I2 and fable-is-awesome.md FP1.
     @State private var icon: NSImage?
     @State private var broken = false
     /// An app item's bundle id (resolved off the render path, like the icon), so the
@@ -103,36 +104,58 @@ struct ItemView: View {
                     Button("Remove", role: .destructive, action: onRemove)
                 }
             }
-            // Keyed by the item AND `iconNonce`: reloads whenever the item changes
-            // — a reorder swap into this (slot-keyed, reused) cell, a rename, or a
-            // custom-icon change — and whenever the drawer bumps the nonce (e.g. the
-            // Trash was emptied), so the icon always follows the item's state.
-            .task(id: ResolveKey(item: item, nonce: iconNonce, list: layout == .list)) {
-                icon = ItemView.resolveIcon(item)
-                broken = BookmarkResolver.isBroken(item)
-                bundleID = ItemView.appBundleID(item)
-                // The list layout shows size + kind columns; resolve them off the render
-                // path too (and only when actually in a list).
-                if layout == .list {
-                    let meta = ItemView.resolveMetadata(item)
-                    byteSize = meta.size
-                    typeDescription = meta.kind
-                } else {
-                    byteSize = nil
-                    typeDescription = nil
-                }
-                trashCount = item.kind == .trash ? TrashInspector.trashCount() : 0
-                // Best-effort: swap the globe for the site's favicon once fetched.
-                if item.kind == .url, let url = item.url,
+            // Keyed by the item — a reorder swap into this (slot-keyed, reused) cell,
+            // a rename, or a custom-icon change — and, for a Trash item only, by
+            // `iconNonce` (bumped when the Trash's contents change). Other kinds pass
+            // a constant nonce so a Trash event doesn't re-resolve the whole drawer.
+            .task(id: ResolveKey(item: item, nonce: item.kind == .trash ? iconNonce : 0, list: layout == .list)) {
+                // Everything below does filesystem work (bookmark resolution, stat,
+                // icon decode; a per-volume sweep for the Trash count). `.task`
+                // inherits the view's MainActor context, so hop to a detached task —
+                // otherwise a large drawer serializes hundreds of blocking calls on
+                // the main thread, merely deferred out of `body`.
+                let item = item
+                let wantsListMeta = layout == .list
+                let resolved = await Task.detached(priority: .userInitiated) { () -> Resolution in
+                    let meta: (size: Int64?, kind: String?) =
+                        wantsListMeta ? ItemView.resolveMetadata(item) : (nil, nil)
+                    return Resolution(icon: ItemView.resolveIcon(item),
+                                      broken: BookmarkResolver.isBroken(item),
+                                      bundleID: ItemView.appBundleID(item),
+                                      byteSize: meta.size,
+                                      typeDescription: meta.kind,
+                                      trashCount: item.kind == .trash ? TrashInspector.trashCount() : 0)
+                }.value
+                guard !Task.isCancelled else { return }
+                icon = resolved.icon
+                broken = resolved.broken
+                bundleID = resolved.bundleID
+                byteSize = resolved.byteSize
+                typeDescription = resolved.typeDescription
+                trashCount = resolved.trashCount
+                // Best-effort: swap the globe for the site's favicon once fetched —
+                // but never over a user-chosen icon (image or generated style).
+                if item.kind == .url, item.customIconBookmark == nil, item.iconStyle == nil,
+                   let url = item.url,
                    let favicon = await FaviconCache.shared.fetch(for: url), !Task.isCancelled {
                     icon = favicon
                 }
             }
     }
 
-    /// Re-resolve key: the item, the drawer's nonce, and whether the list columns are
-    /// shown (so a grid→list switch re-resolves the metadata).
+    /// Re-resolve key: the item, the Trash nonce (constant for non-trash items), and
+    /// whether the list columns are shown (so a grid→list switch re-resolves metadata).
     private struct ResolveKey: Equatable { let item: DrawerItem; let nonce: Int; let list: Bool }
+
+    /// Everything the `.task` resolves off the main actor in one hop.
+    private struct Resolution {
+        let icon: NSImage
+        let broken: Bool
+        let bundleID: String?
+        let byteSize: Int64?
+        let typeDescription: String?
+        let trashCount: Int
+    }
 
     @ViewBuilder
     private var cell: some View {
