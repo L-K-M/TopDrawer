@@ -220,8 +220,10 @@ private struct TabEditor: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                Stepper("Columns: \(draft.gridColumns)", value: $draft.gridColumns, in: 1...10)
-                Stepper("Rows: \(draft.gridRows)", value: $draft.gridRows, in: 1...12)
+                // Ranges match the General pane's new-tab defaults (and Preferences'
+                // clamps): a tab created at 12×16 must be editable back up here.
+                Stepper("Columns: \(draft.gridColumns)", value: $draft.gridColumns, in: 1...12)
+                Stepper("Rows: \(draft.gridRows)", value: $draft.gridRows, in: 1...16)
                 Text("Layout and size for the drawer. Items can be placed anywhere in the grid, with gaps; for a notes tab the columns/rows size the text area. The list layout shows entries top-to-bottom and adds a date column for the Fresh, Recents, and folder tabs.")
                     .font(.caption).foregroundStyle(.secondary)
             }
