@@ -45,6 +45,8 @@ final class TabController {
     /// update live when Finder empties it. Lives for the controller's lifetime.
     private var trashWatch: DispatchSourceFileSystemObject?
     private var pendingFolderRefresh: DispatchWorkItem?
+    /// Coalesces bursts of Trash directory events into one icon refresh.
+    private var pendingTrashRefresh: DispatchWorkItem?
     /// A light repeating scan that lights the Fresh tab pill's "just landed" dot;
     /// runs only while a Fresh tab exists.
     private var freshBadgeTimer: Timer?
@@ -1137,10 +1139,26 @@ final class TabController {
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: .main)
-        source.setEventHandler { [weak self] in self?.drawer.model.iconNonce += 1 }
+        source.setEventHandler { [weak self] in self?.scheduleTrashRefresh() }
         source.setCancelHandler { close(fd) }
         trashWatch = source
         source.resume()
+    }
+
+    /// Coalesces a burst of Trash directory events (a batch delete streams many)
+    /// into one icon-nonce bump — the same debounce the folder watch uses. Every
+    /// bump re-runs item icon resolution, so raw event streams were re-resolving
+    /// the whole open drawer once per trashed file. Skipped while the drawer is
+    /// hidden: `hide()` clears the items and every reopen rebuilds the cells (and
+    /// re-resolves their icons) anyway.
+    private func scheduleTrashRefresh() {
+        pendingTrashRefresh?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.drawer.isVisible else { return }
+            self.drawer.model.iconNonce += 1
+        }
+        pendingTrashRefresh = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     /// Coalesces a burst of directory-change events into a single re-list.
