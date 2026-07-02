@@ -888,6 +888,13 @@ final class TabController {
 
     // MARK: Item rename / icon
 
+    /// Floats a dialog above the drawer panel. The drawer rides at popup-menu level,
+    /// so an app-modal alert left at its default level can end up *behind* a large
+    /// drawer — invisible, while it blocks every click in the app.
+    private func floatAboveDrawer(_ window: NSWindow) {
+        window.level = NSWindow.Level(rawValue: preferences.tabWindowLevel.drawerWindowLevel.rawValue + 1)
+    }
+
     /// Renames an item via a small modal prompt, then commits it to the store.
     private func renameItem(_ item: DrawerItem) {
         guard let id = openTabID else { return }
@@ -902,6 +909,7 @@ final class TabController {
         alert.window.initialFirstResponder = field
 
         NSApp.activate(ignoringOtherApps: true)   // a text prompt needs key focus
+        floatAboveDrawer(alert.window)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
@@ -922,6 +930,7 @@ final class TabController {
         panel.message = "Choose an image to use as this item's icon"
 
         NSApp.activate(ignoringOtherApps: true)
+        floatAboveDrawer(panel)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         var updated = item
         updated.customIconBookmark = BookmarkResolver.makeBookmark(for: url)
@@ -935,10 +944,15 @@ final class TabController {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Empty the Trash?"
-        alert.informativeText = "This permanently erases the items in the Trash. You can’t undo this."
+        // Say how many items are about to go, the way Finder does. (Shares the
+        // metadata count's `.DS_Store` caveat — see TrashInspector.)
+        let count = TrashInspector.trashCount()
+        let what = count > 0 ? "the \(count) item\(count == 1 ? "" : "s")" : "the items"
+        alert.informativeText = "This permanently erases \(what) in the Trash. You can’t undo this."
         alert.addButton(withTitle: "Empty Trash")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)   // a modal alert needs key focus
+        floatAboveDrawer(alert.window)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         if FileMover.emptyTrash() {
             drawer.model.iconNonce += 1   // re-resolve the Trash icon in place (full → empty)
