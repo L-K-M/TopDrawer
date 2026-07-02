@@ -13,7 +13,7 @@ struct MarkdownText: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ForEach(Array(text.components(separatedBy: .newlines).enumerated()), id: \.offset) { index, raw in
+            ForEach(Array(MarkdownText.lines(text).enumerated()), id: \.offset) { index, raw in
                 view(for: MarkdownText.classify(raw), index: index)
             }
         }
@@ -68,7 +68,21 @@ struct MarkdownText: View {
         }
     }
 
-    // MARK: Pure line classification
+    // MARK: Pure line splitting & classification
+
+    /// Splits note text into lines with **normalized** endings: CRLF, bare CR, and
+    /// the Unicode line/paragraph separators each count as exactly one break.
+    /// Shared by the renderer and `togglingCheckbox` so their line indexes always
+    /// agree. (Splitting on `CharacterSet.newlines` treated CRLF as *two* breaks,
+    /// so toggling a checkbox in pasted Windows-style text rejoined with an extra
+    /// phantom blank line per line ending.) Pure, so it's unit-testable.
+    static func lines(_ text: String) -> [String] {
+        var normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        for separator in ["\r", "\u{2028}", "\u{2029}"] {
+            normalized = normalized.replacingOccurrences(of: separator, with: "\n")
+        }
+        return normalized.components(separatedBy: "\n")
+    }
 
     enum Line: Equatable {
         case blank
@@ -112,9 +126,11 @@ struct MarkdownText: View {
     }
 
     /// Flips the checkbox marker on line `lineIndex` of `text` (`[ ]`↔`[x]`),
-    /// returning the rewritten source. A no-op if that line isn't a checkbox. Pure.
+    /// returning the rewritten source. A no-op if that line isn't a checkbox. Uses
+    /// the same `lines(_:)` split as the renderer, so the tapped index always names
+    /// the same line (the rewrite normalizes any CRLF/CR endings to `\n`). Pure.
     static func togglingCheckbox(in text: String, lineIndex: Int) -> String {
-        var lines = text.components(separatedBy: .newlines)
+        var lines = MarkdownText.lines(text)
         guard lines.indices.contains(lineIndex),
               case .checkbox(let isChecked, _) = classify(lines[lineIndex]) else { return text }
         let line = lines[lineIndex]
