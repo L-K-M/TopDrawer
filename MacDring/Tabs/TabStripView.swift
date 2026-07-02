@@ -229,7 +229,12 @@ struct TabStripView: View {
     // MARK: Drop
 
     private var acceptedDropTypes: [UTType] {
-        model.acceptsWebURLDrops ? [.fileURL, .url] : [.fileURL]
+        // Only advertise drops the tab can actually take: an empty list means the
+        // pill never highlights (read-only live listings — see `acceptsFileDrops`).
+        var types: [UTType] = []
+        if model.acceptsFileDrops { types.append(.fileURL) }
+        if model.acceptsWebURLDrops { types.append(.url) }
+        return types
     }
 
     private var dropTargetBinding: Binding<Bool> {
