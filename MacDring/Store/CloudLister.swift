@@ -33,7 +33,9 @@ enum CloudLister {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         return sorted.prefix(limit).enumerated().map { index, root in
-            var item = DrawerItem(kind: .cloud, displayName: root.name, url: root.url, slot: index)
+            // Stable (path-derived) id — same rationale as DisksLister.
+            var item = DrawerItem(id: DrawerItem.stableID(kind: .cloud, url: root.url),
+                                  kind: .cloud, displayName: root.name, url: root.url, slot: index)
             // A per-provider color/glyph "personality"; the tab's own `iconStyles`
             // override (applied after listing) still win for a user-customized icon.
             item.iconStyle = providerIconStyle(forName: root.name)

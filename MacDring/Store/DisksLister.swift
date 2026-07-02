@@ -38,7 +38,11 @@ enum DisksLister {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         return ejectable.prefix(limit).enumerated().map { index, volume in
-            DrawerItem(kind: .disk, displayName: volume.name, url: volume.url, slot: index)
+            // Stable (path-derived) id: a re-list on mount/unmount keeps the
+            // surviving volumes' identity, so per-item UI state (the Eject All
+            // spinners) and icon caches follow them. See DrawerItem.stableID.
+            DrawerItem(id: DrawerItem.stableID(kind: .disk, url: volume.url),
+                       kind: .disk, displayName: volume.name, url: volume.url, slot: index)
         }
     }
 
