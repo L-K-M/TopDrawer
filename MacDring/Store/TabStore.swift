@@ -166,29 +166,42 @@ final class TabStore: ObservableObject {
     }
 
     /// Re-mints bookmarks that have gone stale (their target moved or was renamed) so
-    /// items keep resolving instead of silently falling back to a now-wrong path.
-    /// Resolves and re-mints off the main thread, then writes the refreshed bookmarks
-    /// back on it without notifying `onChange` (the resolved URLs are unchanged, so
-    /// nothing needs to reconcile). Safe to call once at launch; a no-op when nothing
-    /// is stale.
+    /// they keep resolving instead of silently falling back to a now-wrong path.
+    /// Sweeps **every** bookmark the document holds: each item's target bookmark, its
+    /// custom-icon bookmark, and each folder tab's directory bookmark. Resolves and
+    /// re-mints off the main thread, then writes the refreshed bookmarks back on it
+    /// without notifying `onChange` (the resolved URLs are unchanged, so nothing needs
+    /// to reconcile). Safe to call once at launch; a no-op when nothing is stale.
     func remintStaleBookmarks() {
         let snapshot = document.tabs
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            var fresh: [UUID: Data] = [:]   // itemID → re-minted bookmark
+            func reminted(_ data: Data?) -> Data? {
+                guard let data,
+                      let resolved = BookmarkResolver.resolve(data), resolved.isStale,
+                      let minted = BookmarkResolver.makeBookmark(for: resolved.url) else { return nil }
+                return minted
+            }
+            var freshTargets: [UUID: Data] = [:]   // itemID → re-minted target bookmark
+            var freshIcons: [UUID: Data] = [:]     // itemID → re-minted custom-icon bookmark
+            var freshFolders: [UUID: Data] = [:]   // tabID → re-minted folder bookmark
             for tab in snapshot {
+                if let minted = reminted(tab.folderBookmark) { freshFolders[tab.id] = minted }
                 for item in tab.items {
-                    guard let data = item.bookmark,
-                          let resolved = BookmarkResolver.resolve(data), resolved.isStale,
-                          let minted = BookmarkResolver.makeBookmark(for: resolved.url) else { continue }
-                    fresh[item.id] = minted
+                    if let minted = reminted(item.bookmark) { freshTargets[item.id] = minted }
+                    if let minted = reminted(item.customIconBookmark) { freshIcons[item.id] = minted }
                 }
             }
-            guard !fresh.isEmpty else { return }
+            guard !freshTargets.isEmpty || !freshIcons.isEmpty || !freshFolders.isEmpty else { return }
             DispatchQueue.main.async {
                 self?.mutate(notifyChange: false) {
                     for ti in $0.tabs.indices {
-                        for ii in $0.tabs[ti].items.indices where fresh[$0.tabs[ti].items[ii].id] != nil {
-                            $0.tabs[ti].items[ii].bookmark = fresh[$0.tabs[ti].items[ii].id]
+                        if let minted = freshFolders[$0.tabs[ti].id] {
+                            $0.tabs[ti].folderBookmark = minted
+                        }
+                        for ii in $0.tabs[ti].items.indices {
+                            let id = $0.tabs[ti].items[ii].id
+                            if let minted = freshTargets[id] { $0.tabs[ti].items[ii].bookmark = minted }
+                            if let minted = freshIcons[id] { $0.tabs[ti].items[ii].customIconBookmark = minted }
                         }
                     }
                 }
@@ -215,7 +228,15 @@ final class TabStore: ObservableObject {
             NSLog("MacDring: imported layout is version \(doc.version), newer than this build's \(LauncherDocument.currentVersion) — refusing import so newer data isn't downgraded")
             return false
         }
-        replaceTabs(TabStore.normalizingSlots(doc).tabs)
+        let normalized = TabStore.normalizingSlots(doc)
+        mutate {
+            // Adopt the imported document's version as well as its tabs: if the
+            // on-disk document happened to come from a newer build, `saveNow`
+            // (rightly) refuses to write while `version` stays newer — which would
+            // leave the freshly imported layout silently unpersistable.
+            $0.version = normalized.version
+            $0.tabs = normalized.tabs
+        }
         return true
     }
 
