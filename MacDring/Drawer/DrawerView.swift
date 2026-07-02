@@ -64,8 +64,10 @@ struct DrawerView: View {
             }
         )
         .clipShape(shape)
+        // Primary (not hardcoded white): the outline has to read over the light
+        // appearance's Frosted/Solid backing too, where white-on-white vanishes.
         .overlay(
-            shape.stroke(.white.opacity(model.isDropTargeted ? 0.9 : 0.12),
+            shape.stroke(Color.primary.opacity(model.isDropTargeted ? 0.85 : 0.14),
                          lineWidth: model.isDropTargeted ? 2 : 1)
         )
         .onHover { inside in
@@ -120,31 +122,41 @@ struct DrawerView: View {
         .font(.callout)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
         // Defer a tick so the field is in the responder chain before we focus it (the
         // panel has just become key as it slides open).
         .onAppear { DispatchQueue.main.async { focus = .search } }
     }
 
     /// The filtered results as a compact, keyboard-navigable list (Up/Down select,
-    /// Return launches — handled by the key monitor). The selected row is tinted.
+    /// Return launches — handled by the key monitor). The selected row is tinted
+    /// and kept scrolled into view as ↑/↓ move it past the fold.
     private var searchResultsList: some View {
         let results = model.searchResults
-        return ScrollView {
-            if results.isEmpty {
-                Text("No matches for “\(model.searchQuery)”")
-                    .foregroundStyle(.secondary).font(.callout)
-                    .frame(maxWidth: .infinity).padding(.vertical, 20)
-            } else {
-                VStack(spacing: 2) {
-                    ForEach(results) { item in
-                        itemView(item, layout: .list)
-                            .padding(.vertical, 3)
-                            .padding(.horizontal, 6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 8)
-                                .fill(item.id == model.selectedItemID ? Color.accentColor.opacity(0.30) : .clear))
+        return ScrollViewReader { proxy in
+            ScrollView {
+                if results.isEmpty {
+                    Text("No matches for “\(model.searchQuery)”")
+                        .foregroundStyle(.secondary).font(.callout)
+                        .frame(maxWidth: .infinity).padding(.vertical, 20)
+                } else {
+                    VStack(spacing: 2) {
+                        ForEach(results) { item in
+                            itemView(item, layout: .list)
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 8)
+                                    .fill(item.id == model.selectedItemID ? Color.accentColor.opacity(0.30) : .clear))
+                                .id(item.id)
+                        }
                     }
+                }
+            }
+            .onChange(of: model.selectedItemID) { selected in
+                guard let selected else { return }
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    proxy.scrollTo(selected, anchor: .center)
                 }
             }
         }
@@ -214,7 +226,7 @@ struct DrawerView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
@@ -323,7 +335,7 @@ struct DrawerView: View {
             .padding(.vertical, 3)
             .padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 8)
-                .fill(.white.opacity(fileDropHere ? 0.16 : 0)))
+                .fill(Color.primary.opacity(fileDropHere ? 0.12 : 0)))
             .overlay {
                 if intoTarget {
                     RoundedRectangle(cornerRadius: 8)
@@ -341,8 +353,10 @@ struct DrawerView: View {
         // plain slot drop — give it a distinct ring so the difference is obvious.
         let intoTarget = fileDropHere && (item?.kind == .folder || item?.kind == .application || item?.kind == .trash)
         return ZStack {
+            // Primary adapts to light/dark; hardcoded white washed out over the
+            // light appearance's Frosted/Solid backing.
             RoundedRectangle(cornerRadius: 10)
-                .fill(.white.opacity((reorderHere || fileDropHere) ? 0.16 : 0))
+                .fill(Color.primary.opacity((reorderHere || fileDropHere) ? 0.12 : 0))
             if let item { inCellItem(item) }
         }
         .frame(maxWidth: .infinity)
@@ -488,7 +502,9 @@ struct DrawerView: View {
         case .cloud:
             return "No cloud drives found."
         case .recents:
-            return "Nothing opened from MacDring yet."
+            // Source-agnostic: a System/Both tab shows this too (including the
+            // moment Spotlight is still gathering), so "from MacDring" would lie.
+            return "Nothing recently opened yet."
         case .fresh:
             return "No files have arrived recently."
         default:
