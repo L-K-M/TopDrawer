@@ -925,6 +925,23 @@ final class TabController {
             guard let self, let id = self.openTabID else { return }
             self.store.placeItem(itemID, atSlot: slot, inTab: id)
         }
+        drawer.model.onGroupItems = { [weak self] draggedID, targetID in
+            guard let self, let id = self.openTabID else { return }
+            self.store.groupItems(draggedID: draggedID, ontoTargetID: targetID, inTab: id)
+        }
+        drawer.model.onPlaceInGroup = { [weak self] itemID, slot in
+            guard let self, let id = self.openTabID,
+                  let groupID = self.drawer.model.openGroupID else { return }
+            self.store.placeItemInGroup(itemID, atSlot: slot, groupID: groupID, inTab: id)
+        }
+        drawer.model.onRemoveFromGroup = { [weak self] itemID, groupID in
+            guard let self, let id = self.openTabID else { return }
+            self.store.removeFromGroup(childID: itemID, groupID: groupID, inTab: id)
+        }
+        drawer.model.onRenameGroup = { [weak self] groupID, name in
+            guard let self, let id = self.openTabID else { return }
+            self.store.renameGroup(groupID: groupID, to: name, inTab: id)
+        }
         drawer.model.onOpenSettings = { [weak self] in
             guard let self, let id = self.openTabID else { return }
             self.closeDrawer()
@@ -1396,8 +1413,14 @@ final class TabController {
         // itself; the monitor only swallows the keys that drive result navigation so
         // they don't move the text cursor instead.
         switch event.keyCode {
-        case 53:   // Esc — clear an active filter first, else close the drawer
-            if model.isSearching { model.clearSearch() } else { closeDrawer() }
+        case 53:   // Esc — clear a filter, else leave an open group, else close the drawer
+            if model.isSearching {
+                model.clearSearch()
+            } else if model.openGroupID != nil {
+                model.openGroupID = nil
+            } else {
+                closeDrawer()
+            }
             return nil
         case 125, 126:   // Down, Up — move the result selection while filtering
             guard model.isSearching else { return event }

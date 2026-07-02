@@ -12,9 +12,20 @@ final class DrawerModel: ObservableObject {
     /// inward face: top→bottom for left/right, leading→trailing for top/bottom.
     @Published var squareInnerStart: Bool = false
     @Published var squareInnerEnd: Bool = false
-    @Published var items: [DrawerItem] = []
+    @Published var items: [DrawerItem] = [] {
+        didSet {
+            // Keep `openGroupID` honest: if the open group is gone from the new items
+            // (dissolved by a pop-out, or removed by a reconcile), drop back to the top
+            // level. Otherwise the raw id would linger and misroute reorders/dwell and
+            // show a phantom "Move Out of Group" on every top-level item.
+            if let gid = openGroupID, !items.contains(where: { $0.id == gid && $0.kind == .group }) {
+                openGroupID = nil
+            }
+        }
+    }
     /// The id of the group whose expanded sub-grid is currently open, or `nil` at the
-    /// top level. Cleared automatically when that group no longer exists (dissolved).
+    /// top level. Cleared automatically when that group no longer exists (dissolved,
+    /// or gone after a reconcile) — see `items.didSet`.
     @Published var openGroupID: UUID?
     @Published var isDropTargeted: Bool = false
     /// The grid slot a file drag is currently hovering over (drives the per-slot
@@ -142,6 +153,17 @@ final class DrawerModel: ObservableObject {
     var onMouseExited: (() -> Void)?
     /// Called when a drag-reorder finishes: place `itemID` at grid `slot`.
     var onPlaceItem: ((_ itemID: UUID, _ slot: Int) -> Void)?
+    /// Two items were dragged together (drop app onto app) — form a new group, or
+    /// extend the target group: `draggedID` dropped onto `targetID`.
+    var onGroupItems: ((_ draggedID: UUID, _ targetID: UUID) -> Void)?
+    /// A drag-reorder finished *inside* the open group: place `itemID` at the group's
+    /// sub-grid `slot`.
+    var onPlaceInGroup: ((_ itemID: UUID, _ slot: Int) -> Void)?
+    /// Pop `itemID` out of group `groupID` back to the top level (context menu, or a
+    /// drag out of the folder).
+    var onRemoveFromGroup: ((_ itemID: UUID, _ groupID: UUID) -> Void)?
+    /// Rename group `groupID` to `name` (the inline field in the open-group header).
+    var onRenameGroup: ((_ groupID: UUID, _ name: String) -> Void)?
     /// Open this tab's settings (drawer header gear).
     var onOpenSettings: (() -> Void)?
     /// Toggle this tab's locked state (drawer header lock).
@@ -156,6 +178,12 @@ final class DrawerModel: ObservableObject {
     /// The item occupying a grid slot, if any.
     func item(atSlot slot: Int) -> DrawerItem? {
         items.first { $0.slot == slot }
+    }
+
+    /// The item occupying a slot in the **currently visible** context — an open
+    /// group's children, else the top level. Drives the grid while a group is open.
+    func visibleItem(atSlot slot: Int) -> DrawerItem? {
+        visibleItems.first { $0.slot == slot }
     }
 }
 

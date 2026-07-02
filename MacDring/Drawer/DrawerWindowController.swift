@@ -182,6 +182,7 @@ final class DrawerWindowController {
         panel.level = preferences.tabWindowLevel.drawerWindowLevel
         apply(tab: tab)
         model.clearSearch()   // each open starts unfiltered
+        model.openGroupID = nil   // …and at the top level, not inside a group
         model.edge = edge
         currentEdge = edge
         currentScreen = screen

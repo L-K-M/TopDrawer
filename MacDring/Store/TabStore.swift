@@ -252,8 +252,8 @@ final class TabStore: ObservableObject {
         mutate {
             guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
             if let target = BookmarkResolver.url(for: item)?.standardized,
-               let existing = $0.tabs[i].items.first(where: { BookmarkResolver.url(for: $0)?.standardized == target }) {
-                resultID = existing.id   // already present — reuse it, don't duplicate
+               let existing = $0.tabs[i].items.flattenedLaunchable().first(where: { BookmarkResolver.url(for: $0)?.standardized == target }) {
+                resultID = existing.id   // already present (top level or inside a group) — reuse it, don't duplicate
                 return
             }
             $0.tabs[i].items.append(item)
@@ -328,6 +328,55 @@ final class TabStore: ObservableObject {
                 $0.tabs[ti].items[occupant].slot = oldSlot
             }
             $0.tabs[ti].items[ii].slot = slot
+        }
+    }
+
+    // MARK: Groups (iOS-folder-like)
+
+    /// Forms a group from `draggedID` dropped onto `targetID` (or drops the dragged
+    /// item into `targetID` when it's already a group). A no-op if the move isn't
+    /// groupable (see `DrawerGrouping.grouped`), so the caller can have fallen back to
+    /// a plain reorder.
+    func groupItems(draggedID: UUID, ontoTargetID targetID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  let grouped = DrawerGrouping.grouped($0.tabs[ti].items,
+                                                       draggedID: draggedID, ontoTargetID: targetID) else { return }
+            $0.tabs[ti].items = grouped
+        }
+    }
+
+    /// Pops `childID` out of group `groupID` back to the top level, dissolving the
+    /// group if it drops below two items.
+    func removeFromGroup(childID: UUID, groupID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            $0.tabs[ti].items = DrawerGrouping.removingFromGroup($0.tabs[ti].items,
+                                                                 childID: childID, groupID: groupID)
+        }
+    }
+
+    /// Renames group `groupID` (the inline field in the open-group header).
+    func renameGroup(groupID: UUID, to name: String, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            $0.tabs[ti].items = DrawerGrouping.renaming($0.tabs[ti].items, groupID: groupID, to: name)
+        }
+    }
+
+    /// Reorders a child within its group's sub-grid, with the same swap-or-move-into-a-
+    /// gap semantics as `placeItem` one level down.
+    func placeItemInGroup(_ itemID: UUID, atSlot slot: Int, groupID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  let gi = $0.tabs[ti].items.firstIndex(where: { $0.id == groupID && $0.kind == .group }),
+                  let ii = $0.tabs[ti].items[gi].children.firstIndex(where: { $0.id == itemID }) else { return }
+            let oldSlot = $0.tabs[ti].items[gi].children[ii].slot
+            guard oldSlot != slot else { return }
+            if let occupant = $0.tabs[ti].items[gi].children.firstIndex(where: { $0.slot == slot }) {
+                $0.tabs[ti].items[gi].children[occupant].slot = oldSlot
+            }
+            $0.tabs[ti].items[gi].children[ii].slot = slot
         }
     }
 

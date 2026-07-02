@@ -11,6 +11,14 @@ enum DrawerGrouping {
     static let defaultName = "Group"
     /// A group with fewer children than this collapses back into loose items.
     static let dissolveThreshold = 2
+    /// The item kinds that may go into a group — launchable targets only. Containers
+    /// with their own dedicated slot (Trash, disks, cloud roots) never group.
+    static let groupableKinds: Set<ItemKind> = [.application, .file, .folder, .url]
+
+    /// Whether `item` can be dragged into (or used to seed) a group — a launchable
+    /// target. A `.group` is never groupable as a *dragged* item (groups don't nest);
+    /// as a drop *target* the caller allows `.group` explicitly (to append into it).
+    static func isGroupable(_ item: DrawerItem) -> Bool { groupableKinds.contains(item.kind) }
 
     /// Groups `draggedID` onto `targetID` at the top level. If the target is already a
     /// group the dragged item joins it; otherwise both are wrapped in a new group at
@@ -21,7 +29,9 @@ enum DrawerGrouping {
         guard draggedID != targetID,
               let dragged = items.first(where: { $0.id == draggedID }),
               let target = items.first(where: { $0.id == targetID }),
-              dragged.kind != .group else { return nil }
+              isGroupable(dragged),                                   // a launchable, non-group source
+              target.kind == .group || isGroupable(target)           // onto a group (append) or another launchable
+        else { return nil }
 
         var result = items.filter { $0.id != draggedID }
         guard let targetIndex = result.firstIndex(where: { $0.id == targetID }) else { return nil }
