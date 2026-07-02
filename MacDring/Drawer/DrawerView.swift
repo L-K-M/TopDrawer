@@ -23,20 +23,34 @@ struct DrawerView: View {
     // The external file-drop target slot lives on the model (`model.fileDropSlot`)
     // so the AppKit-driven drop delegate can update it during a drag.
 
+    /// The occupied slot a drag has *dwelled* over long enough to form a group on drop
+    /// (iOS-folder-style). `nil` until the dwell timer fires; drives the target's
+    /// "will group" highlight.
+    @State private var groupTargetSlot: Int?
+    @State private var dwellWork: DispatchWorkItem?   // pending dwell timer
+    @State private var dwellSlot: Int?                // the slot that timer is arming for
+    /// The inline group-rename buffer, committed on Return / Back (so keystrokes don't
+    /// each hit the store and rebuild the drawer mid-edit).
+    @State private var groupNameDraft = ""
+
     /// Keyboard focus target. The filter field is focused on open (type-to-find); the
     /// notes editor is focused when the user clicks into a note to edit it.
     @FocusState private var focus: Field?
-    private enum Field { case search, notes }
+    private enum Field { case search, notes, groupName }
 
     private let contentSpace = "macdring.drawer.content"
     private var columns: Int { max(1, model.columns) }
-    private var maxSlot: Int { model.items.map(\.slot).max() ?? -1 }
+    /// The items the grid/list currently shows: an open group's children, else the top
+    /// level. Everything below (`maxSlot`, `rows`, slot lookup) works over this.
+    private var contextItems: [DrawerItem] { model.visibleItems }
+    private var maxSlot: Int { contextItems.map(\.slot).max() ?? -1 }
     private var rows: Int {
         DrawerMetrics.gridRowCount(configuredRows: model.rows, maxSlot: maxSlot,
-                                   itemCount: model.items.count, columns: columns)
+                                   itemCount: contextItems.count, columns: columns)
     }
     private var cellHeight: CGFloat { CGFloat(preferences.iconSize) + 26 }
-    /// Only `.items` tabs support internal reorder / remove.
+    /// Only `.items` tabs support internal reorder / remove (and groups only ever live
+    /// in an `.items` tab).
     private var editable: Bool { model.kind == .items }
 
     var body: some View {
@@ -292,7 +306,49 @@ struct DrawerView: View {
     // MARK: Items / folder grid
 
     private var content: some View {
-        ScrollView { itemsLayout }
+        VStack(alignment: .leading, spacing: 8) {
+            if model.openGroup != nil { groupHeader }
+            ScrollView { itemsLayout }
+                // Recreate the grid when the open group changes so the crossfade fires;
+                // `withAnimation` at the open/close call sites drives the transition.
+                .id(model.openGroupID)
+                .transition(.opacity)
+        }
+    }
+
+    /// The open-group header: a Back chevron to the top level and an inline-editable
+    /// name field (iOS-folder style). The name commits on Return or when leaving.
+    private var groupHeader: some View {
+        HStack(spacing: 8) {
+            Button {
+                commitGroupName()
+                withAnimation(.easeInOut(duration: 0.2)) { model.openGroupID = nil }
+            } label: {
+                Image(systemName: "chevron.backward")
+                Text("Back")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            TextField("Group", text: $groupNameDraft)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.trailing)
+                .font(.headline)
+                .focused($focus, equals: .groupName)
+                .onSubmit { commitGroupName() }
+                .frame(maxWidth: 180)
+        }
+        .onAppear { groupNameDraft = model.openGroup?.displayName ?? "" }
+        .onChange(of: model.openGroupID) { _ in groupNameDraft = model.openGroup?.displayName ?? "" }
+    }
+
+    /// Persists the edited group name (defaulting a blank back to "Group"), only when
+    /// it actually changed — one store write, not one per keystroke.
+    private func commitGroupName() {
+        guard let group = model.openGroup else { return }
+        let trimmed = groupNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = trimmed.isEmpty ? DrawerGrouping.defaultName : trimmed
+        if name != group.displayName { model.onRenameGroup?(group.id, name) }
     }
 
     @ViewBuilder
@@ -306,8 +362,8 @@ struct DrawerView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                let ordered = model.items.sorted { $0.slot < $1.slot }
-                if model.kind == .recents || model.kind == .fresh {
+                let ordered = contextItems.sorted { $0.slot < $1.slot }
+                if model.openGroup == nil, model.kind == .recents || model.kind == .fresh {
                     // The date-ranked lists (Recents by last-used, Fresh by Date Added)
                     // read better grouped into recency sections (Today / Yesterday /
                     // This Week / Older).
@@ -346,18 +402,24 @@ struct DrawerView: View {
     }
 
     private func gridSlot(_ slot: Int) -> some View {
-        let item = model.item(atSlot: slot)
+        let item = model.visibleItem(atSlot: slot)
         let reorderHere = dropTargetSlot == slot && dragging?.slot != slot
         let fileDropHere = model.fileDropSlot == slot
         // A file dragged onto a folder/app is a "file into / open with" target, not a
         // plain slot drop — give it a distinct ring so the difference is obvious.
         let intoTarget = fileDropHere && (item?.kind == .folder || item?.kind == .application || item?.kind == .trash)
+        // A drag has dwelled over this (occupied) slot: releasing here forms a group.
+        let groupHere = groupTargetSlot == slot && dragging != nil && dragging?.slot != slot
         return ZStack {
             // Primary adapts to light/dark; hardcoded white washed out over the
             // light appearance's Frosted/Solid backing.
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity((reorderHere || fileDropHere) ? 0.12 : 0))
-            if let item { inCellItem(item) }
+                .fill(Color.primary.opacity((reorderHere || fileDropHere || groupHere) ? 0.12 : 0))
+            if let item {
+                inCellItem(item)
+                    .scaleEffect(groupHere ? 1.12 : 1)
+                    .animation(.easeInOut(duration: 0.15), value: groupHere)
+            }
         }
         .frame(maxWidth: .infinity)
         .frame(height: cellHeight)
@@ -365,6 +427,12 @@ struct DrawerView: View {
             if intoTarget {
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color(hexString: model.colorHex), lineWidth: 2)
+            } else if groupHere {
+                // The "will group" affordance: a soft ring around the item the drag is
+                // hovering, echoing iOS's folder-forming halo. Primary so it reads over
+                // the light appearance's backing too.
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.6), lineWidth: 2)
             }
         }
         .background(slotFrameReporter(slot))
@@ -405,18 +473,66 @@ struct DrawerView: View {
             .onChanged { value in
                 if dragging?.id != item.id { dragging = item }
                 dragOffset = value.translation
-                dropTargetSlot = targetSlot(at: value.location)
+                let target = targetSlot(at: value.location)
+                dropTargetSlot = target
+                updateDwell(target: target, dragged: item)
             }
             .onEnded { value in
-                if let slot = targetSlot(at: value.location), let dragging {
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        model.onPlaceItem?(dragging.id, slot)
-                    }
-                }
+                finishDrag(dragged: item, dropSlot: targetSlot(at: value.location))
                 dragging = nil
                 dragOffset = .zero
                 dropTargetSlot = nil
+                cancelDwell()
             }
+    }
+
+    /// Resolves a finished drag. Top level: a dwell over another item forms a group,
+    /// otherwise it's a reorder. Inside an open group: a reorder within the sub-grid.
+    private func finishDrag(dragged: DrawerItem, dropSlot: Int?) {
+        let topLevel = model.openGroupID == nil
+        if topLevel, let g = groupTargetSlot, g == dropSlot,
+           let target = model.visibleItem(atSlot: g), target.id != dragged.id,
+           DrawerGrouping.isGroupable(dragged),
+           target.kind == .group || DrawerGrouping.isGroupable(target) {
+            model.onGroupItems?(dragged.id, target.id)
+            return
+        }
+        guard let slot = dropSlot else { return }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            if topLevel {
+                model.onPlaceItem?(dragged.id, slot)
+            } else {
+                model.onPlaceInGroup?(dragged.id, slot)
+            }
+        }
+    }
+
+    /// Arms (or re-arms) the dwell timer that turns hovering over another item into a
+    /// group-on-drop target — only at the top level, only over a *different*, occupied
+    /// slot, and never while dragging a group (groups don't nest). Moving to a new slot
+    /// resets the countdown, so brushing past an item to reorder doesn't group.
+    private func updateDwell(target: Int?, dragged: DrawerItem) {
+        guard model.openGroupID == nil, DrawerGrouping.isGroupable(dragged),
+              let target, let occupant = model.visibleItem(atSlot: target),
+              occupant.id != dragged.id,
+              occupant.kind == .group || DrawerGrouping.isGroupable(occupant) else {
+            cancelDwell()
+            return
+        }
+        if dwellSlot == target { return }   // already counting down over this slot
+        dwellWork?.cancel()
+        groupTargetSlot = nil
+        dwellSlot = target
+        let work = DispatchWorkItem { groupTargetSlot = target }
+        dwellWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
+    private func cancelDwell() {
+        dwellWork?.cancel()
+        dwellWork = nil
+        dwellSlot = nil
+        groupTargetSlot = nil
     }
 
     private func targetSlot(at point: CGPoint) -> Int? {
@@ -446,7 +562,11 @@ struct DrawerView: View {
             listColumns: columns,
             launchOnSingleClick: preferences.launchOnSingleClick,
             onLaunch: {
-                if item.isGroup { model.openGroupID = item.id } else { model.onLaunch?(item) }
+                if item.isGroup {
+                    withAnimation(.easeInOut(duration: 0.2)) { model.openGroupID = item.id }
+                } else {
+                    model.onLaunch?(item)
+                }
             },
             onReveal: { model.onRevealItem?(item) },
             onRemove: editable ? { model.onRemoveItem?(item) } : nil,
@@ -457,6 +577,13 @@ struct DrawerView: View {
             iconNonce: model.iconNonce,
             onEject: item.kind == .disk ? { model.onEjectItem?(item) } : nil,
             onCustomizeIcon: { model.onCustomizeItemIcon?(item) },   // any item, any tab kind
+            onUngroup: (editable && model.openGroupID != nil && !item.isGroup)
+                ? {
+                    if let gid = model.openGroupID {
+                        withAnimation(.easeInOut(duration: 0.2)) { model.onRemoveFromGroup?(item.id, gid) }
+                    }
+                }
+                : nil,
             runningBundleIDs: model.runningBundleIDs,
             isEjecting: model.ejectingItemIDs.contains(item.id),
             sparkle: model.sparklingItemIDs.contains(item.id)

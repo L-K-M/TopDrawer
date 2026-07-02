@@ -23,6 +23,9 @@ struct ItemView: View {
     var onEject: (() -> Void)?
     /// Open the generated-icon editor for this item (available for every item).
     var onCustomizeIcon: (() -> Void)?
+    /// Pop this item out of its group back to the top level — set only while a group
+    /// is open, so the row offers "Move Out of Group".
+    var onUngroup: (() -> Void)?
     /// Bundle IDs of currently-running apps — drives the "running" dot on app items.
     var runningBundleIDs: Set<String> = []
     /// This disk item is being ejected (Eject All) — shows a spinner over its icon.
@@ -104,6 +107,10 @@ struct ItemView: View {
                     if (item.customIconBookmark != nil || item.iconStyle != nil), let onResetIcon {
                         Button("Reset Icon", action: onResetIcon)
                     }
+                }
+                if let onUngroup, !item.isGroup {
+                    Divider()
+                    Button("Move Out of Group", action: onUngroup)
                 }
                 if let onRemove {
                     Divider()
