@@ -762,8 +762,24 @@ final class TabController {
     private func handleFileDrop(_ urls: [URL], slot: Int, toTab id: UUID) {
         guard !urls.isEmpty, let tab = store.tab(id: id) else { return }
         let fileURLs = urls.filter { $0.isFileURL }
-        let liveItems = tab.kind == .folder ? FolderLister.contents(of: tab) : tab.items
-        let target = slot >= 0 ? liveItems.first { $0.slot == slot } : nil
+        // Resolve what the drop landed on. A slot drop can only come from the open
+        // drawer, so resolve the target against the items it is *showing*
+        // (`drawer.model.items`) rather than a fresh re-list: the directory may have
+        // changed since the drawer rendered, and a re-listed target can differ from
+        // the slot the user aimed at (a re-list also costs a directory enumeration
+        // per drop). The pill path (slot == -1) has no target to resolve at all.
+        let target: DrawerItem?
+        if slot >= 0 {
+            let liveItems: [DrawerItem]
+            if tab.kind == .folder {
+                liveItems = openTabID == id ? drawer.model.items : FolderLister.contents(of: tab)
+            } else {
+                liveItems = tab.items
+            }
+            target = liveItems.first { $0.slot == slot }
+        } else {
+            target = nil
+        }
 
         if let target, target.kind == .application {
             ItemLauncher.open(urls, withApp: target)   // files *or* links → open-with
