@@ -82,9 +82,14 @@ struct TabStripView: View {
 
     private var modernTab: some View {
         let shape = edgeRoundedRect(edge: model.edge, radius: CGFloat(preferences.cornerRadius))
+        // Pick a legible foreground from the tab color, exactly like the classic
+        // style: hardcoded white was unreadable on light tab colors (yellow, mint).
+        // The dark drop shadow only helps white text pop off a dark tint; under
+        // near-black text on a light pill it reads as smudge, so it goes with it.
+        let foreground = Color(hexString: model.colorHex).readableForeground
         return contentStack
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
+            .foregroundStyle(foreground)
+            .shadow(color: .black.opacity(foreground == .white ? 0.35 : 0), radius: 1, y: 0.5)
             .padding(.vertical, isVertical ? 9 : 4)
             .padding(.horizontal, isVertical ? 4 : 11)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
