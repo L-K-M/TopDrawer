@@ -27,11 +27,33 @@ enum KeyCodes {
         return result
     }
 
-    /// Whether a modifier mask includes at least one modifier (a bare key makes a
-    /// poor global hotkey).
-    static func hasModifier(_ carbonModifiers: UInt32) -> Bool {
-        carbonModifiers & (UInt32(cmdKey) | UInt32(optionKey) | UInt32(controlKey) | UInt32(shiftKey)) != 0
+    /// Whether a modifier mask includes a *commanding* modifier — ⌘, ⌃, or ⌥.
+    /// Shift alone doesn't count: a ⇧-only "hotkey" (e.g. ⇧A) collides with typing
+    /// a capital letter and would swallow it system-wide.
+    static func hasCommandingModifier(_ carbonModifiers: UInt32) -> Bool {
+        carbonModifiers & (UInt32(cmdKey) | UInt32(optionKey) | UInt32(controlKey)) != 0
     }
+
+    /// Whether `keyCode` is a function key (F1–F20). Function keys don't collide
+    /// with typing, so they make fine global hotkeys even without a modifier —
+    /// the classic launcher convention (F12 toggles a dock).
+    static func isFunctionKey(_ keyCode: UInt32) -> Bool {
+        functionKeys.contains(keyCode)
+    }
+
+    /// Whether a key + modifier combination is usable as a global hotkey: it needs
+    /// a commanding modifier (⌘/⌃/⌥ — Shift alone would swallow ordinary typing),
+    /// unless the key is a function key, which is safe bare.
+    static func isUsableHotkey(keyCode: UInt32, modifiers: UInt32) -> Bool {
+        hasCommandingModifier(modifiers) || isFunctionKey(keyCode)
+    }
+
+    private static let functionKeys: Set<UInt32> = [
+        UInt32(kVK_F1), UInt32(kVK_F2), UInt32(kVK_F3), UInt32(kVK_F4), UInt32(kVK_F5),
+        UInt32(kVK_F6), UInt32(kVK_F7), UInt32(kVK_F8), UInt32(kVK_F9), UInt32(kVK_F10),
+        UInt32(kVK_F11), UInt32(kVK_F12), UInt32(kVK_F13), UInt32(kVK_F14), UInt32(kVK_F15),
+        UInt32(kVK_F16), UInt32(kVK_F17), UInt32(kVK_F18), UInt32(kVK_F19), UInt32(kVK_F20),
+    ]
 
     /// A readable name for a virtual key code (common keys; falls back to a hex label).
     static func keyName(for keyCode: UInt32) -> String {
@@ -61,5 +83,8 @@ enum KeyCodes {
         UInt32(kVK_F4): "F4", UInt32(kVK_F5): "F5", UInt32(kVK_F6): "F6",
         UInt32(kVK_F7): "F7", UInt32(kVK_F8): "F8", UInt32(kVK_F9): "F9",
         UInt32(kVK_F10): "F10", UInt32(kVK_F11): "F11", UInt32(kVK_F12): "F12",
+        UInt32(kVK_F13): "F13", UInt32(kVK_F14): "F14", UInt32(kVK_F15): "F15",
+        UInt32(kVK_F16): "F16", UInt32(kVK_F17): "F17", UInt32(kVK_F18): "F18",
+        UInt32(kVK_F19): "F19", UInt32(kVK_F20): "F20",
     ]
 }

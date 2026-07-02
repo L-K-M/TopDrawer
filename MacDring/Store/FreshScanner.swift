@@ -1,16 +1,15 @@
 import Foundation
 
-/// Direct-filesystem backing for the **Fresh** tab — the half that works *without*
-/// Spotlight. It reads each landing-zone directory's entries and ranks them by the
-/// filesystem's own **Date Added** (`addedToDirectoryDateKey` — the very attribute
-/// Finder shows as "Date Added" and that Spotlight mirrors as `kMDItemDateAdded`), so a
-/// fresh download, copy, or save still surfaces when Spotlight indexing is turned off
-/// or the folder is excluded from it.
+/// Direct-filesystem scan that ranks a directory's entries by the filesystem's own
+/// **Date Added** (`addedToDirectoryDateKey` — the very attribute Finder shows as
+/// "Date Added" and that Spotlight mirrors as `kMDItemDateAdded`).
 ///
-/// Shallow by design: it scans the **top level** of each scope (where downloads,
-/// copies, and screenshots actually land), which keeps it synchronous, bounded, and
-/// permission-free like the other listers. Files saved deep inside sub-folders are
-/// left to Spotlight, which `FreshLister.merge` folds in when it's available.
+/// **Not used by the live Fresh tab.** Listing `~/Downloads`, `~/Desktop`, or
+/// `~/Documents` directly trips macOS's folder-access (TCC) consent dialogs —
+/// breaking the app's no-permission promise (fable-is-awesome.md FB1) — so the Fresh
+/// pipeline is Spotlight-only (index reads never prompt). This stays as tested pure
+/// logic for a possible future *opt-in* "works without Spotlight" mode that would
+/// own the prompt explicitly.
 enum FreshScanner {
     /// How far back a file still counts as "fresh". Matches `SpotlightQuery.Mode`'s
     /// `dateAdded` window so the direct scan and the Spotlight query agree on the cutoff.

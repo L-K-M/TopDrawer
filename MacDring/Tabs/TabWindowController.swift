@@ -62,7 +62,8 @@ final class TabWindowController {
         self.preferences = preferences
         self.anchor = tab.anchor
         self.model = TabStripModel(title: tab.title, colorHex: tab.colorHex, glyph: tab.glyph,
-                                   edge: tab.anchor.edge, acceptsWebURLDrops: tab.kind == .items)
+                                   edge: tab.anchor.edge, acceptsWebURLDrops: tab.kind == .items,
+                                   acceptsFileDrops: TabWindowController.takesFileDrops(tab.kind))
 
         let hosting = FirstMouseTabHostingView(rootView: TabStripView(model: model, preferences: preferences))
         hosting.translatesAutoresizingMaskIntoConstraints = true
@@ -156,11 +157,19 @@ final class TabWindowController {
     /// size while previewing a snap to a different edge during a drag.
     var contentLength: CGFloat { max(restingFrame.width, restingFrame.height) }
 
+    /// Whether a tab of `kind` accepts file drops on its pill: items tabs add them,
+    /// folder tabs file them into the mirrored directory. The live listings are
+    /// read-only, so their pills shouldn't advertise (highlight for) a drop that
+    /// `handleFileDrop` would silently discard.
+    private static func takesFileDrops(_ kind: TabKind) -> Bool {
+        kind == .items || kind == .folder
+    }
+
     func update(tab: Tab) {
         anchor = tab.anchor
         // Equality-guard each @Published write: update(tab:) runs for every tab on
         // every reconcile, and an unguarded assignment emits objectWillChange even
-        // for an identical value — five spurious pill invalidations per tab per
+        // for an identical value — six spurious pill invalidations per tab per
         // store mutation.
         if model.title != tab.title { model.title = tab.title }
         if model.colorHex != tab.colorHex { model.colorHex = tab.colorHex }
@@ -168,6 +177,8 @@ final class TabWindowController {
         if model.edge != tab.anchor.edge { model.edge = tab.anchor.edge }
         let acceptsWebURLDrops = tab.kind == .items
         if model.acceptsWebURLDrops != acceptsWebURLDrops { model.acceptsWebURLDrops = acceptsWebURLDrops }
+        let acceptsFileDrops = TabWindowController.takesFileDrops(tab.kind)
+        if model.acceptsFileDrops != acceptsFileDrops { model.acceptsFileDrops = acceptsFileDrops }
 
         // On a concealment-style change, re-seed the concealed flag: a concealable
         // style starts concealed (so the next `place` doesn't flash it onto the edge

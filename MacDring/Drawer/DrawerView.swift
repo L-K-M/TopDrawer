@@ -206,9 +206,9 @@ struct DrawerView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 8)
-            Button("Undo") { undo.action(); model.undoToast = nil }
+            Button("Undo") { undo.action(); withAnimation { model.undoToast = nil } }
                 .controlSize(.small)
-            Button { model.undoToast = nil } label: { Image(systemName: "xmark") }
+            Button { withAnimation { model.undoToast = nil } } label: { Image(systemName: "xmark") }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .help("Dismiss")
         }

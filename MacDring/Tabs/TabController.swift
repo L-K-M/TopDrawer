@@ -45,6 +45,8 @@ final class TabController {
     /// update live when Finder empties it. Lives for the controller's lifetime.
     private var trashWatch: DispatchSourceFileSystemObject?
     private var pendingFolderRefresh: DispatchWorkItem?
+    /// Coalesces bursts of Trash directory events into one icon refresh.
+    private var pendingTrashRefresh: DispatchWorkItem?
     /// A light repeating scan that lights the Fresh tab pill's "just landed" dot;
     /// runs only while a Fresh tab exists.
     private var freshBadgeTimer: Timer?
@@ -54,6 +56,12 @@ final class TabController {
     /// One-shot Spotlight lookup backing the open **Fresh** tab and the **system**
     /// source of a Recents tab; cancelled when the drawer closes or another tab opens.
     private let spotlight = SpotlightQuery()
+    /// The tab the `spotlight` query is currently gathering for, so an unrelated
+    /// reconcile doesn't cancel-and-restart (and thereby starve) an in-flight gather.
+    private var spotlightWatchTabID: UUID?
+    /// A dedicated Spotlight lookup for the Fresh pill dot, so the badge never
+    /// competes with (or restarts) the open drawer's query.
+    private let freshBadgeSpotlight = SpotlightQuery()
 
     /// Observers for app launch/terminate, so application items show a live "running"
     /// dot. Torn down in `saveAndTeardown`.
@@ -76,6 +84,15 @@ final class TabController {
     /// A more generous reveal margin used while a *file drag* nears a concealed tab's
     /// edge, so spring-loading has a real pill to target rather than a 3 pt sliver.
     private static let peekSlop: CGFloat = 60
+    /// The drag pasteboard's `changeCount` stamped at the latest observed mouse-down.
+    /// A drag only counts as a *file* drag when the count has advanced past this —
+    /// the pasteboard retains the previous drag's files, so content alone would
+    /// false-positive the peek on every plain window drag / text selection.
+    private var dragPasteboardCountAtPress = NSPasteboard(name: .drag).changeCount
+    /// Cached "does the drag pasteboard hold file URLs" answer for a given
+    /// `changeCount`, so the out-of-process read runs once per drag session rather
+    /// than once per mouse-moved event.
+    private var dragPasteboardCanReadFiles: (count: Int, canRead: Bool)?
     /// The guide the dragged tab is currently magnetized to, so the alignment haptic
     /// fires once per snap rather than every mouse-move while snapped.
     private var lastSnapGuide: Double?
@@ -198,7 +215,16 @@ final class TabController {
                                                           edge: key.edge, gap: EdgeLayout.minTabGap, in: visible)
                 entry.wc.setRestingFrame(snapped)
                 placed.append(snapped)
-                persistSettledPosition(snapped, was: incoming, edge: key.edge, in: visible, tab: entry.tab)
+                // Persist the settled position only while the tab is sitting on its
+                // *own* anchored display. A pill displaced here by the move-to-main
+                // policy is a guest: its anchor still names the disconnected display,
+                // and writing this screen's settled fraction into it would corrupt
+                // the spot it must restore to when that display returns ("stable
+                // restore is sacred"). Guests are de-overlapped on screen only.
+                if let anchored = registry.screen(for: entry.tab.anchor.displayUUID),
+                   screenNumber(anchored) == key.screen {
+                    persistSettledPosition(snapped, was: incoming, edge: key.edge, in: visible, tab: entry.tab)
+                }
             }
         }
     }
@@ -463,13 +489,31 @@ final class TabController {
         wc.restingFrame.insetBy(dx: -Self.peekSlop, dy: -Self.peekSlop)
     }
 
-    /// Whether a file drag is currently in progress (left button down with file URLs
-    /// on the drag pasteboard) — gates the drag-over peek. The button check avoids a
-    /// false positive from the drag pasteboard retaining the last drag's contents.
+    /// Whether a file drag is currently in progress — gates the drag-over peek.
+    /// A real drag session writes the drag pasteboard *after* the mouse-down, so a
+    /// file drag is: left button down, AND the drag pasteboard's `changeCount` has
+    /// advanced past the value stamped at the press. The pasteboard *retaining* the
+    /// previous drag's files proves nothing — without the stamp, any window drag or
+    /// text selection after the session's first file drag false-positived the peek.
+    /// The (out-of-process) content read happens once per drag session, cached by
+    /// `changeCount`, not once per mouse-moved event.
     private func fileBeingDragged() -> Bool {
         guard NSEvent.pressedMouseButtons & 0x1 != 0 else { return false }
-        return NSPasteboard(name: .drag).canReadObject(forClasses: [NSURL.self],
-                                                       options: [.urlReadingFileURLsOnly: true])
+        let pasteboard = NSPasteboard(name: .drag)
+        let count = pasteboard.changeCount
+        guard count != dragPasteboardCountAtPress else { return false }
+        if let cached = dragPasteboardCanReadFiles, cached.count == count { return cached.canRead }
+        let canRead = pasteboard.canReadObject(forClasses: [NSURL.self],
+                                               options: [.urlReadingFileURLsOnly: true])
+        dragPasteboardCanReadFiles = (count, canRead)
+        return canRead
+    }
+
+    /// Stamps the drag pasteboard's `changeCount` at a mouse-down, so a subsequent
+    /// drag counts as a *file* drag only if the pasteboard was rewritten after the
+    /// press (i.e. a real drag session started).
+    private func stampDragPasteboardAtPress() {
+        dragPasteboardCountAtPress = NSPasteboard(name: .drag).changeCount
     }
 
     /// Applies one tab's reveal decision: reveal it, or — when it should hide —
@@ -536,13 +580,24 @@ final class TabController {
             // `.leftMouseDragged` (in addition to `.mouseMoved`) so a file drag from
             // Finder toward a concealed tab triggers the peek even though the cursor
             // isn't "moving" in the plain sense while the button is held.
-            revealMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
-                self?.handleRevealMouseMoved()
+            // `.leftMouseDown` stamps the drag pasteboard's changeCount at the press,
+            // which is what lets `fileBeingDragged` tell a real file drag apart from
+            // a window drag over the previous drag's leftover pasteboard.
+            revealMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseDown]) { [weak self] event in
+                if event.type == .leftMouseDown {
+                    self?.stampDragPasteboardAtPress()
+                } else {
+                    self?.handleRevealMouseMoved()
+                }
             }
         }
         if revealMonitorLocal == nil {
-            revealMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-                self?.handleRevealMouseMoved()
+            revealMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { [weak self] event in
+                if event.type == .leftMouseDown {
+                    self?.stampDragPasteboardAtPress()
+                } else {
+                    self?.handleRevealMouseMoved()
+                }
                 return event
             }
         }
@@ -709,8 +764,24 @@ final class TabController {
     private func handleFileDrop(_ urls: [URL], slot: Int, toTab id: UUID) {
         guard !urls.isEmpty, let tab = store.tab(id: id) else { return }
         let fileURLs = urls.filter { $0.isFileURL }
-        let liveItems = tab.kind == .folder ? FolderLister.contents(of: tab) : tab.items
-        let target = slot >= 0 ? liveItems.first { $0.slot == slot } : nil
+        // Resolve what the drop landed on. A slot drop can only come from the open
+        // drawer, so resolve the target against the items it is *showing*
+        // (`drawer.model.items`) rather than a fresh re-list: the directory may have
+        // changed since the drawer rendered, and a re-listed target can differ from
+        // the slot the user aimed at (a re-list also costs a directory enumeration
+        // per drop). The pill path (slot == -1) has no target to resolve at all.
+        let target: DrawerItem?
+        if slot >= 0 {
+            let liveItems: [DrawerItem]
+            if tab.kind == .folder {
+                liveItems = openTabID == id ? drawer.model.items : FolderLister.contents(of: tab)
+            } else {
+                liveItems = tab.items
+            }
+            target = liveItems.first { $0.slot == slot }
+        } else {
+            target = nil
+        }
 
         if let target, target.kind == .application {
             ItemLauncher.open(urls, withApp: target)   // files *or* links → open-with
@@ -784,7 +855,8 @@ final class TabController {
     // MARK: Hotkeys
 
     private func registerHotkeyIfNeeded(for tab: Tab) {
-        guard let spec = tab.hotkey, KeyCodes.hasModifier(spec.carbonModifiers) else {
+        guard let spec = tab.hotkey,
+              KeyCodes.isUsableHotkey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) else {
             unregisterHotkey(tab.id)
             return
         }
@@ -888,6 +960,13 @@ final class TabController {
 
     // MARK: Item rename / icon
 
+    /// Floats a dialog above the drawer panel. The drawer rides at popup-menu level,
+    /// so an app-modal alert left at its default level can end up *behind* a large
+    /// drawer — invisible, while it blocks every click in the app.
+    private func floatAboveDrawer(_ window: NSWindow) {
+        window.level = NSWindow.Level(rawValue: preferences.tabWindowLevel.drawerWindowLevel.rawValue + 1)
+    }
+
     /// Renames an item via a small modal prompt, then commits it to the store.
     private func renameItem(_ item: DrawerItem) {
         guard let id = openTabID else { return }
@@ -902,6 +981,7 @@ final class TabController {
         alert.window.initialFirstResponder = field
 
         NSApp.activate(ignoringOtherApps: true)   // a text prompt needs key focus
+        floatAboveDrawer(alert.window)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
@@ -922,6 +1002,7 @@ final class TabController {
         panel.message = "Choose an image to use as this item's icon"
 
         NSApp.activate(ignoringOtherApps: true)
+        floatAboveDrawer(panel)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         var updated = item
         updated.customIconBookmark = BookmarkResolver.makeBookmark(for: url)
@@ -935,10 +1016,15 @@ final class TabController {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Empty the Trash?"
-        alert.informativeText = "This permanently erases the items in the Trash. You can’t undo this."
+        // Say how many items are about to go, the way Finder does. (Shares the
+        // metadata count's `.DS_Store` caveat — see TrashInspector.)
+        let count = TrashInspector.trashCount()
+        let what = count > 0 ? "the \(count) item\(count == 1 ? "" : "s")" : "the items"
+        alert.informativeText = "This permanently erases \(what) in the Trash. You can’t undo this."
         alert.addButton(withTitle: "Empty Trash")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)   // a modal alert needs key focus
+        floatAboveDrawer(alert.window)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         if FileMover.emptyTrash() {
             drawer.model.iconNonce += 1   // re-resolve the Trash icon in place (full → empty)
@@ -1031,8 +1117,8 @@ final class TabController {
     /// a few seconds (cancelling any previous one).
     private func showUndoToast(_ message: String, action: @escaping () -> Void) {
         undoToastClearItem?.cancel()
-        drawer.model.undoToast = DrawerUndo(message: message, action: action)
-        let clear = DispatchWorkItem { [weak self] in self?.drawer.model.undoToast = nil }
+        drawer.setUndoToast(DrawerUndo(message: message, action: action))
+        let clear = DispatchWorkItem { [weak self] in self?.drawer.setUndoToast(nil) }
         undoToastClearItem = clear
         DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: clear)
     }
@@ -1092,37 +1178,40 @@ final class TabController {
         pendingFolderRefresh = nil
     }
 
-    /// Keeps the Fresh "just landed" pill dot in sync: scans now and, while any Fresh
-    /// tab exists, keeps a 60 s timer alive so the dot lights within a minute of a
-    /// file arriving and fades on its own once it's older than `freshRecentWindow`.
+    /// Keeps the Fresh "just landed" pill dot in sync. While any Fresh tab exists a
+    /// 60 s timer re-checks, so the dot lights within a minute of a file arriving and
+    /// fades on its own once it's older than `freshRecentWindow`. The check runs only
+    /// when the timer is first armed and on its beats — **not** on every reconcile,
+    /// which used to mean one landing-zone sweep per store mutation.
     private func updateFreshBadgeTimer() {
         guard store.tabs.contains(where: { $0.kind == .fresh }) else {
             freshBadgeTimer?.invalidate()
             freshBadgeTimer = nil
+            freshBadgeSpotlight.cancel()
             return
         }
+        guard freshBadgeTimer == nil else { return }   // armed — the timer drives the re-checks
         refreshFreshBadges()
-        if freshBadgeTimer == nil {
-            freshBadgeTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-                self?.refreshFreshBadges()
-            }
+        let timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.refreshFreshBadges()
         }
+        timer.tolerance = 10   // a badge dot doesn't need punctual wakeups
+        freshBadgeTimer = timer
     }
 
     /// Lights every Fresh tab pill's dot when the newest item in the (shared) Fresh
-    /// scopes landed within `freshRecentWindow`. One scan covers all Fresh tabs; it
-    /// runs off the main thread and applies the result on it.
+    /// scopes landed within `freshRecentWindow`. Asks **Spotlight** (index-only, so it
+    /// can never trigger a folder-access prompt — unlike a direct directory scan, see
+    /// fable-is-awesome.md FB1); one lookup covers all Fresh tabs.
     private func refreshFreshBadges() {
         let freshTabIDs = store.tabs.filter { $0.kind == .fresh }.map(\.id)
         guard !freshTabIDs.isEmpty else { return }
         let now = Date()
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let results = FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit, now: now)
+        freshBadgeSpotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(),
+                                  limit: FreshLister.limit) { [weak self] results in
+            guard let self else { return }
             let recent = results.contains { now.timeIntervalSince($0.date) <= Self.freshRecentWindow }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                for id in freshTabIDs { self.tabWindows[id]?.model.hasRecentArrival = recent }
-            }
+            for id in freshTabIDs { self.tabWindows[id]?.model.hasRecentArrival = recent }
         }
     }
 
@@ -1137,10 +1226,26 @@ final class TabController {
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: .main)
-        source.setEventHandler { [weak self] in self?.drawer.model.iconNonce += 1 }
+        source.setEventHandler { [weak self] in self?.scheduleTrashRefresh() }
         source.setCancelHandler { close(fd) }
         trashWatch = source
         source.resume()
+    }
+
+    /// Coalesces a burst of Trash directory events (a batch delete streams many)
+    /// into one icon-nonce bump — the same debounce the folder watch uses. Every
+    /// bump re-runs item icon resolution, so raw event streams were re-resolving
+    /// the whole open drawer once per trashed file. Skipped while the drawer is
+    /// hidden: `hide()` clears the items and every reopen rebuilds the cells (and
+    /// re-resolves their icons) anyway.
+    private func scheduleTrashRefresh() {
+        pendingTrashRefresh?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.drawer.isVisible else { return }
+            self.drawer.model.iconNonce += 1
+        }
+        pendingTrashRefresh = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     /// Coalesces a burst of directory-change events into a single re-list.
@@ -1162,15 +1267,23 @@ final class TabController {
     /// `applySpotlightItems`. The async sibling of `updateFolderWatch`.
     private func updateSpotlightWatch() {
         guard let id = openTabID, let tab = store.tab(id: id) else { stopSpotlightWatch(); return }
+        // A reconcile that didn't change the open tab must not cancel-and-restart a
+        // gather that's still running for it — a burst of mutations (e.g. per-keystroke
+        // tab edits) would otherwise starve the query so results never land.
+        let restartable = !(spotlightWatchTabID == id && spotlight.isGathering)
         switch tab.kind {
         case .fresh:
-            // The direct scan already populated the drawer synchronously (works with
-            // Spotlight off); fold the Spotlight results in for deeper sub-folder hits.
-            let scanned = FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
+            // Spotlight-only: reading the index can never trigger a folder-access
+            // (TCC) prompt, unlike a direct scan of ~/Downloads & co. — the reason
+            // the FreshScanner path was retired from the live app (FB1).
+            guard restartable else { return }
+            spotlightWatchTabID = id
             spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightItems(FreshLister.items(from: FreshLister.merge(scanned, results)), forTab: id)
+                self?.applySpotlightItems(FreshLister.items(from: results), forTab: id)
             }
         case .recents where tab.recentsSource.includesSystem:
+            guard restartable else { return }
+            spotlightWatchTabID = id
             let includeMacDring = tab.recentsSource.includesMacDring
             let home = FileManager.default.homeDirectoryForCurrentUser
             spotlight.start(mode: .lastUsed, scopes: [home], limit: RecentsStore.limit) { [weak self] results in
@@ -1186,6 +1299,7 @@ final class TabController {
 
     private func stopSpotlightWatch() {
         spotlight.cancel()
+        spotlightWatchTabID = nil
     }
 
     /// Applies an async live listing to the open drawer — only if the same tab is
@@ -1302,6 +1416,8 @@ final class TabController {
         stopRunningAppMonitoring()
         freshBadgeTimer?.invalidate()
         freshBadgeTimer = nil
+        freshBadgeSpotlight.cancel()
+        stopSpotlightWatch()
         drawer.hide(duration: 0)     // instant on quit, no animation
         openTabID = nil
         for (_, wc) in tabWindows { wc.close() }

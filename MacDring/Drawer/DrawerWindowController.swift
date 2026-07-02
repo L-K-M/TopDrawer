@@ -41,11 +41,14 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
 
     /// The model iff this drag is acceptable here (items/folder tab + has file URLs
     /// or web links). Notes, Disks, Network, Cloud, Recents, and Fresh tabs are
-    /// read-only live listings, so they take no drops.
+    /// read-only live listings, so they take no drops. A folder tab whose directory
+    /// is unset or unresolvable takes none either — advertising a copy drop that
+    /// `handleFileDrop` would then silently swallow is worse than refusing it.
     private func droppableModel(_ sender: NSDraggingInfo) -> DrawerModel? {
         guard let model, model.kind != .notes, model.kind != .disks,
               model.kind != .network, model.kind != .cloud, model.kind != .recents,
               model.kind != .fresh,
+              !(model.kind == .folder && model.folderURL == nil),
               sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self],
                                                       options: pasteboardOptions(for: model))
         else { return nil }
@@ -64,11 +67,15 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
 
     private func updateDrag(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard let model = droppableModel(sender) else { return [] }
-        model.fileDropSlot = slot(at: sender.draggingLocation, model)   // drives the per-slot highlight
+        // Equality-guard both writes: `draggingUpdated` fires per mouse-move, and a
+        // `@Published` setter emits objectWillChange even for an identical value —
+        // unguarded, every drag frame re-invalidated the whole drawer twice.
+        let target = slot(at: sender.draggingLocation, model)   // drives the per-slot highlight
+        if model.fileDropSlot != target { model.fileDropSlot = target }
         // Whole-drawer highlight: even over the header/margins (no slot under
         // the cursor) the drag is acceptable — releasing adds to the tab — and
         // the outline brightening is the only feedback saying so.
-        model.isDropTargeted = true
+        if !model.isDropTargeted { model.isDropTargeted = true }
         return .copy
     }
 
@@ -230,6 +237,13 @@ final class DrawerWindowController {
         panel.setFrame(openFrame, display: true)
     }
 
+    /// Shows or clears the undo toast, inside `withAnimation` so the banner's
+    /// declared move-and-fade transition actually plays (a bare `@Published` write
+    /// from AppKit code pops it in with no animation).
+    func setUndoToast(_ toast: DrawerUndo?) {
+        withAnimation(.easeOut(duration: 0.2)) { model.undoToast = toast }
+    }
+
     /// Hides the drawer over `duration` seconds with a fade + small inward slide.
     func hide(duration: TimeInterval) {
         guard isVisible else { return }
@@ -239,6 +253,8 @@ final class DrawerWindowController {
             panel.alphaValue = 1
             model.items = []
             model.clearSearch()
+            model.undoToast = nil
+            model.ejectingItemIDs = []
             return
         }
         let end = EdgeLayout.nudgedDrawerFrame(edge: currentEdge, openFrame: openFrame, by: Self.nudge)
@@ -254,6 +270,8 @@ final class DrawerWindowController {
             self.panel.alphaValue = 1   // reset while hidden, ready for next open
             self.model.items = []
             self.model.clearSearch()
+            self.model.undoToast = nil
+            self.model.ejectingItemIDs = []
         })
     }
 
@@ -277,6 +295,15 @@ final class DrawerWindowController {
         model.slotFrames = [:]
         model.itemsTruncated = false
         model.sparklingItemIDs = []
+        if !preserveLiveNotes {
+            // A fresh open (or a switch to another tab) must not inherit the previous
+            // drawer session's transients: its undo toast — whose Undo would act on
+            // another tab's files — or its in-flight eject spinners. A refresh of the
+            // already-open tab (`preserveLiveNotes`) keeps both: the toast belongs to
+            // this session, and Eject All refreshes the listing mid-flight.
+            model.undoToast = nil
+            model.ejectingItemIDs = []
+        }
         model.title = tab.title
         model.colorHex = tab.colorHex
         model.columns = max(1, tab.gridColumns)
@@ -318,14 +345,16 @@ final class DrawerWindowController {
             model.notes = ""
             model.folderURL = nil
         case .fresh:
-            // Works even with Spotlight off: a direct, by-Date-Added scan of the
-            // landing zones fills the drawer immediately. The controller's Spotlight
-            // watch then merges in any deeper (sub-folder) hits via `updateLiveItems`
-            // when the index is available. See `FreshScanner` / `FreshLister.merge`.
-            model.items = FreshLister.items(from: FreshScanner.results(scopes: FreshLister.scopes(),
-                                                                       limit: FreshLister.limit))
-                .applyingIconStyles(from: tab.iconStyles)
-            model.sparklingItemIDs = sparkleIDs(for: model.items)
+            // Filled asynchronously by the controller's Spotlight watch (via
+            // `updateLiveItems`). Spotlight reads the index only, so it can never
+            // trigger a folder-access (TCC) prompt — the direct FreshScanner seed
+            // prompted for Downloads/Desktop/Documents and was retired (FB1). On a
+            // refresh of the already-open drawer (`preserveLiveNotes`), the current
+            // items stay put so the list doesn't blank out while a gather is running.
+            if !preserveLiveNotes {
+                model.items = []
+                model.sparklingItemIDs = []
+            }
             model.notes = ""
             model.folderURL = nil
         case .notes:

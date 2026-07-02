@@ -68,6 +68,13 @@ struct NewTabView: View {
         }
         .padding(16)
         .frame(width: 400, height: 340)
+        .onChange(of: kind) { newKind in
+            // Undo the folder-derived name auto-fill if the user switches the type
+            // away before creating (the folder itself is dropped in `create()`).
+            if newKind != .folder, name == folderURL?.lastPathComponent {
+                name = ""
+            }
+        }
     }
 
     private var defaultName: String {
@@ -89,12 +96,16 @@ struct NewTabView: View {
 
     private func create() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
+        // A directory picked while the Type was "Folder" must not ride along when
+        // the user switches to another kind before creating — a notes tab has no
+        // business carrying a folder bookmark (or the folder's auto-filled name).
+        let isFolder = kind == .folder
         onCreate(NewTabConfig(
             name: trimmed.isEmpty ? defaultName : trimmed,
             colorHex: colorHex,
             kind: kind,
-            folderBookmark: folderBookmark,
-            folderURL: folderURL
+            folderBookmark: isFolder ? folderBookmark : nil,
+            folderURL: isFolder ? folderURL : nil
         ))
     }
 

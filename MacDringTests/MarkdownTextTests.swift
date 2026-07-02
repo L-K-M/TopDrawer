@@ -47,4 +47,29 @@ final class MarkdownTextTests: XCTestCase {
         XCTAssertEqual(MarkdownText.togglingCheckbox(in: src, lineIndex: 2), src)
         XCTAssertEqual(MarkdownText.togglingCheckbox(in: src, lineIndex: 9), src)
     }
+
+    // MARK: Line splitting (normalized endings)
+
+    func testLinesTreatsCRLFAsOneBreak() {
+        XCTAssertEqual(MarkdownText.lines("a\r\nb\r\nc"), ["a", "b", "c"])
+        XCTAssertEqual(MarkdownText.lines("a\rb"), ["a", "b"])
+        XCTAssertEqual(MarkdownText.lines("a\u{2028}b\u{2029}c"), ["a", "b", "c"])
+    }
+
+    func testTogglingCheckboxInCRLFTextAddsNoPhantomBlankLines() {
+        // Pasted Windows-style text: toggling must flip the right line and must not
+        // grow the note by a blank line per CRLF (the old .newlines split did).
+        let src = "- [ ] a\r\n- [ ] b\r\nplain"
+        XCTAssertEqual(MarkdownText.togglingCheckbox(in: src, lineIndex: 1),
+                       "- [ ] a\n- [x] b\nplain")
+    }
+
+    func testTogglingCheckboxIndexesMatchTheRenderedLines() {
+        // The renderer and the toggler must split identically, or a tap lands on
+        // the wrong line. Index 2 in CRLF text is "plain" for both.
+        let src = "- [ ] a\r\n- [x] b\r\nplain"
+        XCTAssertEqual(MarkdownText.lines(src)[2], "plain")
+        XCTAssertEqual(MarkdownText.togglingCheckbox(in: src, lineIndex: 2),
+                       src)   // not a checkbox → no-op
+    }
 }

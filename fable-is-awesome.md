@@ -39,7 +39,7 @@ elsewhere goes to heroic lengths to avoid exactly this (see `TrashInspector`'s
 metadata-only counting). **Fix:** make the Fresh pipeline Spotlight-only again
 (drawer fill and pill-dot via `SpotlightQuery`, which reads the index and never
 prompts); keep `FreshScanner` as tested pure logic out of the default path.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #61](https://github.com/L-K-M/MacDring/pull/61) (together with FP4 + FP5).
 
 ### FB2 🔴 De-overlap pass permanently rewrites stored tab positions from transient states — *high*
 `persistSettledPosition` (`TabController.swift:210`) writes every de-overlap snap back
@@ -52,7 +52,7 @@ Transient geometry (Dock reveal/resize, resolution switches mid-reconfiguration)
 do the same on a single display. This violates AGENTS.md's "stable restore is sacred."
 **Fix:** persist a settled position only when the tab is actually sitting on its own
 anchored display.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #62](https://github.com/L-K-M/MacDring/pull/62).
 
 ### FB3 🔴 Hotkey recorder accepts Shift-only shortcuts, which then swallow ordinary typing system-wide — *high*
 `KeyCodes.hasModifier` counts Shift alone as a sufficient modifier
@@ -63,7 +63,7 @@ toggles a drawer and swallows the keystroke. **Fix:** require ⌘/⌃/⌥ for or
 keys; while in there, *allow bare function keys* (F1–F20) — a real DragThing-style
 convenience the backlog already wants (`awesome.md §4`), and safe because F-keys
 don't collide with typing.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #63](https://github.com/L-K-M/MacDring/pull/63) (ships FF6, bare function keys, in the same stroke).
 
 ### FB4 🟠 One bad record wipes the entire Recents history — *medium*
 `RecentsStore.load` decodes with a strict all-or-nothing
@@ -73,7 +73,7 @@ the whole array, and the next `record()` **persists the wipe**. The launcher doc
 learned this exact lesson (`FailableTab` / `FailableDrawerItem` / `decodeLenient`);
 the recents store didn't get the memo. **Fix:** per-element failable decoding + a
 lenient `kind` fallback.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #64](https://github.com/L-K-M/MacDring/pull/64).
 
 ### FB5 🟠 Favicon fetch overwrites a URL item's user-chosen custom icon — *medium*
 `ItemView`'s `.task` (`Drawer/ItemView.swift:126`) fetches a favicon for every `.url`
@@ -81,7 +81,7 @@ item *unconditionally* and assigns it over whatever `resolveIcon` returned — i
 a user-set image (`customIconBookmark`) or generated icon (`iconStyle`), which
 `resolveIcon` correctly prefers. Customize a link's icon and the favicon stomps it a
 beat later. **Fix:** skip the fetch when either override is set.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #65](https://github.com/L-K-M/MacDring/pull/65) (together with FP1 and FP2's nonce scoping).
 
 ### FB6 🟠 The Undo toast survives drawer close/switch — Undo then acts on another tab's files — *medium*
 `model.undoToast` is cleared only by its 6-second timer or a click
@@ -91,14 +91,14 @@ A, click tab B within 6 s: B's drawer opens showing A's "Moved 3 items — Undo"
 pressing Undo silently moves A's files back while you look at B. **Fix:** clear the
 toast (and eject-spinner state) whenever the drawer loads a tab or hides; cancel the
 timer on close.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #66](https://github.com/L-K-M/MacDring/pull/66) (together with FV4).
 
 ### FB7 🟠 Bookmark self-healing skips folder tabs and custom icons — *medium*
 `TabStore.remintStaleBookmarks` (`Store/TabStore.swift:174`) sweeps only
 `item.bookmark`. `Tab.folderBookmark` (the directory a folder tab mirrors) and
 `DrawerItem.customIconBookmark` (custom icon images) never get re-minted, so those go
 stale forever the same way item bookmarks used to. **Fix:** extend the sweep to both.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #67](https://github.com/L-K-M/MacDring/pull/67) (together with FB19).
 
 ### FB8 🟠 Drag-over "peek" fires on any left-button drag — and polls the pasteboard per event — *medium*
 `fileBeingDragged()` (`TabController.swift:469`) gates the generous peek-reveal zone
@@ -112,7 +112,7 @@ system-wide while any concealable tab exists. **Fix:** stamp the drag-pasteboard
 advanced since (a real drag session writes the pasteboard *after* the press); consult
 the pasteboard only when the cursor is actually near a peek zone, cached per
 `changeCount`.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #68](https://github.com/L-K-M/MacDring/pull/68).
 
 ### FB9 🟠 Folder-tab slot drops re-list the directory — the target can differ from what's on screen — *medium*
 `handleFileDrop` (`TabController.swift:712`) resolves the drop-target slot against a
@@ -122,7 +122,7 @@ the slot the user aimed at can resolve to a different item — filing files into
 wrong folder — and every drop pays a full re-list. **Fix:** resolve slot targets from
 `drawer.model.items` when that tab's drawer is open (slots only exist on screen
 anyway).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #69](https://github.com/L-K-M/MacDring/pull/69).
 
 ### FB10 🟠 Read-only tab pills advertise file drops, then silently discard them — *medium*
 Every pill registers for `.fileURL` drops (`TabStripView.swift:232`) and shows the
@@ -131,7 +131,7 @@ network / cloud / recents / fresh tabs with no feedback (`TabController.swift:73
 PR #58 fixed this for *web URL* drops; file drops still lie. **Fix:** a
 `TabStripModel.acceptsFileDrops` flag driven by tab kind — only items/folder pills
 register for file drops.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #70](https://github.com/L-K-M/MacDring/pull/70).
 
 ### FB11 🟠 Rename / Change Icon / Empty Trash dialogs can open *beneath* the drawer while app-modally blocking it — *medium*
 The drawer panel floats at `.popUpMenu` level; `renameItem`, `changeItemIcon`, and
@@ -141,7 +141,7 @@ first; these don't). A large drawer can cover the centered alert: the app is mod
 the drawer eats the clicks, the prompt is invisible. **Fix:** float the dialog above
 the drawer level (and add the Trash item count to the Empty Trash message while
 there — Finder tells you how many items you're about to erase; see FU3).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #71](https://github.com/L-K-M/MacDring/pull/71) (together with FU3).
 
 ### FB12 🟡 Launch-at-Login toggle can show "on" while macOS is still waiting for approval — *medium, needs device*
 `systemLaunchAtLoginEnabled()` maps `.requiresApproval` to `nil` → the stored default
@@ -155,12 +155,12 @@ own message ("waiting for approval in System Settings").
 listing, which rebuilds every transient item **with a fresh UUID**
 (`TabController.swift:1005`), so the remaining in-flight spinners drop off.
 Fixed by stable transient IDs (FP3).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ fixed by FP3's stable ids — [PR #72](https://github.com/L-K-M/MacDring/pull/72).
 
 ### FB14 🟡 The "one-shot" Fresh sparkle replays on every refresh — *low (root cause: FP3)*
 Same UUID churn: each `updateLiveItems` re-mints IDs, so `sparklingItemIDs` re-matches
 and every < 5-min-old item sparkles again on every Spotlight merge or store change.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ fixed by FP3's stable ids — [PR #72](https://github.com/L-K-M/MacDring/pull/72).
 
 ### FB15 🟡 FaviconCache races: concurrent same-host fetches lose, and one network blip pins the globe for the session — *low*
 `claim()` marks a host "tried" *before* fetching (`Common/FaviconCache.swift:57`), so
@@ -169,7 +169,7 @@ generic globe; and a transient network failure also permanently (per session) ma
 the host tried. **Fix:** deduplicate via a per-host in-flight `Task` that late callers
 await, and only pin *definitive* failures (HTTP non-200 / undecodable image), not
 thrown transport errors.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #73](https://github.com/L-K-M/MacDring/pull/73) (together with FP9).
 
 ### FB16 🟡 Checkbox toggle mangles notes with CRLF / Unicode line separators — *low*
 `MarkdownText.togglingCheckbox` splits on `CharacterSet.newlines` and rejoins with
@@ -177,14 +177,14 @@ thrown transport errors.
 per line-ending on the first checkbox tap (`"a\r\nb"` → `["a","","b"]` → `"a\n\nb"`),
 and U+2028/29 are silently rewritten. **Fix:** normalize line endings once in a shared
 `lines()` helper used by both the renderer and the toggler, so indexes always agree.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #74](https://github.com/L-K-M/MacDring/pull/74).
 
 ### FB17 🟡 A folder drawer with no (or a broken) directory still advertises a copy drop — then swallows it — *low*
 `DrawerHostingView.droppableModel` (`DrawerWindowController.swift:45`) accepts drops
 for any folder tab; `handleFileDrop`'s folder branch then bails silently when
 `resolveFolder` fails. The user sees a valid green + drop cursor and the files go
 nowhere. **Fix:** don't advertise the drop when `model.folderURL == nil`.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #75](https://github.com/L-K-M/MacDring/pull/75) (together with FP6).
 
 ### FB18 🟡 A failed Undo looks exactly like a successful one — *low, needs a design call*
 `FileMover.undo`'s return value is ignored (`TabController.swift:1025`); if a file
@@ -197,37 +197,37 @@ If the on-disk document came from a newer MacDring, `saveNow` (correctly) refuse
 write — but `importData` (`Store/TabStore.swift:212`) still reports success after
 replacing the tabs, leaving `document.version` at the newer value, so the *imported*
 layout also never saves. **Fix:** adopt the imported document's version on import.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #67](https://github.com/L-K-M/MacDring/pull/67) (together with FB7).
 
 ### FB20 🟡 "You're up to date" when the version couldn't even be parsed — *low*
 `UpdateChecker.performCheck` (`Updates/UpdateChecker.swift:141`): an unparseable
 release tag or bundle version falls into the "up to date" alert on a user-initiated
 check. Honest answer: "couldn't understand the version info."
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #76](https://github.com/L-K-M/MacDring/pull/76).
 
 ### FB21 🟡 New Tab dialog leaks a previously chosen folder into non-folder tabs — *low*
 Pick *Folder*, choose a directory (name auto-fills), then switch Type to *Notes* and
 create: the notes tab silently carries `folderBookmark`/`folderURL` and the folder's
 name (`Settings/NewTabView.swift:92`). **Fix:** drop the folder fields when the
 created kind isn't `.folder`.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #77](https://github.com/L-K-M/MacDring/pull/77) (together with FB22).
 
 ### FB22 🟡 Per-tab grid steppers max out below what the model (and the General pane) allow — *low*
 `TabEditor` clamps Columns/Rows to 1…10 / 1…12 (`Settings/TabsView.swift:223`) while
 Preferences and the General pane allow 1…12 / 1…16 — a tab created at 16 rows can be
 stepped down but never back up. **Fix:** align the ranges.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #77](https://github.com/L-K-M/MacDring/pull/77) (together with FB21).
 
 ### FB23 ⚪ Any cloud provider with "drive" in its name gets branded as Google Drive — *polish*
 `CloudLister.providerIconStyle` matches `n.contains("google") || n.contains("drive")`
 (`Store/CloudLister.swift:56`) — "Proton Drive" and "pCloud Drive" get Google's green
 triangle. "Google Drive" already contains "google"; drop the bare `"drive"` match.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #78](https://github.com/L-K-M/MacDring/pull/78).
 
 ### FB24 ⚪ Monogram glyphs: Settings accepts 3 characters, the pill renders 2 — *polish*
 `TabsView.monogramBinding` caps at `prefix(3)`; `TabStripView.glyphView` draws
 `prefix(2)`. Type "ABC", get "AB". Align the caps.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #79](https://github.com/L-K-M/MacDring/pull/79) (together with FV1).
 
 ---
 
@@ -245,7 +245,7 @@ bookmark points at an unreachable network volume can hang the UI for seconds
 (`BookmarkResolver.resolve` runs without `.withoutUI`/`.withoutMounting` — known, but
 it now runs on-main × N). **Fix:** hop the resolution through `Task.detached` and
 assign the `@State` results back on the main actor.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #65](https://github.com/L-K-M/MacDring/pull/65) (together with FB5).
 
 ### FP2 🔴 One Trash filesystem event re-runs disk I/O for *every* item in the open drawer — *high*
 The Trash watch bumps `drawer.model.iconNonce` straight from its kqueue handler with
@@ -255,7 +255,7 @@ every visible item × 3–4 filesystem ops (on the main actor, per FP1) — the 
 exists only for the Trash item's full/empty icon and badge, yet it invalidates the
 whole drawer. **Fix:** debounce the watch like the folder watch already does, and
 scope the nonce to trash-kind items in `ResolveKey`.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — the watch debounce in [PR #80](https://github.com/L-K-M/MacDring/pull/80), the nonce scoping in [PR #65](https://github.com/L-K-M/MacDring/pull/65).
 
 ### FP3 🟠 Transient items get fresh UUIDs on every listing — defeating icon caching, SwiftUI diffing, and any state keyed by item ID — *medium*
 Every live listing (folder / disks / network / cloud / recents / fresh) rebuilds its
@@ -264,7 +264,7 @@ Consequences: every refresh re-runs every item's `.task` resolution (the id chan
 SwiftUI treats the whole list as new rows, the Fresh sparkle replays (FB14), and the
 Eject-All spinners detach (FB13). **Fix:** derive stable IDs from the item's path +
 kind (deterministic UUID), so refreshes preserve identity.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #72](https://github.com/L-K-M/MacDring/pull/72).
 
 ### FP4 🟠 The Fresh pill-dot rescans the landing zones on every reconcile — one sweep per keystroke — *medium*
 `reconcile()` ends in `updateFreshBadgeTimer()` which unconditionally calls
@@ -274,7 +274,7 @@ the "light 60 s re-scan" actually also runs once per store mutation: a 10-file d
 keystroke, known B5); dragging an appearance slider = one per debounce tick. Also:
 the timer has no tolerance. **Fix:** scan only when the timer fires or a Fresh tab
 first appears; set timer tolerance.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #61](https://github.com/L-K-M/MacDring/pull/61) (with the FB1 rework).
 
 ### FP5 🟠 An open Fresh drawer re-runs two synchronous main-thread scans *and* restarts the Spotlight gather on every store mutation — *medium (extends known G19)*
 `refreshOpenDrawer` → `apply` (sync scan #1, main thread) → `updateSpotlightWatch`
@@ -284,7 +284,7 @@ first appears; set timer tolerance.
 Spotlight merge **never lands**. G19 said "scans twice on open"; it's actually twice
 per mutation, plus query starvation. **Fix:** covered by the FB1 rework (Spotlight-only
 seed, no restart while a gather for the same tab is in flight).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #61](https://github.com/L-K-M/MacDring/pull/61) (with the FB1 rework).
 
 ### FP6 🟠 File-drag hover dirty-writes the drawer model on every drag frame — *medium*
 `DrawerHostingView.updateDrag` assigns `model.fileDropSlot` and
@@ -294,7 +294,7 @@ identical values, so hovering a drag re-invalidates the whole drawer ~60–120×
 which re-sorts (list) or linearly re-scans slots (grid) in `body` each time. **Fix:**
 equality-guard both writes. (The deeper fix — precomputed sort/section/slot indexes on
 `DrawerModel` — is documented for later.)
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented (equality guards) — [PR #75](https://github.com/L-K-M/MacDring/pull/75); the precomputed-index half stays documented.
 
 ### FP7 🟡 Every reconcile force-lays-out every pill and dirty-writes five `@Published` properties per pill — *low*
 `update(tab:)` assigns title/color/glyph/edge/drops unconditionally and `place(on:)`
@@ -303,7 +303,7 @@ calls `layoutSubtreeIfNeeded()` + `fittingSize` per pill per reconcile
 batching — known) × 12 tabs = 120 forced SwiftUI layout passes + 600 spurious
 publishes. **Fix:** equality-guard the model writes (all `Equatable`); consider a
 measured-size cache later.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented (equality guards) — [PR #81](https://github.com/L-K-M/MacDring/pull/81); the measured-size cache stays documented.
 
 ### FP8 🟡 The notes preview re-parses the whole note on every unrelated drawer invalidation — *low*
 `MarkdownText.body` re-classifies and re-runs `AttributedString(markdown:)` per line
@@ -318,7 +318,7 @@ and toast changes. A 1,000-line note re-parses 1,000 times per unrelated event.
 multi-rep ICOs and oversized PNGs — for the whole session of a permanently-running
 agent, rendered at 16–64 pt (`Common/FaviconCache.swift:15`). **Fix:** cap + downscale
 on store (ImageIO thumbnail), evict oldest.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #73](https://github.com/L-K-M/MacDring/pull/73) (together with FB15).
 
 ### FP10 ⚪ Misc energy nits — *polish*
 `freshBadgeTimer` has no tolerance (fixed with FP4); `updateLiveItems`' direct
@@ -335,7 +335,7 @@ over the tab color at 0.62–0.88 opacity. A yellow, mint, or white tab has whit
 on a light pill. The classic style already solves this with
 `Color.readableForeground` (`Model/ColorHex.swift:62`) — the modern pill should use
 the same (and keep its shadow only for the white case).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #79](https://github.com/L-K-M/MacDring/pull/79) (together with FB24).
 
 ### FV2 🟠 Drawer chrome is tuned for dark backgrounds and washes out in light mode
 Hardcoded white overlays — search-bar fill `.white.opacity(0.10)`
@@ -344,7 +344,7 @@ Hardcoded white overlays — search-bar fill `.white.opacity(0.10)`
 (`:68`) — are nearly invisible over a light appearance with Frosted/Solid
 translucency. **Fix:** semantic colors (`Color.primary.opacity(…)`, separator color)
 that adapt to appearance.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #82](https://github.com/L-K-M/MacDring/pull/82) (together with FU1 + FU4).
 
 ### FV3 🟡 The undo banner squeezes the exact-fit drawer
 `DrawerMetrics.contentSize` budgets for the search bar but not the toast
@@ -357,7 +357,7 @@ pick and an on-device look.)*
 `undoBanner` declares `.transition(.move + .opacity)` (`DrawerView.swift:218`) but
 `undoToast` is set outside `withAnimation`, so the banner pops. **Fix:** wrap the
 set/clear in `withAnimation`.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #66](https://github.com/L-K-M/MacDring/pull/66) (together with FB6).
 
 ### FV5 ⚪ Time buckets go stale across midnight
 `TimeBucket.grouped(…, now: Date())` is evaluated in `body` (`DrawerView.swift:302`);
@@ -372,7 +372,7 @@ a Recents drawer left open across midnight keeps "Today" until something re-rend
 Arrowing through filtered results moves `selectedItemID` but nothing scrolls the list
 (`DrawerView.swift:133`) — the selection disappears off-screen in a long result list.
 **Fix:** `ScrollViewReader` + scroll-to-selection.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #82](https://github.com/L-K-M/MacDring/pull/82).
 
 ### FU2 🟠 The menu-bar menu can't reach any existing tab
 The status menu offers eight "New … Tab" items but no way to *open* a drawer — the
@@ -380,18 +380,18 @@ only entry points are the pills themselves. If every tab is auto-hidden (or on a
 disconnected display under the park policy), there's no mouse path to your stuff.
 **Fix:** a "Tabs" section listing each tab (with its color dot); click = toggle its
 drawer.
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #83](https://github.com/L-K-M/MacDring/pull/83).
 
 ### FU3 🟠 "Empty the Trash?" doesn't say how many items
 Finder's equivalent tells you what you're about to erase; MacDring has
 `TrashInspector.trashCount()` one call away (`TabController.swift:938`).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #71](https://github.com/L-K-M/MacDring/pull/71) (together with FB11).
 
 ### FU4 🟡 The Recents empty-state copy is wrong for system-sourced tabs
 "Nothing opened from MacDring yet." shows for `system`/`both` tabs too
 (`DrawerView.swift:491`) — including during the seconds Spotlight is still gathering
 (that loading-state gap is known G18; the copy itself is fixable now).
-**Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+**Status:** ✅ implemented — [PR #82](https://github.com/L-K-M/MacDring/pull/82) (copy fix; the loading state itself remains known G18).
 
 ### FU5 ⚪ Eight top-level "New X Tab…" menu items
 A "New Tab" submenu would halve the menu's height. *(Taste — documented.)*
@@ -419,7 +419,7 @@ already on those lists, or with a materially better angle.)*
   the existing `BehaviorMode` pattern.
 - **FF6 — Bare function-key hotkeys.** Already on the backlog; FB3's fix implements
   the validation half (F1–F20 accepted without modifiers).
-  **Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+  **Status:** ✅ shipped with FB3's fix — [PR #63](https://github.com/L-K-M/MacDring/pull/63).
 - **FF7 — Quick Look.** Reaffirming the backlog item: Space-to-peek is the single
   most-missed file-browser affordance in every drawer type.
 
@@ -436,7 +436,7 @@ already on those lists, or with a materially better angle.)*
   onto the pill, type to filter, ⌘-click to reveal, right-click → Customize Icon,
   auto-hide). The checklist renders as real, tappable checkboxes — onboarding that
   demos the notes feature while it teaches the rest.
-  **Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+  **Status:** ✅ implemented — [PR #84](https://github.com/L-K-M/MacDring/pull/84).
 - **FI3 — Anticipatory pill "breathe."** While a file drag hovers a pill waiting for
   spring-open, scale the pill 1.00→1.04 and back — "keep holding, something's about
   to happen." Pairs with the backlogged countdown glow.
@@ -449,10 +449,10 @@ already on those lists, or with a materially better angle.)*
 - **FI6 — Poof on remove.** The classic poof already plays for drop-on-Trash; play
   the same `NSAnimationEffect.poof` when an item is removed via its context menu.
   Consistent physicality, three lines.
-  **Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+  **Status:** ✅ implemented — [PR #84](https://github.com/L-K-M/MacDring/pull/84).
 - **FI7 — Spring-open haptic.** The drag-snap alignment tick exists; add a
   `.levelChange` tick the moment a spring-loaded drawer actually opens under a drag.
-  **Status:** 🔧 selected for implementation — see §7 (this line is updated with the PR link once it's open).
+  **Status:** ✅ implemented — [PR #84](https://github.com/L-K-M/MacDring/pull/84).
 - **FI8 — Universal search.** One global hotkey → a small centered field that
   type-to-finds across *all* tabs' items (the per-drawer `DrawerSearch` already has
   the ranking logic), Return launches. "Spotlight for your drawers." Bigger project,
@@ -469,35 +469,36 @@ already on those lists, or with a materially better angle.)*
 
 ## 7. Implementation plan
 
-Selected for implementation, each on its own branch/PR — grouped only where two items
-edit the same lines of code (separate PRs there would guarantee conflicts):
+All 24 selected items are implemented — one branch/PR each, grouped only where two
+items edit the same lines of code (separate PRs there would guarantee conflicts).
+Every PR is open against `main`; macOS CI builds and tests each one.
 
-| Branch | Covers |
-|---|---|
-| `claude/fb1-fresh-no-tcc` | FB1 + FP4 + FP5 |
-| `claude/fb2-stable-restore` | FB2 |
-| `claude/fb3-hotkey-validation` | FB3 (+ ships FF6) |
-| `claude/fb4-recents-lenient-decode` | FB4 |
-| `claude/fb5-itemview-task` | FB5 + FP1 + FP2's nonce scoping |
-| `claude/fb6-undo-toast-scope` | FB6 + FV4 |
-| `claude/fb7-store-fixes` | FB7 + FB19 |
-| `claude/fb8-peek-gating` | FB8 |
-| `claude/fb9-drop-slot-consistency` | FB9 |
-| `claude/fb10-pill-drop-honesty` | FB10 |
-| `claude/fb11-modal-levels` | FB11 + FU3 |
-| `claude/fb15-favicon-cache` | FB15 + FP9 |
-| `claude/fb16-markdown-line-endings` | FB16 |
-| `claude/fb17-drag-hover-guards` | FB17 + FP6 |
-| `claude/fb20-update-check-honesty` | FB20 |
-| `claude/fb21-newtab-dialog-fixes` | FB21 + FB22 |
-| `claude/fb23-cloud-branding` | FB23 |
-| `claude/fv1-pill-contrast` | FV1 + FB24 |
-| `claude/fp2-trash-watch-debounce` | FP2's debounce half |
-| `claude/fp3-stable-transient-ids` | FP3 (fixes FB13 + FB14) |
-| `claude/fp7-pill-update-guards` | FP7 |
-| `claude/fv2-drawer-chrome` | FV2 + FU1 + FU4 |
-| `claude/fu2-menu-tab-access` | FU2 |
-| `claude/fi-delight-batch` | FI2 + FI6 + FI7 |
+| Branch | Covers | PR |
+|---|---|---|
+| `claude/fb1-fresh-no-tcc` | FB1 + FP4 + FP5 | [PR #61](https://github.com/L-K-M/MacDring/pull/61) |
+| `claude/fb2-stable-restore` | FB2 | [PR #62](https://github.com/L-K-M/MacDring/pull/62) |
+| `claude/fb3-hotkey-validation` | FB3 (+ ships FF6) | [PR #63](https://github.com/L-K-M/MacDring/pull/63) |
+| `claude/fb4-recents-lenient-decode` | FB4 | [PR #64](https://github.com/L-K-M/MacDring/pull/64) |
+| `claude/fb5-itemview-task` | FB5 + FP1 + FP2's nonce scoping | [PR #65](https://github.com/L-K-M/MacDring/pull/65) |
+| `claude/fb6-undo-toast-scope` | FB6 + FV4 | [PR #66](https://github.com/L-K-M/MacDring/pull/66) |
+| `claude/fb7-store-fixes` | FB7 + FB19 | [PR #67](https://github.com/L-K-M/MacDring/pull/67) |
+| `claude/fb8-peek-gating` | FB8 | [PR #68](https://github.com/L-K-M/MacDring/pull/68) |
+| `claude/fb9-drop-slot-consistency` | FB9 | [PR #69](https://github.com/L-K-M/MacDring/pull/69) |
+| `claude/fb10-pill-drop-honesty` | FB10 | [PR #70](https://github.com/L-K-M/MacDring/pull/70) |
+| `claude/fb11-modal-levels` | FB11 + FU3 | [PR #71](https://github.com/L-K-M/MacDring/pull/71) |
+| `claude/fb15-favicon-cache` | FB15 + FP9 | [PR #73](https://github.com/L-K-M/MacDring/pull/73) |
+| `claude/fb16-markdown-line-endings` | FB16 | [PR #74](https://github.com/L-K-M/MacDring/pull/74) |
+| `claude/fb17-drag-hover-guards` | FB17 + FP6 | [PR #75](https://github.com/L-K-M/MacDring/pull/75) |
+| `claude/fb20-update-check-honesty` | FB20 | [PR #76](https://github.com/L-K-M/MacDring/pull/76) |
+| `claude/fb21-newtab-dialog-fixes` | FB21 + FB22 | [PR #77](https://github.com/L-K-M/MacDring/pull/77) |
+| `claude/fb23-cloud-branding` | FB23 | [PR #78](https://github.com/L-K-M/MacDring/pull/78) |
+| `claude/fv1-pill-contrast` | FV1 + FB24 | [PR #79](https://github.com/L-K-M/MacDring/pull/79) |
+| `claude/fp2-trash-watch-debounce` | FP2's debounce half | [PR #80](https://github.com/L-K-M/MacDring/pull/80) |
+| `claude/fp3-stable-transient-ids` | FP3 (fixes FB13 + FB14) | [PR #72](https://github.com/L-K-M/MacDring/pull/72) |
+| `claude/fp7-pill-update-guards` | FP7 | [PR #81](https://github.com/L-K-M/MacDring/pull/81) |
+| `claude/fv2-drawer-chrome` | FV2 + FU1 + FU4 | [PR #82](https://github.com/L-K-M/MacDring/pull/82) |
+| `claude/fu2-menu-tab-access` | FU2 | [PR #83](https://github.com/L-K-M/MacDring/pull/83) |
+| `claude/fi-delight-batch` | FI2 + FI6 + FI7 | [PR #84](https://github.com/L-K-M/MacDring/pull/84) |
 
 Documented for a later pass (needs device time, a design call, or a bigger refactor):
 FB12, FB18, FP8, FP10, FV3, FV5, FU5, FF1–FF5, FF7, FI1, FI3–FI5, FI8–FI10.

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// What a drawer item points at.
@@ -128,6 +129,22 @@ extension Array where Element == DrawerItem {
 }
 
 extension DrawerItem {
+    /// A stable, deterministic id for a **transient** item, derived from its kind and
+    /// target. The live listings (folder / disks / network / cloud / recents / fresh)
+    /// rebuild their items on every refresh; giving the rebuilt item the *same*
+    /// identity keeps SwiftUI diffing cheap, lets each cell's icon-resolution task
+    /// skip unchanged items, and preserves per-item UI state across refreshes — the
+    /// Eject-All spinners and the Fresh sparkle's one-shot both key off item ids.
+    /// (Persistent `.items` keep their random UUIDs; a 128-bit SHA-256 prefix can't
+    /// realistically collide with them or with another path's id.)
+    static func stableID(kind: ItemKind, url: URL) -> UUID {
+        let target = url.isFileURL ? url.standardizedFileURL.path : url.absoluteString
+        let digest = SHA256.hash(data: Data("\(kind.rawValue)|\(target)".utf8))
+        let b = Array(digest.prefix(16))
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                           b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+    }
+
     /// Detects an item's kind (app / folder / file) and display name from a
     /// file/app/folder URL — the shared part of `fromFileURL` and `transientFileItem`.
     static func kindAndName(for url: URL) -> (kind: ItemKind, name: String) {
@@ -169,9 +186,10 @@ extension DrawerItem {
     /// never persisted, and every read path (`launch`, `reveal`, `isBroken`, drag-out)
     /// falls back to `url` when there's no bookmark — so this avoids ~N
     /// `makeBookmark` syscalls per refresh on a large directory. See ANALYSIS.md I1.
+    /// The id is **stable** (path-derived), so a re-list preserves item identity.
     static func transientFileItem(_ url: URL) -> DrawerItem {
         let (kind, name) = kindAndName(for: url)
-        return DrawerItem(kind: kind, displayName: name, url: url)
+        return DrawerItem(id: stableID(kind: kind, url: url), kind: kind, displayName: name, url: url)
     }
 
     /// Builds an item from a **dropped** URL: a file/app/folder item for file URLs,

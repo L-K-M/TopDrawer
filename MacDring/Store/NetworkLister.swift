@@ -37,7 +37,9 @@ enum NetworkLister {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         return shares.prefix(limit).enumerated().map { index, volume in
-            DrawerItem(kind: .disk, displayName: volume.name, url: volume.url, slot: index)
+            // Stable (path-derived) id — same rationale as DisksLister.
+            DrawerItem(id: DrawerItem.stableID(kind: .disk, url: volume.url),
+                       kind: .disk, displayName: volume.name, url: volume.url, slot: index)
         }
     }
 
