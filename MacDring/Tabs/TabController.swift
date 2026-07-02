@@ -767,6 +767,9 @@ final class TabController {
         let work = DispatchWorkItem { [weak self] in
             self?.pendingSpringOpen = nil
             self?.pendingSpringOpenTabID = nil
+            // A soft tick as the spring finally releases — the sibling of the
+            // drag-snap alignment haptic, marking "the drawer is opening under you".
+            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
             self?.openDrawer(id)
         }
         pendingSpringOpen = work
@@ -817,6 +820,10 @@ final class TabController {
         drawer.model.onLaunch = { [weak self] item in self?.launch(item) }
         drawer.model.onRemoveItem = { [weak self] item in
             guard let self, let id = self.openTabID else { return }
+            // The classic poof, same as drop-on-Trash — physical feedback that the
+            // item left the grid (only the launcher entry goes; the file stays put).
+            NSAnimationEffect.poof.show(centeredAt: NSEvent.mouseLocation,
+                                        size: NSSize(width: 32, height: 32), completionHandler: {})
             self.store.removeItem(id: item.id, fromTab: id)
         }
         drawer.model.onRevealItem = { item in ItemLauncher.revealInFinder(item) }

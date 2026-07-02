@@ -229,6 +229,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             gridRows: Int(preferences.gridRows)
         )
         store.addTab(tab)
+        store.addTab(welcomeTab(displayUUID: uuid))
+    }
+
+    /// A first-run "Welcome" notes tab whose content is a checklist of things to
+    /// try. The `- [ ]` lines render as real, tappable checkboxes in the note's
+    /// preview — onboarding that demos the notes feature while it teaches the rest.
+    /// Just a normal tab: rename it, restyle it, or delete it like any other.
+    private func welcomeTab(displayUUID: String) -> Tab {
+        let notes = """
+        # Welcome to MacDring 👋
+
+        Five things to try:
+
+        - [ ] Drag a file from Finder onto the **Apps** tab
+        - [ ] Open a drawer and just start typing to filter it
+        - [ ] ⌘-click any item to reveal it in Finder
+        - [ ] Right-click an item → **Customize Icon…**
+        - [ ] Right-click a tab → *Configure Tab…* → set **When idle** to *Auto-hide*
+
+        Ticking a box edits this note — it's a real scratchpad.
+        Click anywhere to write; delete this tab whenever you're done.
+        """
+        return Tab(
+            title: "Welcome",
+            colorHex: "#E8A33D",
+            glyph: .symbol("hand.wave.fill"),
+            anchor: ScreenAnchor(displayUUID: displayUUID, edge: .right, position: 0.3, order: 1),
+            behavior: preferences.newTabBehavior,
+            gridColumns: 5,   // for a notes tab, columns/rows size the text area
+            gridRows: 5,
+            kind: .notes,
+            notes: notes
+        )
     }
 
     // MARK: Helpers
