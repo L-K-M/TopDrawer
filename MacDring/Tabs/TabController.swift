@@ -758,36 +758,23 @@ final class TabController {
     private func handleTabPillDrop(_ urls: [URL], toTab id: UUID) {
         guard let tab = store.tab(id: id) else { return }
         let accepted = tab.kind == .items ? urls : urls.filter(\.isFileURL)
-        handleFileDrop(accepted, slot: -1, toTab: id)
+        handleFileDrop(accepted, target: nil, toTab: id)
     }
 
-    /// Routes files **and web links** dropped on a tab/drawer. `slot` is the drawer
-    /// slot they landed on (or -1 for the tab pill / drawer background): dropping on
-    /// an **app** opens them with it, on a **folder** files the files into it,
-    /// otherwise they are added (items tab) or filed into the mirrored directory
-    /// (folder tab). Web links can't be moved on disk, so they're only *added* (and
-    /// only on an items tab); they can still be opened-with an app.
-    private func handleFileDrop(_ urls: [URL], slot: Int, toTab id: UUID) {
+    /// Routes files **and web links** dropped on a tab/drawer. Occupied targets carry
+    /// displayed item identity, while both occupied and empty targets may carry an
+    /// unambiguous top-level placement slot. A nil target is the tab pill / drawer
+    /// background. Dropping on an **app** opens with it; dropping on a **folder** files
+    /// the files into it; otherwise items are added or filed into the mirrored directory.
+    /// Web links can only be added to an items tab, though an app can still open them.
+    private func handleFileDrop(_ urls: [URL], target dropTarget: ExternalDropTarget?, toTab id: UUID) {
         guard !urls.isEmpty, let tab = store.tab(id: id) else { return }
         let fileURLs = urls.filter { $0.isFileURL }
-        // Resolve what the drop landed on. A slot drop can only come from the open
-        // drawer, so resolve the target against the items it is *showing*
-        // (`drawer.model.items`) rather than a fresh re-list: the directory may have
-        // changed since the drawer rendered, and a re-listed target can differ from
-        // the slot the user aimed at (a re-list also costs a directory enumeration
-        // per drop). The pill path (slot == -1) has no target to resolve at all.
-        let target: DrawerItem?
-        if slot >= 0 {
-            let liveItems: [DrawerItem]
-            if tab.kind == .folder {
-                liveItems = openTabID == id ? drawer.model.items : FolderLister.contents(of: tab)
-            } else {
-                liveItems = tab.items
-            }
-            target = liveItems.first { $0.slot == slot }
-        } else {
-            target = nil
-        }
+        // The AppKit path reports only what SwiftUI is actually displaying. Resolve
+        // occupied IDs against that same view context, including open-group children
+        // and flattened search results; never re-list or reinterpret a local slot.
+        let target = drawer.model.item(forExternalDropTarget: dropTarget)
+        let placementSlot = dropTarget?.topLevelPlacementSlot
 
         if let target, target.kind == .application {
             ItemLauncher.open(urls, withApp: target)   // files *or* links → open-with
@@ -826,10 +813,10 @@ final class TabController {
                     ids.append(itemID)
                 }
             }
-            if slot >= 0 {
+            if let placementSlot {
                 // Land them in a run from the target slot (so a duplicate moves there
                 // too, and a multi-file drop doesn't scatter). See ANALYSIS.md I4.
-                store.placeItems(ids, startingAt: slot, inTab: id)
+                store.placeItems(ids, startingAt: placementSlot, inTab: id)
             }
             if openTabID != id { openDrawer(id) }   // a store change already refreshed an open drawer
         }
@@ -912,9 +899,9 @@ final class TabController {
         drawer.model.onCustomizeItemIcon = { [weak self] item in self?.customizeIcon(item) }
         drawer.model.onEjectItem = { [weak self] item in self?.ejectDisk(item) }
         drawer.model.onEjectAll = { [weak self] in self?.ejectAllDisks() }
-        drawer.model.onDropFiles = { [weak self] urls, slot in
+        drawer.model.onDropFiles = { [weak self] urls, target in
             guard let self, let id = self.openTabID else { return }
-            self.handleFileDrop(urls, slot: slot, toTab: id)
+            self.handleFileDrop(urls, target: target, toTab: id)
         }
         drawer.model.onMouseEntered = { [weak self] in self?.cancelHoverClose() }
         drawer.model.onMouseExited = { [weak self] in
