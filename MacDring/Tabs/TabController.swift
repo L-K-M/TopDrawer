@@ -14,15 +14,28 @@ final class TabController {
 
     /// Presents the generated-icon editor (built lazily on first use).
     private lazy var iconEditor = IconEditorWindowController()
+    /// Identifies the editor allowed to mutate/reopen its originating drawer. A newer
+    /// editor invalidates callbacks from the window it replaces.
+    private var iconEditorSessionID: UUID?
 
     private var tabWindows: [UUID: TabWindowController] = [:]
     private var hotkeys: [UUID: (hotkey: CarbonHotkey, spec: HotkeySpec)] = [:]
-    /// Specs macOS already refused to register this session (a system-reserved combo,
-    /// or one another app/tab owns). Cached so a reconcile doesn't re-attempt — and
-    /// re-log — the same failing spec on every store mutation; cleared when the spec
-    /// changes so a new combination is retried.
+    /// Specs Carbon already refused to register this session (a system-reserved combo
+    /// or one another app owns). Cached so a reconcile doesn't re-attempt — and re-log
+    /// — the same external failure on every store mutation. Conflicts with another
+    /// MacDring tab are detected before calling Carbon and are never cached here.
     private var failedHotkeySpecs: [UUID: HotkeySpec] = [:]
     private var openTabID: UUID?
+    /// A new identity for every successful `openDrawer` call. It distinguishes a
+    /// reopened drawer from the previous session even when the tab id is unchanged.
+    private var drawerSessionID: UUID?
+    /// Only the newest launch request in the current drawer session may apply its
+    /// completion; a second launch supersedes the first.
+    private var activeLaunchRequestID: UUID?
+    /// Advances on each successful drawer open and each real drawer close. Toggle
+    /// requests flow through those paths, so a snapshot detects intervening drawer
+    /// activity even when the drawer ends up closed again.
+    private var drawerInteractionGeneration: UInt = 0
     private var hotkeyCounter: UInt32 = 1
 
     private var globalClickMonitor: Any?
@@ -56,9 +69,37 @@ final class TabController {
     /// One-shot Spotlight lookup backing the open **Fresh** tab and the **system**
     /// source of a Recents tab; cancelled when the drawer closes or another tab opens.
     private let spotlight = SpotlightQuery()
-    /// The tab the `spotlight` query is currently gathering for, so an unrelated
-    /// reconcile doesn't cancel-and-restart (and thereby starve) an in-flight gather.
-    private var spotlightWatchTabID: UUID?
+    private struct SpotlightWatchKey: Equatable {
+        enum Configuration: Equatable {
+            case fresh
+            case recents(RecentsSource)
+        }
+
+        let tabID: UUID
+        let configuration: Configuration
+
+        init?(tab: Tab) {
+            tabID = tab.id
+            switch tab.kind {
+            case .fresh:
+                configuration = .fresh
+            case .recents where tab.recentsSource.includesSystem:
+                configuration = .recents(tab.recentsSource)
+            default:
+                return nil
+            }
+        }
+    }
+    /// The complete work represented by `spotlight`, retained after its one-shot
+    /// completion so unrelated reconciles do not issue the same lookup again.
+    private var spotlightWatchKey: SpotlightWatchKey?
+    private enum SpotlightWatchResult {
+        case fresh([DrawerItem])
+        case recents([RecentItem])
+    }
+    /// Completed source-stable results are kept with their full work key because a
+    /// synchronous drawer refresh replaces system Recents with its local-only listing.
+    private var completedSpotlightResult: (key: SpotlightWatchKey, result: SpotlightWatchResult)?
     /// A dedicated Spotlight lookup for the Fresh pill dot, so the badge never
     /// competes with (or restarts) the open drawer's query.
     private let freshBadgeSpotlight = SpotlightQuery()
@@ -141,6 +182,7 @@ final class TabController {
     func reconcile() {
         let tabs = store.tabs
         let liveIDs = Set(tabs.map(\.id))
+        var internallyBlockedHotkeyTabs: [Tab] = []
 
         for (id, wc) in tabWindows where !liveIDs.contains(id) {
             wc.close()
@@ -165,6 +207,16 @@ final class TabController {
                 wc.hide()                      // park until the display returns
                 if openTabID == tab.id { closeDrawer() }
             }
+            if registerHotkeyIfNeeded(for: tab) {
+                internallyBlockedHotkeyTabs.append(tab)
+            }
+        }
+
+        // A blocked tab may precede its owner in `tabs`. By the end of the first pass
+        // every changed/removed owner has released its old registration, so retry only
+        // known MacDring conflicts once. Keeping this as a bounded pass avoids a nested
+        // or re-entrant reconcile while still handling swaps and longer change cycles.
+        for tab in internallyBlockedHotkeyTabs {
             registerHotkeyIfNeeded(for: tab)
         }
 
@@ -236,8 +288,7 @@ final class TabController {
     private func persistSettledPosition(_ snapped: CGRect, was incoming: CGRect,
                                         edge: Edge, in visible: CGRect, tab: Tab) {
         guard abs(snapped.minX - incoming.minX) > 0.5 || abs(snapped.minY - incoming.minY) > 0.5 else { return }
-        let position = EdgeLayout.position(forPoint: CGPoint(x: snapped.midX, y: snapped.midY),
-                                           edge: edge, in: visible)
+        let position = EdgeLayout.position(forTabFrame: snapped, edge: edge, in: visible)
         var anchor = tab.anchor
         anchor.position = position
         store.setAnchor(anchor, forTab: tab.id, notify: false)
@@ -290,11 +341,18 @@ final class TabController {
               let tab = store.tab(id: id),
               let screen = wc.currentScreen else { return }
         drawer.refresh(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen)
+        if let key = SpotlightWatchKey(tab: tab),
+           spotlightWatchKey == key,
+           let completed = completedSpotlightResult,
+           completed.key == key,
+           let items = spotlightItems(from: completed.result, for: key) {
+            drawer.updateLiveItems(items.applyingIconStyles(from: tab.iconStyles))
+        }
         wc.applyFrame(EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                 restingTabFrame: wc.restingFrame,
                                                 drawerFrame: drawer.openFrame))
         updateFolderWatch()   // the open tab may have changed folder/sort
-        updateSpotlightWatch()   // re-issue the Spotlight lookup for a Fresh / system-Recents tab
+        updateSpotlightWatch()   // reconcile the keyed Spotlight work for Fresh / system Recents
     }
 
     private func makeWindow(for tab: Tab) -> TabWindowController {
@@ -346,6 +404,7 @@ final class TabController {
               // keeps its old screen reference, so a hotkey/spring-open must not slide a
               // drawer out onto a detached display. See ANALYSIS.md B3.
               let screen = resolvedScreen(for: tab) else { return }
+        drawerInteractionGeneration &+= 1
         if let prev = openTabID, prev != id {
             tabWindows[prev]?.setOpen(false)
             tabWindows[prev]?.restoreResting()
@@ -354,6 +413,8 @@ final class TabController {
         cancelReConceal(id)
         cancelSpringOpen()
         openTabID = id
+        drawerSessionID = UUID()
+        activeLaunchRequestID = nil
         restackTabs()   // re-seat the resting tabs (esp. a just-closed previous tab) below the new open one
         wc.reveal(duration: 0)   // restore a concealed (slid-off / sliver) tab to full size before opening
         wc.setOpen(true)
@@ -374,12 +435,15 @@ final class TabController {
     private func closeDrawer() {
         cancelHoverClose()
         cancelSpringOpen()
+        if openTabID != nil { drawerInteractionGeneration &+= 1 }
         let duration = animationDuration
         if let id = openTabID, let wc = tabWindows[id] {
             wc.setOpen(false)
             wc.animate(to: wc.restingFrame, duration: duration)   // slide the tab back to the edge
         }
         openTabID = nil
+        drawerSessionID = nil
+        activeLaunchRequestID = nil
         restackTabs()   // the tab rejoins its edge stack → restore the predictable z-order
         drawer.hide(duration: duration)
         stopMonitoring()
@@ -677,8 +741,8 @@ final class TabController {
             return
         }
         let snapped = snappedDragFrame(id, wc: wc, target: target)
-        let position = EdgeLayout.position(forPoint: CGPoint(x: snapped.midX, y: snapped.midY),
-                                           edge: target.edge, in: target.screen.visibleFrame)
+        let position = EdgeLayout.position(forTabFrame: snapped, edge: target.edge,
+                                           in: target.screen.visibleFrame)
         // Stack the dropped tab on top of whatever shares its (new) edge, so the
         // de-overlap pass treats it as the newcomer that yields — though it already
         // sits in a legal slot, so nothing actually has to move.
@@ -719,7 +783,7 @@ final class TabController {
         let orders = store.tabs
             .filter { $0.id != id && $0.anchor.edge == edge && $0.anchor.displayUUID == uuid }
             .map(\.anchor.order)
-        return (orders.max() ?? -1) + 1
+        return PersistedLayoutBounds.nextOrder(after: orders.max())
     }
 
     /// The screen / edge / position the dragged pill should snap to, from the
@@ -758,36 +822,23 @@ final class TabController {
     private func handleTabPillDrop(_ urls: [URL], toTab id: UUID) {
         guard let tab = store.tab(id: id) else { return }
         let accepted = tab.kind == .items ? urls : urls.filter(\.isFileURL)
-        handleFileDrop(accepted, slot: -1, toTab: id)
+        handleFileDrop(accepted, target: nil, toTab: id)
     }
 
-    /// Routes files **and web links** dropped on a tab/drawer. `slot` is the drawer
-    /// slot they landed on (or -1 for the tab pill / drawer background): dropping on
-    /// an **app** opens them with it, on a **folder** files the files into it,
-    /// otherwise they are added (items tab) or filed into the mirrored directory
-    /// (folder tab). Web links can't be moved on disk, so they're only *added* (and
-    /// only on an items tab); they can still be opened-with an app.
-    private func handleFileDrop(_ urls: [URL], slot: Int, toTab id: UUID) {
+    /// Routes files **and web links** dropped on a tab/drawer. Occupied targets carry
+    /// displayed item identity, while both occupied and empty targets may carry an
+    /// unambiguous top-level placement slot. A nil target is the tab pill / drawer
+    /// background. Dropping on an **app** opens with it; dropping on a **folder** files
+    /// the files into it; otherwise items are added or filed into the mirrored directory.
+    /// Web links can only be added to an items tab, though an app can still open them.
+    private func handleFileDrop(_ urls: [URL], target dropTarget: ExternalDropTarget?, toTab id: UUID) {
         guard !urls.isEmpty, let tab = store.tab(id: id) else { return }
         let fileURLs = urls.filter { $0.isFileURL }
-        // Resolve what the drop landed on. A slot drop can only come from the open
-        // drawer, so resolve the target against the items it is *showing*
-        // (`drawer.model.items`) rather than a fresh re-list: the directory may have
-        // changed since the drawer rendered, and a re-listed target can differ from
-        // the slot the user aimed at (a re-list also costs a directory enumeration
-        // per drop). The pill path (slot == -1) has no target to resolve at all.
-        let target: DrawerItem?
-        if slot >= 0 {
-            let liveItems: [DrawerItem]
-            if tab.kind == .folder {
-                liveItems = openTabID == id ? drawer.model.items : FolderLister.contents(of: tab)
-            } else {
-                liveItems = tab.items
-            }
-            target = liveItems.first { $0.slot == slot }
-        } else {
-            target = nil
-        }
+        // The AppKit path reports only what SwiftUI is actually displaying. Resolve
+        // occupied IDs against that same view context, including open-group children
+        // and flattened search results; never re-list or reinterpret a local slot.
+        let target = drawer.model.item(forExternalDropTarget: dropTarget)
+        let placementSlot = dropTarget?.topLevelPlacementSlot
 
         if let target, target.kind == .application {
             ItemLauncher.open(urls, withApp: target)   // files *or* links → open-with
@@ -819,7 +870,7 @@ final class TabController {
         case .items:
             let dropped = urls.map { DrawerItem.fromDroppedURL($0) }   // files & links, in drop order
             // Add, dedup, and optionally place the whole drop in one store mutation.
-            store.addItems(dropped, toTab: id, startingAt: slot >= 0 ? slot : nil)
+            store.addItems(dropped, toTab: id, startingAt: placementSlot)
             if openTabID != id { openDrawer(id) }   // a store change already refreshed an open drawer
         }
     }
@@ -852,16 +903,34 @@ final class TabController {
 
     // MARK: Hotkeys
 
-    private func registerHotkeyIfNeeded(for tab: Tab) {
+    /// Returns `true` only when another live MacDring registration owns the spec and
+    /// the caller should include the tab in the bounded second registration pass.
+    @discardableResult
+    private func registerHotkeyIfNeeded(for tab: Tab) -> Bool {
         guard let spec = tab.hotkey,
               KeyCodes.isUsableHotkey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) else {
             unregisterHotkey(tab.id)
-            return
+            return false
         }
-        if let existing = hotkeys[tab.id], existing.spec == spec { return }
-        // Already tried and failed this exact spec — don't retry/re-log until it changes.
-        if failedHotkeySpecs[tab.id] == spec { return }
-        unregisterHotkey(tab.id)
+        if let existing = hotkeys[tab.id] {
+            if existing.spec == spec { return false }
+            // Release a stale registration before checking ownership. This lets two or
+            // more tabs swap/cycle specs without retaining registrations that block one
+            // another for the entire reconciliation pass.
+            unregisterHotkey(tab.id)
+        }
+
+        // A changed spec gets one Carbon attempt; an unchanged external failure remains
+        // cached for the session so unrelated reconciles cannot retry or re-log it.
+        if failedHotkeySpecs[tab.id] == spec { return false }
+        failedHotkeySpecs[tab.id] = nil
+
+        // Do not ask Carbon to confirm a conflict MacDring already owns. Besides avoiding
+        // a misleading failure log, keeping this out of `failedHotkeySpecs` allows the
+        // bounded pass above to retry as soon as the owner releases or changes the spec.
+        if hotkeys.contains(where: { $0.key != tab.id && $0.value.spec == spec }) {
+            return true
+        }
 
         let hotkey = CarbonHotkey(identifier: hotkeyCounter)
         hotkeyCounter += 1
@@ -873,6 +942,7 @@ final class TabController {
         } else {
             failedHotkeySpecs[tab.id] = spec
         }
+        return false
     }
 
     private func unregisterHotkey(_ id: UUID) {
@@ -901,9 +971,9 @@ final class TabController {
         drawer.model.onCustomizeItemIcon = { [weak self] item in self?.customizeIcon(item) }
         drawer.model.onEjectItem = { [weak self] item in self?.ejectDisk(item) }
         drawer.model.onEjectAll = { [weak self] in self?.ejectAllDisks() }
-        drawer.model.onDropFiles = { [weak self] urls, slot in
+        drawer.model.onDropFiles = { [weak self] urls, target in
             guard let self, let id = self.openTabID else { return }
-            self.handleFileDrop(urls, slot: slot, toTab: id)
+            self.handleFileDrop(urls, target: target, toTab: id)
         }
         drawer.model.onMouseEntered = { [weak self] in self?.cancelHoverClose() }
         drawer.model.onMouseExited = { [weak self] in
@@ -958,22 +1028,40 @@ final class TabController {
     }
 
     private func launch(_ item: DrawerItem) {
-        ItemLauncher.launch(item)
-        recordRecent(item)
-        let keepOpen = openTabID.flatMap { store.tab(id: $0) }?.behavior.keepOpenAfterLaunch ?? false
-        if !keepOpen {
-            closeDrawer()
-        } else if openTabID.flatMap({ store.tab(id: $0) })?.kind == .recents {
-            refreshOpenDrawer()   // re-list so the just-opened item jumps to the top
+        guard let tabID = openTabID, let sessionID = drawerSessionID else { return }
+        let request = DrawerLaunchRequest(tabID: tabID, sessionID: sessionID)
+        activeLaunchRequestID = request.requestID
+        ItemLauncher.launch(item) { [weak self] result in
+            guard let self else { return }
+            let canUpdateDrawer = request.canUpdateDrawer(
+                openTabID: self.openTabID,
+                sessionID: self.drawerSessionID,
+                requestID: self.activeLaunchRequestID
+            )
+            guard case let .success(url) = result else {
+                if canUpdateDrawer { self.activeLaunchRequestID = nil }
+                return
+            }
+
+            // Recents tracks confirmed opens, even when a newer launch or drawer
+            // session has superseded the request that initiated this one.
+            self.recordRecent(item, url: url)
+            guard canUpdateDrawer else { return }
+            self.activeLaunchRequestID = nil
+            let tab = self.store.tab(id: request.tabID)
+            if tab?.behavior.keepOpenAfterLaunch != true {
+                self.closeDrawer()
+            } else if tab?.kind == .recents {
+                self.refreshOpenDrawer()   // re-list so the just-opened item jumps to the top
+            }
         }
     }
 
     /// Records an opened target into the Recents history. Only the kinds you'd want to
     /// re-open are tracked (apps/files/folders/links/cloud); volumes and the Trash are
-    /// skipped, as are items with no resolvable target.
-    private func recordRecent(_ item: DrawerItem) {
-        guard [.application, .file, .folder, .url, .cloud].contains(item.kind),
-              let url = BookmarkResolver.url(for: item) else { return }
+    /// skipped. `url` is the target whose launch was confirmed by `ItemLauncher`.
+    private func recordRecent(_ item: DrawerItem, url: URL) {
+        guard [.application, .file, .folder, .url, .cloud].contains(item.kind) else { return }
         RecentsStore.shared.record(RecentItem(url: url, kind: item.kind, name: item.displayName, date: Date()))
     }
 
@@ -1023,9 +1111,8 @@ final class TabController {
         NSApp.activate(ignoringOtherApps: true)
         floatAboveDrawer(panel)
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        var updated = item
-        updated.customIconBookmark = BookmarkResolver.makeBookmark(for: url)
-        store.updateItem(updated, inTab: id)
+        store.setCustomIconBookmark(BookmarkResolver.makeBookmark(for: url),
+                                    forItem: item.id, inTab: id)
     }
 
     /// Empties the Trash (Trash item context menu) after a confirmation, via Finder
@@ -1053,32 +1140,44 @@ final class TabController {
     /// Clears an item's custom icon (image *and* generated style), restoring its default.
     private func resetItemIcon(_ item: DrawerItem) {
         guard let id = openTabID else { return }
-        var updated = item
-        updated.customIconBookmark = nil
-        updated.iconStyle = nil
-        store.updateItem(updated, inTab: id)
+        store.setIconStyle(nil, forItem: item.id, inTab: id)
     }
 
     /// Opens the generated-icon editor for `item` and stores the result. The drawer
     /// closes first because the editor is an ordinary window (the drawer floats above
-    /// normal windows), then reopens so the new icon is visible. A persistent
-    /// `.items` item keeps its style on the item (clearing any image override);
-    /// a live item's style is stored on the tab, keyed by its path.
+    /// normal windows), then reopens when the editor closes unless another drawer has
+    /// since opened. A persistent `.items` item keeps its saved style on the item (and
+    /// clears any image override); a live item's style is stored on the tab, keyed by
+    /// its path.
     private func customizeIcon(_ item: DrawerItem) {
         guard let id = openTabID, let kind = store.tab(id: id)?.kind else { return }
-        closeDrawer()
-        iconEditor.show(itemName: item.displayName, initial: item.iconStyle) { [weak self] style in
-            guard let self else { return }
-            if kind == .items {
-                var updated = item
-                updated.iconStyle = style
-                if style != nil { updated.customIconBookmark = nil }   // generated replaces an image override
-                self.store.updateItem(updated, inTab: id)
-            } else if let path = item.url?.path {
-                self.store.setIconStyle(style, forItemPath: path, inTab: id)
+        let sessionID = UUID()
+        let drawerGenerationBeforeEditor = drawerInteractionGeneration
+        let expectedDrawerGeneration = drawerGenerationBeforeEditor &+ 1
+        iconEditorSessionID = sessionID
+        closeDrawer()   // the one generation change this editor session expects
+        iconEditor.show(
+            itemName: item.displayName,
+            initial: item.iconStyle,
+            onSave: { [weak self] style in
+                guard let self, self.iconEditorSessionID == sessionID else { return }
+                if kind == .items {
+                    self.store.setIconStyle(style, forItem: item.id, inTab: id)
+                } else if let path = item.url?.path {
+                    self.store.setIconStyle(style, forItemPath: path, inTab: id)
+                }
+            },
+            onClose: { [weak self] in
+                guard let self, self.iconEditorSessionID == sessionID else { return }
+                self.iconEditorSessionID = nil
+                // A tab opened while the editor was up is now the user's active
+                // context, even if it later closed; only our intentional close is allowed.
+                guard self.drawerInteractionGeneration == expectedDrawerGeneration,
+                      self.openTabID == nil,
+                      self.store.tab(id: id) != nil else { return }
+                self.openDrawer(id)
             }
-            self.openDrawer(id)   // reopen so the change shows
-        }
+        )
     }
 
     // MARK: Disks (eject)
@@ -1283,49 +1382,67 @@ final class TabController {
     /// Starts (or restarts) the Spotlight lookup backing the open drawer when it's a
     /// **Fresh** tab or a **Recents** tab whose source includes the system; otherwise
     /// stops any running query. Results fill the drawer asynchronously via
-    /// `applySpotlightItems`. The async sibling of `updateFolderWatch`.
+    /// `applySpotlightResult`. The async sibling of `updateFolderWatch`.
     private func updateSpotlightWatch() {
-        guard let id = openTabID, let tab = store.tab(id: id) else { stopSpotlightWatch(); return }
-        // A reconcile that didn't change the open tab must not cancel-and-restart a
-        // gather that's still running for it — a burst of mutations (e.g. per-keystroke
-        // tab edits) would otherwise starve the query so results never land.
-        let restartable = !(spotlightWatchTabID == id && spotlight.isGathering)
-        switch tab.kind {
+        guard let id = openTabID,
+              let tab = store.tab(id: id),
+              let key = SpotlightWatchKey(tab: tab) else { stopSpotlightWatch(); return }
+        guard spotlightWatchKey != key else { return }
+        completedSpotlightResult = nil
+        spotlightWatchKey = key
+
+        switch key.configuration {
         case .fresh:
             // Spotlight-only: reading the index can never trigger a folder-access
             // (TCC) prompt, unlike a direct scan of ~/Downloads & co. — the reason
             // the FreshScanner path was retired from the live app (FB1).
-            guard restartable else { return }
-            spotlightWatchTabID = id
             spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightItems(FreshLister.items(from: results), forTab: id)
+                self?.applySpotlightResult(.fresh(FreshLister.items(from: results)), for: key)
             }
-        case .recents where tab.recentsSource.includesSystem:
-            guard restartable else { return }
-            spotlightWatchTabID = id
-            let includeMacDring = tab.recentsSource.includesMacDring
+        case .recents:
             let home = FileManager.default.homeDirectoryForCurrentUser
             spotlight.start(mode: .lastUsed, scopes: [home], limit: RecentsStore.limit) { [weak self] results in
                 let system = results.map { RecentItem(spotlight: $0) }
-                let history = includeMacDring ? RecentsStore.shared.items : []
-                let merged = RecentsStore.deduplicatedByURL(history + system, limit: RecentsStore.limit)
-                self?.applySpotlightItems(RecentsLister.items(from: merged), forTab: id)
+                self?.applySpotlightResult(.recents(system), for: key)
             }
-        default:
-            stopSpotlightWatch()
         }
     }
 
     private func stopSpotlightWatch() {
         spotlight.cancel()
-        spotlightWatchTabID = nil
+        spotlightWatchKey = nil
+        completedSpotlightResult = nil
     }
 
-    /// Applies an async live listing to the open drawer — only if the same tab is
-    /// still open — re-applying its per-target icon overrides and re-seating the
-    /// riding tab onto the (possibly resized) drawer.
-    private func applySpotlightItems(_ items: [DrawerItem], forTab id: UUID) {
-        guard openTabID == id, let wc = tabWindows[id], let tab = store.tab(id: id) else { return }
+    /// Materializes source-stable query results using the current MacDring history.
+    /// Keeping history out of the cache means launches appear immediately and Clear
+    /// cannot resurrect records captured by an earlier `.both` completion.
+    private func spotlightItems(from result: SpotlightWatchResult,
+                                for key: SpotlightWatchKey) -> [DrawerItem]? {
+        switch (key.configuration, result) {
+        case (.fresh, .fresh(let items)):
+            return items
+        case (.recents(let source), .recents(let system)):
+            let history = source.includesMacDring ? RecentsStore.shared.items : []
+            let merged = RecentsStore.deduplicatedByURL(history + system, limit: RecentsStore.limit)
+            return RecentsLister.items(from: merged)
+        default:
+            return nil
+        }
+    }
+
+    /// Applies an async live listing to the open drawer — only if the same tab and
+    /// Spotlight configuration are still current — re-applying its per-target icon
+    /// overrides and re-seating the riding tab onto the (possibly resized) drawer.
+    private func applySpotlightResult(_ result: SpotlightWatchResult, for key: SpotlightWatchKey) {
+        let id = key.tabID
+        guard spotlightWatchKey == key,
+              openTabID == id,
+              let wc = tabWindows[id],
+              let tab = store.tab(id: id),
+              SpotlightWatchKey(tab: tab) == key,
+              let items = spotlightItems(from: result, for: key) else { return }
+        completedSpotlightResult = (key, result)
         drawer.updateLiveItems(items.applyingIconStyles(from: tab.iconStyles))
         wc.applyFrame(EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                 restingTabFrame: wc.restingFrame,
@@ -1445,6 +1562,8 @@ final class TabController {
         stopSpotlightWatch()
         drawer.hide(duration: 0)     // instant on quit, no animation
         openTabID = nil
+        drawerSessionID = nil
+        activeLaunchRequestID = nil
         for (_, wc) in tabWindows { wc.close() }
         tabWindows.removeAll()
         for (_, entry) in hotkeys { entry.hotkey.unregister() }

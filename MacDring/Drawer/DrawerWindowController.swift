@@ -5,29 +5,30 @@ import SwiftUI
 /// for file drops. SwiftUI's `.onDrop` is unreliable inside this borderless panel
 /// (especially nested in a `ScrollView`) and gives no hovered location — the same
 /// reason reordering uses a `DragGesture` instead. So drops are handled here at the
-/// AppKit level: the drag location is mapped to a grid slot via `model.slotFrames`
-/// (which the SwiftUI content reports in this view's coordinate space) and routed
-/// through `model.onDropFiles`. Also accepts the first mouse click while non-key.
+/// AppKit level: the drag location is mapped to an identity-aware target via
+/// `model.externalDropTargetFrames` (reported by the displayed SwiftUI content in
+/// this view's coordinate space) and routed through `model.onDropFiles`. Also accepts
+/// the first mouse click while non-key.
 private final class DrawerHostingView: NSHostingView<DrawerView> {
     /// Wired by the controller right after construction (the same model the
-    /// SwiftUI `DrawerView` observes), used to read slot frames + the tab kind and
+    /// SwiftUI `DrawerView` observes), used to read target frames + the tab kind and
     /// to route drops. The controller also calls `registerForDraggedTypes`.
     var model: DrawerModel?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// The grid slot under a window-space drag `location` (nearest if none contains
-    /// it). Converts to this view's top-left coordinate space to match the frames
-    /// the SwiftUI content reports into `model.slotFrames`.
-    private func slot(at location: NSPoint, _ model: DrawerModel) -> Int? {
+    /// The displayed target under a window-space drag `location` (nearest if none
+    /// contains it). Converts to this view's top-left coordinate space to match the
+    /// frames SwiftUI reports into `model.externalDropTargetFrames`.
+    private func target(at location: NSPoint, _ model: DrawerModel) -> ExternalDropTarget? {
         var p = convert(location, from: nil)            // window → this view
         if !isFlipped { p.y = bounds.height - p.y }      // normalize to top-left (SwiftUI)
         let point = CGPoint(x: p.x, y: p.y)
-        let frames = model.slotFrames
+        let frames = model.externalDropTargetFrames
         guard !frames.isEmpty else { return nil }
         if let hit = frames.first(where: { $0.value.contains(point) })?.key { return hit }
-        // Only snap to the nearest slot when within (or just outside) the grid; a
-        // drop on the header/margins returns nil → slot -1 (generic add to the tab),
+        // Only snap to the nearest target when within (or just outside) the content;
+        // a drop on the header/margins returns nil (generic add to the tab),
         // so it can't accidentally land "inside" the nearest folder.
         let grid = frames.values.reduce(CGRect.null) { $0.union($1) }.insetBy(dx: -24, dy: -24)
         guard grid.contains(point) else { return nil }
@@ -70,9 +71,9 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
         // Equality-guard both writes: `draggingUpdated` fires per mouse-move, and a
         // `@Published` setter emits objectWillChange even for an identical value —
         // unguarded, every drag frame re-invalidated the whole drawer twice.
-        let target = slot(at: sender.draggingLocation, model)   // drives the per-slot highlight
-        if model.fileDropSlot != target { model.fileDropSlot = target }
-        // Whole-drawer highlight: even over the header/margins (no slot under
+        let target = target(at: sender.draggingLocation, model)
+        if model.fileDropTarget != target { model.fileDropTarget = target }
+        // Whole-drawer highlight: even over the header/margins (no target under
         // the cursor) the drag is acceptable — releasing adds to the tab — and
         // the outline brightening is the only feedback saying so.
         if !model.isDropTargeted { model.isDropTargeted = true }
@@ -80,12 +81,12 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        model?.fileDropSlot = nil
+        model?.fileDropTarget = nil
         model?.isDropTargeted = false
     }
 
     override func draggingEnded(_ sender: NSDraggingInfo) {
-        model?.fileDropSlot = nil
+        model?.fileDropTarget = nil
         model?.isDropTargeted = false
     }
 
@@ -95,10 +96,10 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let model = droppableModel(sender) else { return false }
-        let target = slot(at: sender.draggingLocation, model) ?? -1
+        let target = target(at: sender.draggingLocation, model)
         let urls = (sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
                                                           options: pasteboardOptions(for: model)) as? [URL]) ?? []
-        model.fileDropSlot = nil
+        model.fileDropTarget = nil
         model.isDropTargeted = false
         guard !urls.isEmpty else { return false }
         model.onDropFiles?(urls, target)   // routed by TabController (open-with / move-in / add)
@@ -291,9 +292,9 @@ final class DrawerWindowController {
     }
 
     private func apply(tab: Tab, preserveLiveNotes: Bool = false) {
-        model.fileDropSlot = nil
+        model.fileDropTarget = nil
         model.isDropTargeted = false
-        model.slotFrames = [:]
+        model.externalDropTargetFrames = [:]
         model.itemsTruncated = false
         model.sparklingItemIDs = []
         if !preserveLiveNotes {

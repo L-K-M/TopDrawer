@@ -7,6 +7,8 @@ final class FileMoverTests: XCTestCase {
     private var src: URL!
     private var dst: URL!
 
+    private enum FakeTrashError: Error { case failed }
+
     override func setUpWithError() throws {
         base = FileManager.default.temporaryDirectory.appendingPathComponent("macdring-mover-\(UUID().uuidString)")
         src = base.appendingPathComponent("src", isDirectory: true)
@@ -79,5 +81,45 @@ final class FileMoverTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: b.path))
         XCTAssertFalse(fm.fileExists(atPath: dst.appendingPathComponent("a.txt").path))
         XCTAssertFalse(fm.fileExists(atPath: dst.appendingPathComponent("b.txt").path))
+    }
+
+    func testTrashReturnsFalseWhenThereAreNoEligibleFileURLs() throws {
+        let link = try XCTUnwrap(URL(string: "https://example.com"))
+        var attempted: [URL] = []
+        let fakeTrash: (URL) throws -> Void = { attempted.append($0) }
+
+        XCTAssertFalse(FileMover.trash([], trashItem: fakeTrash))
+        XCTAssertFalse(FileMover.trash([link], trashItem: fakeTrash))
+        XCTAssertTrue(attempted.isEmpty)
+    }
+
+    func testTrashIgnoresLinkWhenFileSucceeds() throws {
+        let link = try XCTUnwrap(URL(string: "https://example.com/item"))
+        let file = src.appendingPathComponent("file.txt")
+        try Data("file".utf8).write(to: file)
+        var attempted: [URL] = []
+
+        XCTAssertTrue(FileMover.trash([link, file], trashItem: { attempted.append($0) }))
+        XCTAssertEqual(attempted, [file])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testTrashReportsFailureAmongEligibleFiles() throws {
+        let link = try XCTUnwrap(URL(string: "https://example.com/item"))
+        let first = src.appendingPathComponent("first.txt")
+        let failing = src.appendingPathComponent("failing.txt")
+        let last = src.appendingPathComponent("last.txt")
+        try Data().write(to: first)
+        try Data().write(to: failing)
+        try Data().write(to: last)
+        var attempted: [URL] = []
+
+        let result = FileMover.trash([first, link, failing, last], trashItem: { url in
+            attempted.append(url)
+            if url == failing { throw FakeTrashError.failed }
+        })
+
+        XCTAssertFalse(result)
+        XCTAssertEqual(attempted, [first, failing, last])
     }
 }

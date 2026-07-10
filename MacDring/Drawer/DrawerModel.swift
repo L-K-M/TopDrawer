@@ -28,14 +28,14 @@ final class DrawerModel: ObservableObject {
     /// or gone after a reconcile) — see `items.didSet`.
     @Published var openGroupID: UUID?
     @Published var isDropTargeted: Bool = false
-    /// The grid slot a file drag is currently hovering over (drives the per-slot
-    /// drop highlight while spring-loaded). `nil` when no slot is targeted.
-    @Published var fileDropSlot: Int?
-    /// Slot → cell frame (in the drawer's content coordinate space), mirrored from
-    /// the view so the file-drop delegate can map a drag location to a slot **live**.
+    /// The displayed item or empty grid cell a file drag is currently hovering over.
+    /// `nil` means the background (or no active file drag).
+    @Published var fileDropTarget: ExternalDropTarget?
+    /// External target → frame (in the drawer's content coordinate space), mirrored
+    /// from the view so the file-drop delegate can map a drag location **live**.
     /// (The delegate's own captured copy is stale when a drawer springs open
     /// mid-drag, before the grid has reported its frames.)
-    var slotFrames: [Int: CGRect] = [:]
+    var externalDropTargetFrames: [ExternalDropTarget: CGRect] = [:]
 
     /// The tab's grid size (width = columns, height = rows).
     @Published var columns: Int = 4
@@ -97,6 +97,9 @@ final class DrawerModel: ObservableObject {
     var openGroup: DrawerItem? { openGroupID.flatMap { id in items.first { $0.id == id && $0.kind == .group } } }
     /// The items the drawer body shows: an open group's children, else the top level.
     var visibleItems: [DrawerItem] { openGroup?.children ?? items }
+    /// The items actually rendered as external drop targets. Search replaces the
+    /// current grid/list with flattened results, including matching group children.
+    var displayedItems: [DrawerItem] { isSearching ? searchResults : visibleItems }
 
     /// Whether this drawer offers search — a non-notes listing with enough items to
     /// be worth filtering (counting items inside groups too). Gates both the search
@@ -146,9 +149,9 @@ final class DrawerModel: ObservableObject {
     var onEjectItem: ((DrawerItem) -> Void)?
     /// Eject every ejectable volume (Disks tab header button).
     var onEjectAll: (() -> Void)?
-    /// Files were dropped on the drawer: `slot` is the target slot, or -1 for the
-    /// background. The controller routes (open-with / move-into / add).
-    var onDropFiles: ((_ urls: [URL], _ slot: Int) -> Void)?
+    /// Files were dropped on the drawer. Targets carry displayed identity plus an
+    /// optional unambiguous top-level placement slot; `nil` is the background.
+    var onDropFiles: ((_ urls: [URL], _ target: ExternalDropTarget?) -> Void)?
     var onMouseEntered: (() -> Void)?
     var onMouseExited: (() -> Void)?
     /// Called when a drag-reorder finishes: place `itemID` at grid `slot`.
@@ -184,6 +187,23 @@ final class DrawerModel: ObservableObject {
     /// group's children, else the top level. Drives the grid while a group is open.
     func visibleItem(atSlot slot: Int) -> DrawerItem? {
         visibleItems.first { $0.slot == slot }
+    }
+
+    /// Builds the external target for a displayed cell. Only the unfiltered top-level
+    /// layout can safely use its local slot for top-level placement.
+    func externalDropTarget(for item: DrawerItem?, atLocalSlot slot: Int) -> ExternalDropTarget {
+        let placementSlot = openGroupID == nil && !isSearching ? slot : nil
+        if let item {
+            return .occupiedItem(id: item.id, topLevelPlacementSlot: placementSlot)
+        }
+        return .emptySlot(localSlot: slot, topLevelPlacementSlot: placementSlot)
+    }
+
+    /// Resolves an occupied external target only among the items currently displayed.
+    /// Empty slots and the background intentionally have no item.
+    func item(forExternalDropTarget target: ExternalDropTarget?) -> DrawerItem? {
+        guard let target, case .occupiedItem(let id, _) = target else { return nil }
+        return displayedItems.first { $0.id == id }
     }
 }
 

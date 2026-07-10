@@ -26,8 +26,10 @@ enum DrawerMetrics {
     /// Size for a notes drawer, derived from the tab's grid dimensions (so the
     /// Columns/Rows steppers also size the text area), clamped to the screen.
     static func notesSize(columns: Int, rows: Int, iconSize: CGFloat, in visibleFrame: CGRect) -> CGSize {
-        let width = padding + CGFloat(max(1, columns)) * (iconSize + 28)
-        let height = padding + headerHeight + CGFloat(max(1, rows)) * (iconSize + 26)
+        let columns = PersistedLayoutBounds.clampedGridColumns(columns)
+        let rows = PersistedLayoutBounds.clampedGridRows(rows)
+        let width = padding + CGFloat(columns) * (iconSize + 28)
+        let height = padding + headerHeight + CGFloat(rows) * (iconSize + 26)
         return CGSize(width: min(max(width, 260), visibleFrame.width - 16),
                       height: min(max(height, 180), visibleFrame.height - 16))
     }
@@ -37,7 +39,7 @@ enum DrawerMetrics {
     /// one-column tab still shows a name + date. Shared by `contentSize` and the row
     /// view so the rendered columns match the drawer's actual width.
     static func listWidth(columns: Int, iconSize: CGFloat) -> CGFloat {
-        let cols = max(1, columns)
+        let cols = PersistedLayoutBounds.clampedGridColumns(columns)
         let gridWidth = padding + CGFloat(cols) * (iconSize + 28) + CGFloat(cols - 1) * gridInterColumn
         return max(gridWidth, listMinWidth)
     }
@@ -53,10 +55,22 @@ enum DrawerMetrics {
     /// grown if needed so items/slots placed beyond it stay visible. The empty
     /// cells within are the droppable gaps for free arrangement.
     static func gridRowCount(configuredRows: Int, maxSlot: Int, itemCount: Int, columns: Int) -> Int {
-        let cols = max(1, columns)
+        let cols = PersistedLayoutBounds.clampedGridColumns(columns)
+        let configuredRows = PersistedLayoutBounds.clampedGridRows(configuredRows)
+        let maxSlot = PersistedLayoutBounds.normalizedSlot(maxSlot)
+        let itemCount = min(max(itemCount, 0), PersistedLayoutBounds.maximumSlotCount)
         let slotRows = maxSlot >= 0 ? (maxSlot / cols) + 1 : 0
         let itemRows = itemCount > 0 ? ((itemCount - 1) / cols) + 1 : 0
         return max(configuredRows, slotRows, itemRows, 1)
+    }
+
+    /// Number of valid row-major destination cells to render. The final row may be
+    /// partial so it ends exactly at the maximum slot rather than exposing larger ids.
+    static func renderedGridSlotCount(rows: Int, columns: Int) -> Int {
+        let cols = PersistedLayoutBounds.clampedGridColumns(columns)
+        let maxRows = (PersistedLayoutBounds.maximumSlotCount + cols - 1) / cols
+        let rows = min(max(rows, 0), maxRows)
+        return min(rows * cols, PersistedLayoutBounds.maximumSlotCount)
     }
 
     /// The content size for a drawer, clamped to fit on `visibleFrame`. For the
@@ -69,10 +83,12 @@ enum DrawerMetrics {
                             columns: Int,
                             searchable: Bool = false,
                             in visibleFrame: CGRect) -> CGSize {
+        let configuredRows = PersistedLayoutBounds.clampedGridRows(configuredRows)
+        let columns = PersistedLayoutBounds.clampedGridColumns(columns)
         var size: CGSize
         switch layout {
         case .grid:
-            let cols = max(1, columns)
+            let cols = columns
             let rows = gridRowCount(configuredRows: configuredRows, maxSlot: maxSlot, itemCount: itemCount, columns: cols)
             let cellWidth = iconSize + 28
             let cellHeight = iconSize + 26
