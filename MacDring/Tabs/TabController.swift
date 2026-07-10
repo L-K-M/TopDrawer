@@ -288,8 +288,7 @@ final class TabController {
     private func persistSettledPosition(_ snapped: CGRect, was incoming: CGRect,
                                         edge: Edge, in visible: CGRect, tab: Tab) {
         guard abs(snapped.minX - incoming.minX) > 0.5 || abs(snapped.minY - incoming.minY) > 0.5 else { return }
-        let position = EdgeLayout.position(forPoint: CGPoint(x: snapped.midX, y: snapped.midY),
-                                           edge: edge, in: visible)
+        let position = EdgeLayout.position(forTabFrame: snapped, edge: edge, in: visible)
         var anchor = tab.anchor
         anchor.position = position
         store.setAnchor(anchor, forTab: tab.id, notify: false)
@@ -742,8 +741,8 @@ final class TabController {
             return
         }
         let snapped = snappedDragFrame(id, wc: wc, target: target)
-        let position = EdgeLayout.position(forPoint: CGPoint(x: snapped.midX, y: snapped.midY),
-                                           edge: target.edge, in: target.screen.visibleFrame)
+        let position = EdgeLayout.position(forTabFrame: snapped, edge: target.edge,
+                                           in: target.screen.visibleFrame)
         // Stack the dropped tab on top of whatever shares its (new) edge, so the
         // de-overlap pass treats it as the newcomer that yields — though it already
         // sits in a legal slot, so nothing actually has to move.

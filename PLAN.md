@@ -298,11 +298,12 @@ must not steal focus or churn the active-app order).
   earlier one snaps — to the **nearest legal gap** (≥ `minTabGap`) — so the
   most-recently-stacked tab (a drop, a new tab, or a move-to-edge, all bumped to the top
   `order`) is the one that yields while the tabs already there stay put. A drag previews
-  this same snapped slot live and commits it on release (WYSIWYG). The settled positions
-  are **persisted back**, so the stored layout is itself legal and the pass is idempotent:
-  re-running it — or dragging one tab away — re-derives the same frames and nothing
-  drifts. `visibleFrame` keeps tabs clear of the menu bar and the macOS Dock; if a tab's
-  edge collides with the Dock's edge, nudge inward and warn in Settings.
+  this same snapped slot live and commits it on release (WYSIWYG). A frame-aware inverse
+  preserves exact `0`/`1` anchors for tabs touching an along-edge boundary. The settled
+  positions are **persisted back**, so the stored layout is itself legal and the pass is
+  idempotent: re-running it — or dragging one tab away — re-derives the same frames and
+  nothing drifts. `visibleFrame` keeps tabs clear of the menu bar and the macOS Dock; if
+  a tab's edge collides with the Dock's edge, nudge inward and warn in Settings.
 
 ---
 

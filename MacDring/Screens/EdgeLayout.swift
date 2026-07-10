@@ -1,8 +1,8 @@
 import CoreGraphics
 
 /// Pure geometry: turns a tab's `ScreenAnchor` into on-screen frames, positions
-/// a drawer adjacent to its tab, and inverts a drag point back into a fractional
-/// position. All coordinates are AppKit/Cocoa screen coordinates (origin
+/// a drawer adjacent to its tab, and inverts a drag point or settled tab frame back
+/// into a fractional position. All coordinates are AppKit/Cocoa screen coordinates (origin
 /// bottom-left, y grows upward). No global state, so it's fully unit-testable.
 /// See PLAN.md §5–6.
 enum EdgeLayout {
@@ -270,10 +270,26 @@ enum EdgeLayout {
         clamp(center - width / 2, vf.minX, vf.maxX - width)
     }
 
-    // MARK: Drag inversion
+    // MARK: Position inversion
+
+    /// The fractional position represented by a settled tab `frame`. A tab touching
+    /// an along-edge boundary retains the exact endpoint anchor (`0` or `1`) rather
+    /// than deriving an inset fraction from its center. Interior frames use the same
+    /// center-based inverse as cursor targeting.
+    static func position(forTabFrame frame: CGRect, edge: Edge, in visibleFrame: CGRect) -> Double {
+        let tolerance: CGFloat = 0.001
+        if edge.isVertical {
+            if abs(frame.maxY - visibleFrame.maxY) <= tolerance { return 0 }
+            if abs(frame.minY - visibleFrame.minY) <= tolerance { return 1 }
+        } else {
+            if abs(frame.minX - visibleFrame.minX) <= tolerance { return 0 }
+            if abs(frame.maxX - visibleFrame.maxX) <= tolerance { return 1 }
+        }
+        return position(forPoint: CGPoint(x: frame.midX, y: frame.midY), edge: edge, in: visibleFrame)
+    }
 
     /// The fractional position along `edge` for a screen-space point `p` — the
-    /// inverse of `tabFrame`'s placement, used during drag-to-reposition.
+    /// point inverse used to target the cursor during drag-to-reposition.
     static func position(forPoint p: CGPoint, edge: Edge, in visibleFrame: CGRect) -> Double {
         switch edge {
         case .left, .right:
