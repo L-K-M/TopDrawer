@@ -62,7 +62,7 @@ final class TabStore: ObservableObject {
             self.document = TabStore.normalizingSlots(doc)
             self.loadedFromDisk = true
         } else {
-            // A primary that *exists* but won't decode is quarantined (renamed
+            // A primary that *exists* but won't decode safely is quarantined (renamed
             // aside), never overwritten: it may be hand-recoverable (e.g. JSON
             // truncated by a crash), and leaving it in place would let the next
             // save destroy it — first by rotating it over the good `.bak`, then,
@@ -83,7 +83,7 @@ final class TabStore: ObservableObject {
         }
     }
 
-    /// Moves an undecodable launcher file aside as `launcher.corrupt-<stamp>.json`
+    /// Moves a corrupt launcher file aside as `launcher.corrupt-<stamp>.json`
     /// so no save path can ever overwrite it. User data is never deleted here.
     private static func quarantine(_ url: URL, fileManager: FileManager) {
         let formatter = DateFormatter()
@@ -93,14 +93,14 @@ final class TabStore: ObservableObject {
             .appendingPathComponent("launcher.corrupt-\(formatter.string(from: Date())).json")
         do {
             try fileManager.moveItem(at: url, to: dest)
-            NSLog("MacDring: launcher document couldn't be decoded — preserved it at \(dest.lastPathComponent)")
+            NSLog("MacDring: corrupt launcher document preserved at \(dest.lastPathComponent)")
         } catch {
-            NSLog("MacDring: couldn't quarantine undecodable launcher document: \(error.localizedDescription)")
+            NSLog("MacDring: couldn't quarantine corrupt launcher document: \(error.localizedDescription)")
         }
     }
 
-    /// Ensures every item in every tab has a valid, distinct grid slot (migrates
-    /// older documents saved before items had slots).
+    /// Normalizes item slots in every tab, assigning missing slots while bounded
+    /// capacity remains (and migrating documents saved before items had slots).
     private static func normalizingSlots(_ document: LauncherDocument) -> LauncherDocument {
         var doc = document
         for i in doc.tabs.indices {
@@ -122,7 +122,17 @@ final class TabStore: ObservableObject {
 
     private static func decode(_ data: Data) -> LauncherDocument? {
         do {
-            return try JSONDecoder().decode(LauncherDocument.self, from: data)
+            let document = try JSONDecoder().decode(LauncherDocument.self, from: data)
+            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let rawTabs = root["tabs"] as? [Any] else {
+                NSLog("MacDring: launcher document is missing a tabs array")
+                return nil
+            }
+            if !rawTabs.isEmpty, document.tabs.isEmpty {
+                NSLog("MacDring: launcher document contained tabs but none could be decoded")
+                return nil
+            }
+            return document
         } catch {
             NSLog("MacDring: couldn't decode launcher document: \(error)")
             return nil
@@ -149,17 +159,14 @@ final class TabStore: ObservableObject {
         mutate { $0.tabs.removeAll { $0.id == id } }
     }
 
-    /// Replaces a tab (matched by id) with an updated value. Items get any missing
-    /// slots filled (the Settings editor appends items with an unassigned slot),
-    /// matching `addItem` and the on-disk load so they render immediately — not
-    /// only after a restart re-normalizes the document.
-    func updateTab(_ tab: Tab) {
+    /// Mutates the current value of a tab in place. Reading the tab inside the
+    /// store prevents a Settings edit from replacing unrelated changes made since
+    /// the editor was shown. Items get any missing slots filled after the change.
+    func updateTab(id tabID: UUID, _ change: (inout Tab) -> Void) {
         mutate {
-            if let i = $0.tabs.firstIndex(where: { $0.id == tab.id }) {
-                var tab = tab
-                tab.items = tab.items.assigningMissingSlots()
-                $0.tabs[i] = tab
-            }
+            guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            change(&$0.tabs[i])
+            $0.tabs[i].items = $0.tabs[i].items.assigningMissingSlots()
         }
     }
 
@@ -274,7 +281,7 @@ final class TabStore: ObservableObject {
 
     /// Replaces all tabs from an exported document. Decodes leniently (the same
     /// forward/again-compatible path as a normal load) and normalizes slots.
-    /// Returns `false` without changing anything if the data can't be decoded.
+    /// Returns `false` without changing anything if the data can't be decoded safely.
     @discardableResult
     func importData(_ data: Data) -> Bool {
         guard let doc = TabStore.decode(data) else { return false }
@@ -320,21 +327,30 @@ final class TabStore: ObservableObject {
     /// Places `ids` at consecutive free grid slots starting at `start` — skipping any
     /// slot held by an item *not* in `ids` — preserving their order. Used when several
     /// items are dropped onto a slot together so they land in a tidy run from the
-    /// target instead of scattering. See ANALYSIS.md I4.
+    /// target instead of scattering. If the complete run cannot fit below the slot
+    /// bound, no items move. See ANALYSIS.md I4.
     func placeItems(_ ids: [UUID], startingAt start: Int, inTab tabID: UUID) {
         guard !ids.isEmpty else { return }
-        mutate {
-            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
-            let moving = Set(ids)
-            var blocked = Set($0.tabs[ti].items.filter { !moving.contains($0.id) }.map(\.slot))
-            var slot = max(0, start)
-            for id in ids {
-                while blocked.contains(slot) { slot += 1 }   // next slot free of a non-moving item
-                if let ii = $0.tabs[ti].items.firstIndex(where: { $0.id == id }) {
-                    $0.tabs[ti].items[ii].slot = slot
+        mutate { document in
+            guard let ti = document.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            let itemIndices = ids.compactMap { id in
+                document.tabs[ti].items.firstIndex(where: { $0.id == id })
+            }
+            guard !itemIndices.isEmpty else { return }
+            let moving = Set(itemIndices.map { document.tabs[ti].items[$0].id })
+            var blocked = Set(document.tabs[ti].items.filter { !moving.contains($0.id) }.map(\.slot))
+            var slot = min(max(0, start), PersistedLayoutBounds.maximumSlotOrOrder)
+            var placements: [(index: Int, slot: Int)] = []
+            for index in itemIndices {
+                while blocked.contains(slot) {
+                    guard slot < PersistedLayoutBounds.maximumSlotOrOrder else { return }
+                    slot += 1   // next slot free of a non-moving item
                 }
+                placements.append((index, slot))
                 blocked.insert(slot)
-                slot += 1
+            }
+            for placement in placements {
+                document.tabs[ti].items[placement.index].slot = placement.slot
             }
         }
     }
@@ -351,6 +367,46 @@ final class TabStore: ObservableObject {
         mutate {
             if let i = $0.tabs.firstIndex(where: { $0.id == tabID }) {
                 $0.tabs[i].items = DrawerGrouping.updatingItem($0.tabs[i].items, with: item)
+            }
+        }
+    }
+
+    /// Sets an image override on a persistent item and clears its generated style, so
+    /// there is only one custom icon source. Passing `nil` clears both overrides.
+    func setCustomIconBookmark(_ bookmark: Data?, forItem itemID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            Self.mutateItem(itemID, in: &$0.tabs[ti].items) {
+                $0.customIconBookmark = bookmark
+                $0.iconStyle = nil
+            }
+        }
+    }
+
+    /// Sets a generated override on a persistent item and always clears its image
+    /// bookmark. A `nil` style is the generated editor's "Use Default" result.
+    func setIconStyle(_ style: IconStyle?, forItem itemID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            Self.mutateItem(itemID, in: &$0.tabs[ti].items) {
+                $0.iconStyle = style
+                $0.customIconBookmark = nil
+            }
+        }
+    }
+
+    /// Applies an item mutation at the top level or one level inside a group. Groups
+    /// cannot nest, and their children are persistent items too.
+    private static func mutateItem(_ itemID: UUID, in items: inout [DrawerItem],
+                                   _ change: (inout DrawerItem) -> Void) {
+        if let i = items.firstIndex(where: { $0.id == itemID }) {
+            change(&items[i])
+            return
+        }
+        for i in items.indices where items[i].kind == .group {
+            if let j = items[i].children.firstIndex(where: { $0.id == itemID }) {
+                change(&items[i].children[j])
+                return
             }
         }
     }
@@ -372,6 +428,7 @@ final class TabStore: ObservableObject {
     /// slot is empty the item simply moves there, leaving a gap. This is what makes
     /// free arrangement with gaps possible.
     func placeItem(_ itemID: UUID, atSlot slot: Int, inTab tabID: UUID) {
+        guard PersistedLayoutBounds.normalizedSlot(slot) == slot else { return }
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
                   let ii = $0.tabs[ti].items.firstIndex(where: { $0.id == itemID }) else { return }
@@ -420,6 +477,7 @@ final class TabStore: ObservableObject {
     /// Reorders a child within its group's sub-grid, with the same swap-or-move-into-a-
     /// gap semantics as `placeItem` one level down.
     func placeItemInGroup(_ itemID: UUID, atSlot slot: Int, groupID: UUID, inTab tabID: UUID) {
+        guard PersistedLayoutBounds.normalizedSlot(slot) == slot else { return }
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
                   let gi = $0.tabs[ti].items.firstIndex(where: { $0.id == groupID && $0.kind == .group }),

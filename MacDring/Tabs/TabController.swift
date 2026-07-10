@@ -14,6 +14,9 @@ final class TabController {
 
     /// Presents the generated-icon editor (built lazily on first use).
     private lazy var iconEditor = IconEditorWindowController()
+    /// Identifies the editor allowed to mutate/reopen its originating drawer. A newer
+    /// editor invalidates callbacks from the window it replaces.
+    private var iconEditorSessionID: UUID?
 
     private var tabWindows: [UUID: TabWindowController] = [:]
     private var hotkeys: [UUID: (hotkey: CarbonHotkey, spec: HotkeySpec)] = [:]
@@ -29,6 +32,10 @@ final class TabController {
     /// Only the newest launch request in the current drawer session may apply its
     /// completion; a second launch supersedes the first.
     private var activeLaunchRequestID: UUID?
+    /// Advances on each successful drawer open and each real drawer close. Toggle
+    /// requests flow through those paths, so a snapshot detects intervening drawer
+    /// activity even when the drawer ends up closed again.
+    private var drawerInteractionGeneration: UInt = 0
     private var hotkeyCounter: UInt32 = 1
 
     private var globalClickMonitor: Any?
@@ -352,6 +359,7 @@ final class TabController {
               // keeps its old screen reference, so a hotkey/spring-open must not slide a
               // drawer out onto a detached display. See ANALYSIS.md B3.
               let screen = resolvedScreen(for: tab) else { return }
+        drawerInteractionGeneration &+= 1
         if let prev = openTabID, prev != id {
             tabWindows[prev]?.setOpen(false)
             tabWindows[prev]?.restoreResting()
@@ -382,6 +390,7 @@ final class TabController {
     private func closeDrawer() {
         cancelHoverClose()
         cancelSpringOpen()
+        if openTabID != nil { drawerInteractionGeneration &+= 1 }
         let duration = animationDuration
         if let id = openTabID, let wc = tabWindows[id] {
             wc.setOpen(false)
@@ -729,7 +738,7 @@ final class TabController {
         let orders = store.tabs
             .filter { $0.id != id && $0.anchor.edge == edge && $0.anchor.displayUUID == uuid }
             .map(\.anchor.order)
-        return (orders.max() ?? -1) + 1
+        return PersistedLayoutBounds.nextOrder(after: orders.max())
     }
 
     /// The screen / edge / position the dragged pill should snap to, from the
@@ -1062,9 +1071,8 @@ final class TabController {
         NSApp.activate(ignoringOtherApps: true)
         floatAboveDrawer(panel)
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        var updated = item
-        updated.customIconBookmark = BookmarkResolver.makeBookmark(for: url)
-        store.updateItem(updated, inTab: id)
+        store.setCustomIconBookmark(BookmarkResolver.makeBookmark(for: url),
+                                    forItem: item.id, inTab: id)
     }
 
     /// Empties the Trash (Trash item context menu) after a confirmation, via Finder
@@ -1092,32 +1100,44 @@ final class TabController {
     /// Clears an item's custom icon (image *and* generated style), restoring its default.
     private func resetItemIcon(_ item: DrawerItem) {
         guard let id = openTabID else { return }
-        var updated = item
-        updated.customIconBookmark = nil
-        updated.iconStyle = nil
-        store.updateItem(updated, inTab: id)
+        store.setIconStyle(nil, forItem: item.id, inTab: id)
     }
 
     /// Opens the generated-icon editor for `item` and stores the result. The drawer
     /// closes first because the editor is an ordinary window (the drawer floats above
-    /// normal windows), then reopens so the new icon is visible. A persistent
-    /// `.items` item keeps its style on the item (clearing any image override);
-    /// a live item's style is stored on the tab, keyed by its path.
+    /// normal windows), then reopens when the editor closes unless another drawer has
+    /// since opened. A persistent `.items` item keeps its saved style on the item (and
+    /// clears any image override); a live item's style is stored on the tab, keyed by
+    /// its path.
     private func customizeIcon(_ item: DrawerItem) {
         guard let id = openTabID, let kind = store.tab(id: id)?.kind else { return }
-        closeDrawer()
-        iconEditor.show(itemName: item.displayName, initial: item.iconStyle) { [weak self] style in
-            guard let self else { return }
-            if kind == .items {
-                var updated = item
-                updated.iconStyle = style
-                if style != nil { updated.customIconBookmark = nil }   // generated replaces an image override
-                self.store.updateItem(updated, inTab: id)
-            } else if let path = item.url?.path {
-                self.store.setIconStyle(style, forItemPath: path, inTab: id)
+        let sessionID = UUID()
+        let drawerGenerationBeforeEditor = drawerInteractionGeneration
+        let expectedDrawerGeneration = drawerGenerationBeforeEditor &+ 1
+        iconEditorSessionID = sessionID
+        closeDrawer()   // the one generation change this editor session expects
+        iconEditor.show(
+            itemName: item.displayName,
+            initial: item.iconStyle,
+            onSave: { [weak self] style in
+                guard let self, self.iconEditorSessionID == sessionID else { return }
+                if kind == .items {
+                    self.store.setIconStyle(style, forItem: item.id, inTab: id)
+                } else if let path = item.url?.path {
+                    self.store.setIconStyle(style, forItemPath: path, inTab: id)
+                }
+            },
+            onClose: { [weak self] in
+                guard let self, self.iconEditorSessionID == sessionID else { return }
+                self.iconEditorSessionID = nil
+                // A tab opened while the editor was up is now the user's active
+                // context, even if it later closed; only our intentional close is allowed.
+                guard self.drawerInteractionGeneration == expectedDrawerGeneration,
+                      self.openTabID == nil,
+                      self.store.tab(id: id) != nil else { return }
+                self.openDrawer(id)
             }
-            self.openDrawer(id)   // reopen so the change shows
-        }
+        )
     }
 
     // MARK: Disks (eject)

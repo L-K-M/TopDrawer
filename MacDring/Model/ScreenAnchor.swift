@@ -19,13 +19,18 @@ struct ScreenAnchor: Codable, Equatable {
     var position: Double
 
     /// Tie-break / stack order for tabs that share the same edge on a display.
-    var order: Int
+    var order: Int {
+        didSet {
+            let bounded = PersistedLayoutBounds.clampedOrder(order)
+            if order != bounded { order = bounded }
+        }
+    }
 
     init(displayUUID: String, edge: Edge, position: Double, order: Int = 0) {
         self.displayUUID = displayUUID
         self.edge = edge
         self.position = ScreenAnchor.clampPosition(position)
-        self.order = order
+        self.order = PersistedLayoutBounds.clampedOrder(order)
     }
 
     init(from decoder: Decoder) throws {
@@ -33,7 +38,7 @@ struct ScreenAnchor: Codable, Equatable {
         displayUUID = try c.decode(String.self, forKey: .displayUUID)
         edge = try c.decode(Edge.self, forKey: .edge)
         position = ScreenAnchor.clampPosition(try c.decode(Double.self, forKey: .position))
-        order = try c.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        order = PersistedLayoutBounds.clampedOrder(try c.decodeIfPresent(Int.self, forKey: .order) ?? 0)
     }
 
     private enum CodingKeys: String, CodingKey { case displayUUID, edge, position, order }

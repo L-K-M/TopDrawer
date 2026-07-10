@@ -19,7 +19,7 @@ struct TabsView: View {
 
             Group {
                 if let id = selection, let tab = store.tab(id: id) {
-                    TabEditor(draft: tab, preferences: preferences, store: store, registry: registry)
+                    TabEditor(tab: tab, preferences: preferences, store: store, registry: registry)
                         .id(id)
                 } else {
                     VStack(spacing: 6) {
@@ -128,7 +128,7 @@ struct TabsView: View {
         // so the de-overlap pass snaps the newcomer into a legal gap and leaves the
         // existing tabs put.
         let rightTabs = store.tabs.filter { $0.anchor.edge == .right && $0.anchor.displayUUID == uuid }
-        let order = (rightTabs.map(\.anchor.order).max() ?? -1) + 1
+        let order = PersistedLayoutBounds.nextOrder(after: rightTabs.map(\.anchor.order).max())
         let tab = Tab(
             title: "New Tab",
             colorHex: preferences.defaultTabColorHex,
@@ -151,7 +151,9 @@ struct TabsView: View {
     private func moveTabs(from offsets: IndexSet, to destination: Int) {
         var tabs = store.tabs
         tabs.move(fromOffsets: offsets, toOffset: destination)
-        for index in tabs.indices { tabs[index].anchor.order = index }
+        for index in tabs.indices {
+            tabs[index].anchor.order = PersistedLayoutBounds.clampedOrder(index)
+        }
         store.replaceTabs(tabs)
     }
 }
@@ -160,12 +162,12 @@ struct TabsView: View {
 /// global setting, or pin it On / Off for this tab. "Use global" is also the revert.
 private enum BehaviorMode { case useGlobal, on, off }
 
-/// Edits one tab. Holds a local `draft` (re-seeded when the selection changes via
-/// `.id`) and commits the whole tab to the store on any change.
+/// Edits one tab through field-wise store bindings so unrelated live changes are
+/// never replaced by a stale editor snapshot.
 private struct TabEditor: View {
-    @State var draft: Tab
+    let tab: Tab
     @ObservedObject var preferences: Preferences
-    let store: TabStore
+    @ObservedObject var store: TabStore
     let registry: DisplayRegistry
 
     @State private var showingLinkSheet = false
@@ -176,8 +178,8 @@ private struct TabEditor: View {
             Section("Tab") {
                 // A tab's type is fixed at creation (it determines what the drawer
                 // holds), so it's shown read-only here — change it by making a new tab.
-                LabeledContent("Type", value: draft.kind.displayName)
-                TextField("Name", text: $draft.title)
+                LabeledContent("Type", value: currentTab.kind.displayName)
+                TextField("Name", text: tabBinding(\.title))
                 ColorPicker("Color", selection: colorBinding, supportsOpacity: false)
                 Picker("Glyph", selection: glyphIsSymbolBinding) {
                     Text("SF Symbol").tag(true)
@@ -200,30 +202,30 @@ private struct TabEditor: View {
             }
 
             Section("Placement") {
-                Picker("Edge", selection: $draft.anchor.edge) {
+                Picker("Edge", selection: tabBinding(\.anchor.edge)) {
                     ForEach(Edge.allCases) { Text($0.displayName).tag($0) }
                 }
-                Picker("Display", selection: $draft.anchor.displayUUID) {
+                Picker("Display", selection: tabBinding(\.anchor.displayUUID)) {
                     ForEach(displayChoices, id: \.uuid) { Text($0.name).tag($0.uuid) }
                 }
                 VStack(alignment: .leading) {
                     Text("Position along edge")
-                    Slider(value: $draft.anchor.position, in: 0...1)
+                    Slider(value: tabBinding(\.anchor.position), in: 0...1)
                 }
-                Toggle("Locked (can't be moved)", isOn: $draft.locked)
+                Toggle("Locked (can't be moved)", isOn: tabBinding(\.locked))
             }
 
             Section("Drawer") {
-                if draft.kind != .notes {
-                    Picker("Layout", selection: $draft.layout) {
+                if currentTab.kind != .notes {
+                    Picker("Layout", selection: tabBinding(\.layout)) {
                         ForEach(DrawerLayout.allCases) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
                 }
                 // Ranges match the General pane's new-tab defaults (and Preferences'
                 // clamps): a tab created at 12×16 must be editable back up here.
-                Stepper("Columns: \(draft.gridColumns)", value: $draft.gridColumns, in: 1...12)
-                Stepper("Rows: \(draft.gridRows)", value: $draft.gridRows, in: 1...16)
+                Stepper("Columns: \(currentTab.gridColumns)", value: tabBinding(\.gridColumns), in: 1...12)
+                Stepper("Rows: \(currentTab.gridRows)", value: tabBinding(\.gridRows), in: 1...16)
                 Text("Layout and size for the drawer. Items can be placed anywhere in the grid, with gaps; for a notes tab the columns/rows size the text area. The list layout shows entries top-to-bottom and adds a date column for the Fresh, Recents, and folder tabs.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -243,22 +245,22 @@ private struct TabEditor: View {
                     Text("On").tag(BehaviorMode.on)
                     Text("Off").tag(BehaviorMode.off)
                 }
-                Toggle("Keep open after launching an item", isOn: $draft.behavior.keepOpenAfterLaunch)
-                Picker("When idle", selection: $draft.behavior.concealment) {
+                Toggle("Keep open after launching an item", isOn: tabBinding(\.behavior.keepOpenAfterLaunch))
+                Picker("When idle", selection: tabBinding(\.behavior.concealment)) {
                     ForEach(TabConcealment.allCases) { Text($0.displayName).tag($0) }
                 }
                 Text("Hover and close-on-click follow the global default unless set here. Auto-hide slides the tab off its edge (leaving a sliver); auto-fade dims it — either reveals when you move the pointer to that screen edge.")
                     .font(.caption).foregroundStyle(.secondary)
-                LabeledContent("Hotkey") { HotkeyRecorderView(hotkey: $draft.hotkey) }
+                LabeledContent("Hotkey") { HotkeyRecorderView(hotkey: tabBinding(\.hotkey)) }
             }
 
-            if draft.kind == .items {
+            if currentTab.kind == .items {
                 Section("Items") {
-                    if draft.items.isEmpty {
+                    if currentTab.items.isEmpty {
                         Text("No items yet. Add some below, or drag files onto the tab.")
                             .foregroundStyle(.secondary).font(.callout)
                     } else {
-                        ForEach(draft.items) { item in
+                        ForEach(currentTab.items) { item in
                             HStack(spacing: 8) {
                                 Image(nsImage: ItemView.resolveIcon(item))
                                     .resizable().frame(width: 18, height: 18)
@@ -267,7 +269,7 @@ private struct TabEditor: View {
                             }
                             .contextMenu {
                                 Button("Remove", role: .destructive) {
-                                    draft.items.removeAll { $0.id == item.id }
+                                    store.removeItem(id: item.id, fromTab: tab.id)
                                 }
                             }
                         }
@@ -276,12 +278,12 @@ private struct TabEditor: View {
                         Button("Add Files…", action: addFiles)
                         Button("Add Link…") { linkText = ""; showingLinkSheet = true }
                         Button("Add Trash", action: addTrash)
-                            .disabled(draft.items.contains { $0.kind == .trash })
+                            .disabled(currentTab.items.contains { $0.kind == .trash })
                     }
                 }
             }
 
-            if draft.kind == .folder {
+            if currentTab.kind == .folder {
                 Section("Folder") {
                     LabeledContent("Directory") {
                         Text(folderDisplayPath)
@@ -289,46 +291,46 @@ private struct TabEditor: View {
                             .lineLimit(1).truncationMode(.middle)
                     }
                     Button("Choose Folder…", action: chooseFolder)
-                    Picker("Sort by", selection: $draft.folderSort) {
+                    Picker("Sort by", selection: tabBinding(\.folderSort)) {
                         ForEach(FolderSort.allCases) { Text($0.displayName).tag($0) }
                     }
-                    Toggle("Show hidden files", isOn: $draft.folderShowsHidden)
+                    Toggle("Show hidden files", isOn: tabBinding(\.folderShowsHidden))
                     Text("The drawer shows this folder's contents live (read-only); it refreshes automatically when the folder changes. Folders sort before files.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
-            if draft.kind == .notes {
+            if currentTab.kind == .notes {
                 Section("Notes") {
                     Text("Open the tab's drawer to write notes.")
                         .foregroundStyle(.secondary).font(.callout)
                 }
             }
 
-            if draft.kind == .disks {
+            if currentTab.kind == .disks {
                 Section("Disks") {
                     Text("The drawer lists the mounted ejectable volumes live — external, removable, network, and disk-image volumes. Click one to open it in Finder, or use its menu to eject.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
-            if draft.kind == .network {
+            if currentTab.kind == .network {
                 Section("Network") {
                     Text("The drawer lists your mounted network shares live — SMB / AFP / NFS / WebDAV mounts. Click one to open it in Finder, or use its menu to eject (disconnect).")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
-            if draft.kind == .cloud {
+            if currentTab.kind == .cloud {
                 Section("Cloud") {
                     Text("The drawer lists your cloud drives live — iCloud Drive and the providers under ~/Library/CloudStorage (Dropbox, Google Drive, OneDrive, Box, …). Click one to open it in Finder.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
-            if draft.kind == .recents {
+            if currentTab.kind == .recents {
                 Section("Recents") {
-                    Picker("Source", selection: $draft.recentsSource) {
+                    Picker("Source", selection: tabBinding(\.recentsSource)) {
                         ForEach(RecentsSource.allCases) { Text($0.displayName).tag($0) }
                     }
                     Text(recentsSourceHelp)
@@ -336,7 +338,7 @@ private struct TabEditor: View {
                 }
             }
 
-            if draft.kind == .fresh {
+            if currentTab.kind == .fresh {
                 Section("Fresh") {
                     Text("The drawer lists files that recently arrived on this Mac — downloaded, copied, or saved into your Downloads, Desktop, or Documents — newest first, via Spotlight. Read-only; click one to open it. No special permission needed.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -345,7 +347,6 @@ private struct TabEditor: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .onChange(of: draft) { _ in store.updateTab(draft) }
         .sheet(isPresented: $showingLinkSheet) { linkSheet }
     }
 
@@ -353,16 +354,34 @@ private struct TabEditor: View {
 
     private func globalText(_ value: Bool) -> String { value ? "On" : "Off" }
 
+    private var currentTab: Tab {
+        store.tab(id: tab.id) ?? tab
+    }
+
+    private func tabBinding<Value>(_ keyPath: WritableKeyPath<Tab, Value>) -> Binding<Value> {
+        Binding(
+            get: { store.tab(id: tab.id)?[keyPath: keyPath] ?? tab[keyPath: keyPath] },
+            set: { value in
+                store.updateTab(id: tab.id) { $0[keyPath: keyPath] = value }
+            }
+        )
+    }
+
     /// Maps the tab's `overridesOpenOnHover` + `openOnHover` to a 3-way choice:
     /// follow the global default, or pin On / Off for this tab.
     private var openOnHoverModeBinding: Binding<BehaviorMode> {
         Binding(
-            get: { draft.behavior.overridesOpenOnHover ? (draft.behavior.openOnHover ? .on : .off) : .useGlobal },
+            get: {
+                let behavior = currentTab.behavior
+                return behavior.overridesOpenOnHover ? (behavior.openOnHover ? .on : .off) : .useGlobal
+            },
             set: { mode in
-                switch mode {
-                case .useGlobal: draft.behavior.overridesOpenOnHover = false
-                case .on:  draft.behavior.overridesOpenOnHover = true; draft.behavior.openOnHover = true
-                case .off: draft.behavior.overridesOpenOnHover = true; draft.behavior.openOnHover = false
+                store.updateTab(id: tab.id) { tab in
+                    switch mode {
+                    case .useGlobal: tab.behavior.overridesOpenOnHover = false
+                    case .on:  tab.behavior.overridesOpenOnHover = true; tab.behavior.openOnHover = true
+                    case .off: tab.behavior.overridesOpenOnHover = true; tab.behavior.openOnHover = false
+                    }
                 }
             }
         )
@@ -370,30 +389,39 @@ private struct TabEditor: View {
 
     private var autoHideModeBinding: Binding<BehaviorMode> {
         Binding(
-            get: { draft.behavior.overridesAutoHide ? (draft.behavior.autoHide ? .on : .off) : .useGlobal },
+            get: {
+                let behavior = currentTab.behavior
+                return behavior.overridesAutoHide ? (behavior.autoHide ? .on : .off) : .useGlobal
+            },
             set: { mode in
-                switch mode {
-                case .useGlobal: draft.behavior.overridesAutoHide = false
-                case .on:  draft.behavior.overridesAutoHide = true; draft.behavior.autoHide = true
-                case .off: draft.behavior.overridesAutoHide = true; draft.behavior.autoHide = false
+                store.updateTab(id: tab.id) { tab in
+                    switch mode {
+                    case .useGlobal: tab.behavior.overridesAutoHide = false
+                    case .on:  tab.behavior.overridesAutoHide = true; tab.behavior.autoHide = true
+                    case .off: tab.behavior.overridesAutoHide = true; tab.behavior.autoHide = false
+                    }
                 }
             }
         )
     }
 
     private var colorBinding: Binding<Color> {
-        Binding(get: { Color(hexString: draft.colorHex) },
-                set: { draft.colorHex = $0.hexString })
+        Binding(
+            get: { Color(hexString: currentTab.colorHex) },
+            set: { color in store.updateTab(id: tab.id) { $0.colorHex = color.hexString } }
+        )
     }
 
     private var glyphIsSymbolBinding: Binding<Bool> {
         Binding(
-            get: { if case .symbol = draft.glyph { return true } else { return false } },
+            get: { if case .symbol = currentTab.glyph { return true } else { return false } },
             set: { isSymbol in
-                if isSymbol {
-                    if case .symbol = draft.glyph {} else { draft.glyph = .symbol("folder.fill") }
-                } else {
-                    if case .monogram = draft.glyph {} else { draft.glyph = .monogram("A") }
+                store.updateTab(id: tab.id) { tab in
+                    if isSymbol {
+                        if case .symbol = tab.glyph {} else { tab.glyph = .symbol("folder.fill") }
+                    } else {
+                        if case .monogram = tab.glyph {} else { tab.glyph = .monogram("A") }
+                    }
                 }
             }
         )
@@ -401,8 +429,8 @@ private struct TabEditor: View {
 
     private var symbolBinding: Binding<String> {
         Binding(
-            get: { if case .symbol(let s) = draft.glyph { return s } else { return "" } },
-            set: { draft.glyph = .symbol($0) }
+            get: { if case .symbol(let s) = currentTab.glyph { return s } else { return "" } },
+            set: { symbol in store.updateTab(id: tab.id) { $0.glyph = .symbol(symbol) } }
         )
     }
 
@@ -411,8 +439,10 @@ private struct TabEditor: View {
     /// used to be stored but silently never shown.
     private var monogramBinding: Binding<String> {
         Binding(
-            get: { if case .monogram(let m) = draft.glyph { return m } else { return "" } },
-            set: { draft.glyph = .monogram(String($0.prefix(2))) }
+            get: { if case .monogram(let m) = currentTab.glyph { return m } else { return "" } },
+            set: { monogram in
+                store.updateTab(id: tab.id) { $0.glyph = .monogram(String(monogram.prefix(2))) }
+            }
         )
     }
 
@@ -423,8 +453,8 @@ private struct TabEditor: View {
                 choices.append((uuid: uuid, name: screen.localizedName))
             }
         }
-        if !choices.contains(where: { $0.uuid == draft.anchor.displayUUID }) {
-            choices.append((uuid: draft.anchor.displayUUID, name: "Disconnected display"))
+        if !choices.contains(where: { $0.uuid == currentTab.anchor.displayUUID }) {
+            choices.append((uuid: currentTab.anchor.displayUUID, name: "Disconnected display"))
         }
         return choices
     }
@@ -432,7 +462,7 @@ private struct TabEditor: View {
     // MARK: Recents tab
 
     private var recentsSourceHelp: String {
-        switch draft.recentsSource {
+        switch currentTab.recentsSource {
         case .macDring:
             return "Lists what you've opened from MacDring, most recent first. Clear them from the drawer's header."
         case .system:
@@ -445,7 +475,7 @@ private struct TabEditor: View {
     // MARK: Folder tab
 
     private var folderDisplayPath: String {
-        FolderLister.resolveFolder(draft)?.path ?? "None"
+        FolderLister.resolveFolder(currentTab)?.path ?? "None"
     }
 
     private func chooseFolder() {
@@ -455,8 +485,11 @@ private struct TabEditor: View {
         panel.allowsMultipleSelection = false
         panel.message = "Choose a folder to mirror"
         if panel.runModal() == .OK, let url = panel.url {
-            draft.folderURL = url
-            draft.folderBookmark = BookmarkResolver.makeBookmark(for: url)
+            let bookmark = BookmarkResolver.makeBookmark(for: url)
+            store.updateTab(id: tab.id) {
+                $0.folderURL = url
+                $0.folderBookmark = bookmark
+            }
         }
     }
 
@@ -470,15 +503,16 @@ private struct TabEditor: View {
         panel.message = "Choose apps, files, or folders to add"
         if panel.runModal() == .OK {
             for url in panel.urls {
-                draft.items.appendDeduplicatingTarget(DrawerItem.fromFileURL(url))
+                store.addItem(DrawerItem.fromFileURL(url), toTab: tab.id)
             }
         }
     }
 
     /// Adds a Trash item (once): opens the Trash, and accepts drops to delete.
     private func addTrash() {
-        guard !draft.items.contains(where: { $0.kind == .trash }) else { return }
-        draft.items.append(DrawerItem.trash())
+        guard let current = store.tab(id: tab.id),
+              !current.items.contains(where: { $0.kind == .trash }) else { return }
+        store.addItem(DrawerItem.trash(), toTab: tab.id)
     }
 
     private var linkSheet: some View {
@@ -491,7 +525,9 @@ private struct TabEditor: View {
                 Spacer()
                 Button("Cancel") { showingLinkSheet = false }
                 Button("Add") {
-                    if let item = DrawerItem.fromLink(linkText) { draft.items.appendDeduplicatingTarget(item) }
+                    if let item = DrawerItem.fromLink(linkText) {
+                        store.addItem(item, toTab: tab.id)
+                    }
                     showingLinkSheet = false
                 }
                 .keyboardShortcut(.defaultAction)

@@ -39,7 +39,7 @@ struct DrawerView: View {
     private enum Field { case search, notes, groupName }
 
     private let contentSpace = "macdring.drawer.content"
-    private var columns: Int { max(1, model.columns) }
+    private var columns: Int { PersistedLayoutBounds.clampedGridColumns(model.columns) }
     /// The items the grid/list currently shows: an open group's children, else the top
     /// level. Everything below (`maxSlot`, `rows`, slot lookup) works over this.
     private var contextItems: [DrawerItem] { model.visibleItems }
@@ -47,6 +47,9 @@ struct DrawerView: View {
     private var rows: Int {
         DrawerMetrics.gridRowCount(configuredRows: model.rows, maxSlot: maxSlot,
                                    itemCount: contextItems.count, columns: columns)
+    }
+    private var renderedSlotCount: Int {
+        DrawerMetrics.renderedGridSlotCount(rows: rows, columns: columns)
     }
     private var cellHeight: CGFloat { CGFloat(preferences.iconSize) + 26 }
     /// Only `.items` tabs support internal reorder / remove (and groups only ever live
@@ -356,7 +359,7 @@ struct DrawerView: View {
         if model.layout == .grid {
             let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: columns)
             LazyVGrid(columns: gridColumns, spacing: 12) {
-                ForEach(Array(0..<(rows * columns)), id: \.self) { slot in
+                ForEach(Array(0..<renderedSlotCount), id: \.self) { slot in
                     gridSlot(slot)
                 }
             }
