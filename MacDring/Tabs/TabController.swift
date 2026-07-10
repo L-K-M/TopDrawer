@@ -869,19 +869,8 @@ final class TabController {
             if openTabID == id { refreshOpenDrawer() } else { openDrawer(id) }
         case .items:
             let dropped = urls.map { DrawerItem.fromDroppedURL($0) }   // files & links, in drop order
-            // Add each (dedup) and collect the id actually in the tab — the existing
-            // item on a duplicate, or the new one — preserving order, de-duped.
-            var ids: [UUID] = []
-            for newItem in dropped {
-                if let itemID = store.addItem(newItem, toTab: id), !ids.contains(itemID) {
-                    ids.append(itemID)
-                }
-            }
-            if let placementSlot {
-                // Land them in a run from the target slot (so a duplicate moves there
-                // too, and a multi-file drop doesn't scatter). See ANALYSIS.md I4.
-                store.placeItems(ids, startingAt: placementSlot, inTab: id)
-            }
+            // Add, dedup, and optionally place the whole drop in one store mutation.
+            store.addItems(dropped, toTab: id, startingAt: placementSlot)
             if openTabID != id { openDrawer(id) }   // a store change already refreshed an open drawer
         }
     }

@@ -325,6 +325,69 @@ final class TabStore: ObservableObject {
         return resultID
     }
 
+    /// Adds an ordered drop in one mutation, reusing items with matching targets at
+    /// either the top level or inside groups. Returns each actual existing/new id once,
+    /// in first-seen drop order. When `start` is non-nil, top-level results are placed
+    /// in an ordered run from that slot while preserving slots occupied by other items.
+    @discardableResult
+    func addItems(_ items: [DrawerItem], toTab tabID: UUID, startingAt start: Int? = nil) -> [UUID] {
+        guard !items.isEmpty,
+              let tabIndex = document.tabs.firstIndex(where: { $0.id == tabID }) else { return [] }
+
+        var tab = document.tabs[tabIndex]
+        var resultIDs: [UUID] = []
+        var seenIDs = Set<UUID>()
+        var addedItem = false
+
+        for item in items {
+            let resultID: UUID
+            if let target = BookmarkResolver.url(for: item)?.standardized,
+               let existing = tab.items.flattenedLaunchable().first(where: {
+                   BookmarkResolver.url(for: $0)?.standardized == target
+               }) {
+                resultID = existing.id
+            } else {
+                tab.items.append(item)
+                resultID = item.id
+                addedItem = true
+            }
+            if seenIDs.insert(resultID).inserted { resultIDs.append(resultID) }
+        }
+
+        if addedItem { tab.items = tab.items.assigningMissingSlots() }
+
+        var changed = addedItem
+        if let start {
+            let topLevelIDs = Set(tab.items.map(\.id))
+            let placingIDs = resultIDs.filter { topLevelIDs.contains($0) }
+            let moving = Set(placingIDs)
+            var blocked = Set(tab.items.filter { !moving.contains($0.id) }.map(\.slot))
+            let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+            var slot = min(max(0, start), maximum)
+            var placements: [(index: Int, slot: Int)]? = []
+            for id in placingIDs {
+                while blocked.contains(slot) {
+                    guard slot < maximum else { placements = nil; break }
+                    slot += 1
+                }
+                guard placements != nil,
+                      let itemIndex = tab.items.firstIndex(where: { $0.id == id }) else { break }
+                placements?.append((itemIndex, slot))
+                blocked.insert(slot)
+            }
+            if let placements {
+                for placement in placements where tab.items[placement.index].slot != placement.slot {
+                    tab.items[placement.index].slot = placement.slot
+                    changed = true
+                }
+            }
+        }
+
+        guard changed else { return resultIDs }
+        mutate { $0.tabs[tabIndex] = tab }
+        return resultIDs
+    }
+
     /// Places `ids` at consecutive free grid slots starting at `start` — skipping any
     /// slot held by an item *not* in `ids` — preserving their order. Used when several
     /// items are dropped onto a slot together so they land in a tidy run from the
