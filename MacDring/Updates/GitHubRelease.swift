@@ -37,17 +37,20 @@ struct GitHubRelease: Decodable {
         case assets
     }
 
-    /// The best asset to download: a disk image, then a zip, then a pkg, else the
-    /// first uploaded asset. `nil` if the release has no assets. (GitHub's
+    /// The best supported asset to download: a disk image, then a zip, then a pkg.
+    /// `nil` if the release has no asset with one of those extensions. (GitHub's
     /// auto-generated "Source code" archives aren't in `assets`, so they're never
     /// picked.)
     var preferredAsset: Asset? {
         let preference = ["dmg", "zip", "pkg"]
-        func rank(_ asset: Asset) -> Int {
-            let ext = (asset.name as NSString).pathExtension.lowercased()
-            return preference.firstIndex(of: ext) ?? preference.count
+        for ext in preference {
+            if let asset = assets.first(where: {
+                ($0.name as NSString).pathExtension.lowercased() == ext
+            }) {
+                return asset
+            }
         }
-        return assets.min { rank($0) < rank($1) }
+        return nil
     }
 
     /// A trimmed, length-capped form of the release body, suitable for an alert's
