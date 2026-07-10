@@ -56,9 +56,37 @@ final class TabController {
     /// One-shot Spotlight lookup backing the open **Fresh** tab and the **system**
     /// source of a Recents tab; cancelled when the drawer closes or another tab opens.
     private let spotlight = SpotlightQuery()
-    /// The tab the `spotlight` query is currently gathering for, so an unrelated
-    /// reconcile doesn't cancel-and-restart (and thereby starve) an in-flight gather.
-    private var spotlightWatchTabID: UUID?
+    private struct SpotlightWatchKey: Equatable {
+        enum Configuration: Equatable {
+            case fresh
+            case recents(RecentsSource)
+        }
+
+        let tabID: UUID
+        let configuration: Configuration
+
+        init?(tab: Tab) {
+            tabID = tab.id
+            switch tab.kind {
+            case .fresh:
+                configuration = .fresh
+            case .recents where tab.recentsSource.includesSystem:
+                configuration = .recents(tab.recentsSource)
+            default:
+                return nil
+            }
+        }
+    }
+    /// The complete work represented by `spotlight`, retained after its one-shot
+    /// completion so unrelated reconciles do not issue the same lookup again.
+    private var spotlightWatchKey: SpotlightWatchKey?
+    private enum SpotlightWatchResult {
+        case fresh([DrawerItem])
+        case recents([RecentItem])
+    }
+    /// Completed source-stable results are kept with their full work key because a
+    /// synchronous drawer refresh replaces system Recents with its local-only listing.
+    private var completedSpotlightResult: (key: SpotlightWatchKey, result: SpotlightWatchResult)?
     /// A dedicated Spotlight lookup for the Fresh pill dot, so the badge never
     /// competes with (or restarts) the open drawer's query.
     private let freshBadgeSpotlight = SpotlightQuery()
@@ -290,11 +318,18 @@ final class TabController {
               let tab = store.tab(id: id),
               let screen = wc.currentScreen else { return }
         drawer.refresh(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen)
+        if let key = SpotlightWatchKey(tab: tab),
+           spotlightWatchKey == key,
+           let completed = completedSpotlightResult,
+           completed.key == key,
+           let items = spotlightItems(from: completed.result, for: key) {
+            drawer.updateLiveItems(items.applyingIconStyles(from: tab.iconStyles))
+        }
         wc.applyFrame(EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                 restingTabFrame: wc.restingFrame,
                                                 drawerFrame: drawer.openFrame))
         updateFolderWatch()   // the open tab may have changed folder/sort
-        updateSpotlightWatch()   // re-issue the Spotlight lookup for a Fresh / system-Recents tab
+        updateSpotlightWatch()   // reconcile the keyed Spotlight work for Fresh / system Recents
     }
 
     private func makeWindow(for tab: Tab) -> TabWindowController {
@@ -1294,49 +1329,67 @@ final class TabController {
     /// Starts (or restarts) the Spotlight lookup backing the open drawer when it's a
     /// **Fresh** tab or a **Recents** tab whose source includes the system; otherwise
     /// stops any running query. Results fill the drawer asynchronously via
-    /// `applySpotlightItems`. The async sibling of `updateFolderWatch`.
+    /// `applySpotlightResult`. The async sibling of `updateFolderWatch`.
     private func updateSpotlightWatch() {
-        guard let id = openTabID, let tab = store.tab(id: id) else { stopSpotlightWatch(); return }
-        // A reconcile that didn't change the open tab must not cancel-and-restart a
-        // gather that's still running for it — a burst of mutations (e.g. per-keystroke
-        // tab edits) would otherwise starve the query so results never land.
-        let restartable = !(spotlightWatchTabID == id && spotlight.isGathering)
-        switch tab.kind {
+        guard let id = openTabID,
+              let tab = store.tab(id: id),
+              let key = SpotlightWatchKey(tab: tab) else { stopSpotlightWatch(); return }
+        guard spotlightWatchKey != key else { return }
+        completedSpotlightResult = nil
+        spotlightWatchKey = key
+
+        switch key.configuration {
         case .fresh:
             // Spotlight-only: reading the index can never trigger a folder-access
             // (TCC) prompt, unlike a direct scan of ~/Downloads & co. — the reason
             // the FreshScanner path was retired from the live app (FB1).
-            guard restartable else { return }
-            spotlightWatchTabID = id
             spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightItems(FreshLister.items(from: results), forTab: id)
+                self?.applySpotlightResult(.fresh(FreshLister.items(from: results)), for: key)
             }
-        case .recents where tab.recentsSource.includesSystem:
-            guard restartable else { return }
-            spotlightWatchTabID = id
-            let includeMacDring = tab.recentsSource.includesMacDring
+        case .recents:
             let home = FileManager.default.homeDirectoryForCurrentUser
             spotlight.start(mode: .lastUsed, scopes: [home], limit: RecentsStore.limit) { [weak self] results in
                 let system = results.map { RecentItem(spotlight: $0) }
-                let history = includeMacDring ? RecentsStore.shared.items : []
-                let merged = RecentsStore.deduplicatedByURL(history + system, limit: RecentsStore.limit)
-                self?.applySpotlightItems(RecentsLister.items(from: merged), forTab: id)
+                self?.applySpotlightResult(.recents(system), for: key)
             }
-        default:
-            stopSpotlightWatch()
         }
     }
 
     private func stopSpotlightWatch() {
         spotlight.cancel()
-        spotlightWatchTabID = nil
+        spotlightWatchKey = nil
+        completedSpotlightResult = nil
     }
 
-    /// Applies an async live listing to the open drawer — only if the same tab is
-    /// still open — re-applying its per-target icon overrides and re-seating the
-    /// riding tab onto the (possibly resized) drawer.
-    private func applySpotlightItems(_ items: [DrawerItem], forTab id: UUID) {
-        guard openTabID == id, let wc = tabWindows[id], let tab = store.tab(id: id) else { return }
+    /// Materializes source-stable query results using the current MacDring history.
+    /// Keeping history out of the cache means launches appear immediately and Clear
+    /// cannot resurrect records captured by an earlier `.both` completion.
+    private func spotlightItems(from result: SpotlightWatchResult,
+                                for key: SpotlightWatchKey) -> [DrawerItem]? {
+        switch (key.configuration, result) {
+        case (.fresh, .fresh(let items)):
+            return items
+        case (.recents(let source), .recents(let system)):
+            let history = source.includesMacDring ? RecentsStore.shared.items : []
+            let merged = RecentsStore.deduplicatedByURL(history + system, limit: RecentsStore.limit)
+            return RecentsLister.items(from: merged)
+        default:
+            return nil
+        }
+    }
+
+    /// Applies an async live listing to the open drawer — only if the same tab and
+    /// Spotlight configuration are still current — re-applying its per-target icon
+    /// overrides and re-seating the riding tab onto the (possibly resized) drawer.
+    private func applySpotlightResult(_ result: SpotlightWatchResult, for key: SpotlightWatchKey) {
+        let id = key.tabID
+        guard spotlightWatchKey == key,
+              openTabID == id,
+              let wc = tabWindows[id],
+              let tab = store.tab(id: id),
+              SpotlightWatchKey(tab: tab) == key,
+              let items = spotlightItems(from: result, for: key) else { return }
+        completedSpotlightResult = (key, result)
         drawer.updateLiveItems(items.applyingIconStyles(from: tab.iconStyles))
         wc.applyFrame(EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                 restingTabFrame: wc.restingFrame,
