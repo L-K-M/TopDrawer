@@ -23,10 +23,44 @@ final class DrawerItemTests: XCTestCase {
         XCTAssertEqual(item.url?.path, "/usr/bin")
     }
 
-    func testFromLinkDefaultsScheme() {
-        let item = DrawerItem.fromLink("example.com")
+    func testFromLinkDefaultsSchemeAndTrimsInput() {
+        let item = DrawerItem.fromLink("  example.com/path  ")
         XCTAssertEqual(item?.kind, .url)
-        XCTAssertEqual(item?.url?.scheme, "https")
+        XCTAssertEqual(item?.url?.absoluteString, "https://example.com/path")
+        XCTAssertEqual(item?.displayName, "example.com")
+    }
+
+    func testFromLinkTreatsCommonHostPortInputsAsHTTPS() {
+        XCTAssertEqual(DrawerItem.fromLink("localhost:3000")?.url?.absoluteString,
+                       "https://localhost:3000")
+        XCTAssertEqual(DrawerItem.fromLink("example.com:8080")?.url?.absoluteString,
+                       "https://example.com:8080")
+    }
+
+    func testFromLinkRejectsMalformedSchemesAndHTTPHosts() {
+        let malformed = [
+            "://example.com",
+            "1http://example.com",
+            "https://",
+            "https:///path",
+            "http://?query",
+            "https://exa mple.com"
+        ]
+
+        for link in malformed {
+            XCTAssertNil(DrawerItem.fromLink(link), "Expected \(link) to be invalid")
+        }
+    }
+
+    func testFromLinkKeepsLegitimateNonHTTPSchemes() {
+        XCTAssertEqual(DrawerItem.fromLink("mailto:user@example.com")?.url?.absoluteString,
+                       "mailto:user@example.com")
+        XCTAssertEqual(DrawerItem.fromLink("ftp://example.com/file")?.url?.absoluteString,
+                       "ftp://example.com/file")
+        XCTAssertEqual(DrawerItem.fromLink("myapp:foo")?.url?.absoluteString,
+                       "myapp:foo")
+        XCTAssertEqual(DrawerItem.fromLink("myapp:3000")?.url?.absoluteString,
+                       "myapp:3000")
     }
 
     func testAppendDeduplicatingTargetSkipsExistingURL() {

@@ -522,22 +522,39 @@ private struct TabEditor: View {
         store.addItem(DrawerItem.trash(), toTab: tab.id)
     }
 
-    private var linkSheet: some View {
+    @ViewBuilder private var linkSheet: some View {
+        let linkItem = DrawerItem.fromLink(linkText)
+        let enteredText = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+
         VStack(alignment: .leading, spacing: 12) {
             Text("Add a Link").font(.headline)
             TextField("https://example.com", text: $linkText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 320)
+            if let destination = linkItem?.url?.absoluteString {
+                Text("Destination: \(destination)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 320, alignment: .leading)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text(enteredText.isEmpty ? "Enter a link." : "Enter a valid link.")
+                    .font(.caption)
+                    .foregroundStyle(enteredText.isEmpty ? Color.secondary : Color.red)
+                    .frame(width: 320, alignment: .leading)
+            }
+
             HStack {
                 Spacer()
                 Button("Cancel") { showingLinkSheet = false }
                 Button("Add") {
-                    if let item = DrawerItem.fromLink(linkText) {
-                        store.addItem(item, toTab: tab.id)
-                    }
+                    guard let linkItem else { return }
+                    store.addItem(linkItem, toTab: tab.id)
                     showingLinkSheet = false
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(linkItem == nil)
             }
         }
         .padding(20)
