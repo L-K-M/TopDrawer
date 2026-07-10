@@ -24,6 +24,24 @@ final class TabStore: ObservableObject {
     private let fileManager: FileManager
     private var saveWorkItem: DispatchWorkItem?
 
+    struct BookmarkRepair {
+        let original: Data
+        let replacement: Data
+    }
+
+    struct ItemBookmarkKey: Hashable {
+        let tabID: UUID
+        let itemID: UUID
+    }
+
+    struct BookmarkRepairs {
+        var folders: [UUID: BookmarkRepair] = [:]
+        var targets: [ItemBookmarkKey: BookmarkRepair] = [:]
+        var icons: [ItemBookmarkKey: BookmarkRepair] = [:]
+
+        var isEmpty: Bool { folders.isEmpty && targets.isEmpty && icons.isEmpty }
+    }
+
     // MARK: Init
 
     /// - Parameters:
@@ -167,39 +185,75 @@ final class TabStore: ObservableObject {
     /// Sweeps **every** bookmark the document holds: each item's target bookmark, its
     /// custom-icon bookmark, and each folder tab's directory bookmark. Resolves and
     /// re-mints off the main thread, then writes the refreshed bookmarks back on it
-    /// without notifying `onChange` (the resolved URLs are unchanged, so nothing needs
-    /// to reconcile). Safe to call once at launch; a no-op when nothing is stale.
+    /// only when each value still matches the snapshot. This prevents a repair from
+    /// overwriting a newer user choice made while it was in flight. The write does not
+    /// notify `onChange` (the resolved URLs are unchanged, so nothing needs to
+    /// reconcile). Safe to call once at launch; a no-op when nothing is stale.
     func remintStaleBookmarks() {
         let snapshot = document.tabs
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            func reminted(_ data: Data?) -> Data? {
-                guard let data,
-                      let resolved = BookmarkResolver.resolve(data), resolved.isStale,
+            let repairs = Self.makeBookmarkRepairs(in: snapshot) { data in
+                guard let resolved = BookmarkResolver.resolve(data), resolved.isStale,
                       let minted = BookmarkResolver.makeBookmark(for: resolved.url) else { return nil }
                 return minted
             }
-            var freshTargets: [UUID: Data] = [:]   // itemID → re-minted target bookmark
-            var freshIcons: [UUID: Data] = [:]     // itemID → re-minted custom-icon bookmark
-            var freshFolders: [UUID: Data] = [:]   // tabID → re-minted folder bookmark
-            for tab in snapshot {
-                if let minted = reminted(tab.folderBookmark) { freshFolders[tab.id] = minted }
-                for item in tab.items {
-                    if let minted = reminted(item.bookmark) { freshTargets[item.id] = minted }
-                    if let minted = reminted(item.customIconBookmark) { freshIcons[item.id] = minted }
-                }
-            }
-            guard !freshTargets.isEmpty || !freshIcons.isEmpty || !freshFolders.isEmpty else { return }
+            guard !repairs.isEmpty else { return }
             DispatchQueue.main.async {
                 self?.mutate(notifyChange: false) {
-                    for ti in $0.tabs.indices {
-                        if let minted = freshFolders[$0.tabs[ti].id] {
-                            $0.tabs[ti].folderBookmark = minted
-                        }
-                        for ii in $0.tabs[ti].items.indices {
-                            let id = $0.tabs[ti].items[ii].id
-                            if let minted = freshTargets[id] { $0.tabs[ti].items[ii].bookmark = minted }
-                            if let minted = freshIcons[id] { $0.tabs[ti].items[ii].customIconBookmark = minted }
-                        }
+                    Self.applyBookmarkRepairs(repairs, to: &$0)
+                }
+            }
+        }
+    }
+
+    static func makeBookmarkRepairs(in tabs: [Tab], remint: (Data) -> Data?) -> BookmarkRepairs {
+        var repairs = BookmarkRepairs()
+
+        func repair(_ original: Data?) -> BookmarkRepair? {
+            guard let original, let replacement = remint(original) else { return nil }
+            return BookmarkRepair(original: original, replacement: replacement)
+        }
+
+        func collect(_ item: DrawerItem, tabID: UUID) {
+            let key = ItemBookmarkKey(tabID: tabID, itemID: item.id)
+            if let repair = repair(item.bookmark) { repairs.targets[key] = repair }
+            if let repair = repair(item.customIconBookmark) { repairs.icons[key] = repair }
+        }
+
+        for tab in tabs {
+            if let repair = repair(tab.folderBookmark) { repairs.folders[tab.id] = repair }
+            for item in tab.items {
+                collect(item, tabID: tab.id)
+                if item.kind == .group {
+                    for child in item.children { collect(child, tabID: tab.id) }
+                }
+            }
+        }
+        return repairs
+    }
+
+    static func applyBookmarkRepairs(_ repairs: BookmarkRepairs, to document: inout LauncherDocument) {
+        func apply(to item: inout DrawerItem, tabID: UUID) {
+            let key = ItemBookmarkKey(tabID: tabID, itemID: item.id)
+            if let repair = repairs.targets[key], item.bookmark == repair.original {
+                item.bookmark = repair.replacement
+            }
+            if let repair = repairs.icons[key], item.customIconBookmark == repair.original {
+                item.customIconBookmark = repair.replacement
+            }
+        }
+
+        for tabIndex in document.tabs.indices {
+            let tabID = document.tabs[tabIndex].id
+            if let repair = repairs.folders[tabID],
+               document.tabs[tabIndex].folderBookmark == repair.original {
+                document.tabs[tabIndex].folderBookmark = repair.replacement
+            }
+            for itemIndex in document.tabs[tabIndex].items.indices {
+                apply(to: &document.tabs[tabIndex].items[itemIndex], tabID: tabID)
+                if document.tabs[tabIndex].items[itemIndex].kind == .group {
+                    for childIndex in document.tabs[tabIndex].items[itemIndex].children.indices {
+                        apply(to: &document.tabs[tabIndex].items[itemIndex].children[childIndex], tabID: tabID)
                     }
                 }
             }
@@ -285,16 +339,15 @@ final class TabStore: ObservableObject {
     func removeItem(id itemID: UUID, fromTab tabID: UUID) {
         mutate {
             if let i = $0.tabs.firstIndex(where: { $0.id == tabID }) {
-                $0.tabs[i].items.removeAll { $0.id == itemID }
+                $0.tabs[i].items = DrawerGrouping.removingItem($0.tabs[i].items, id: itemID)
             }
         }
     }
 
     func updateItem(_ item: DrawerItem, inTab tabID: UUID) {
         mutate {
-            if let i = $0.tabs.firstIndex(where: { $0.id == tabID }),
-               let j = $0.tabs[i].items.firstIndex(where: { $0.id == item.id }) {
-                $0.tabs[i].items[j] = item
+            if let i = $0.tabs.firstIndex(where: { $0.id == tabID }) {
+                $0.tabs[i].items = DrawerGrouping.updatingItem($0.tabs[i].items, with: item)
             }
         }
     }
