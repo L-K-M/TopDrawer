@@ -270,12 +270,15 @@ must not steal focus or churn the active-app order).
 - **Spring-loaded file drops:** hovering a tab while dragging a file opens its
   drawer (after ~0.5 s). File drops onto the drawer are handled at the **AppKit
   level** — the hosting view (`DrawerHostingView`) is an `NSDraggingDestination` that
-  maps the drag location to a **slot under the cursor** (via `DrawerModel.slotFrames`,
-  reported by the SwiftUI content in the hosting view's coordinate space), highlights
-  it, and on release files there — dropping onto an **app** opens it with that app,
-  onto a **folder** files it into that folder, and onto an empty slot / outside the
-  grid adds it (items tab, landing in that slot) or files it into the mirrored
-  directory (folder tab). SwiftUI's `.onDrop` is **not** used here: it fires
+  maps the drag location through `DrawerModel.externalDropTargetFrames`, reported by
+  the displayed grid, list, open group, or flattened search results. Occupied targets
+  carry an item UUID plus an optional unambiguous top-level placement slot; empty cells
+  retain a context-local slot for targeting, but only top-level cells carry placement
+  context. Thus group children/search results resolve by identity, and group-local
+  empty cells never become ambiguous top-level placements. Dropping onto an **app**
+  opens with it, onto a **folder** files into it, and otherwise adds/files the drop;
+  top-level placement context preserves placement near the hovered cell. SwiftUI's
+  `.onDrop` is **not** used here: it fires
   unreliably in the borderless panel (especially nested in a `ScrollView`) and gives
   no hovered location — the same reason reordering uses a `DragGesture`. Folder items
   are also draggable **out** to Finder/other apps. (Dropping onto a folder **moves**
@@ -613,7 +616,7 @@ MacDring/
 >   the slot under it is found from the cells' reported frames; `TabStore.placeItem`
 >   moves it there, swapping if that slot is occupied, on release). SwiftUI's
 >   `.onDrop` is **not** used for reorder — its drop callbacks don't fire inside a
->   borderless panel's grid. (External file drops to *add* items still use `.onDrop`.)
+>   borderless panel's grid. External file drops use the AppKit target-frame path below.
 >   Because cells are keyed by slot index (reused on swap), `ItemView` reloads its
 >   cached icon via `.task(id: item.id)` so the **icon follows the item** on a swap
 >   (otherwise names swap but icons stay put).
@@ -661,11 +664,13 @@ MacDring/
 >   to set the name, color, type, and (for a folder) the directory, then creates it.
 > - **Spring-loaded file drops** — hovering a tab while dragging opens its drawer;
 >   the drawer's hosting view (`DrawerHostingView`, an **AppKit `NSDraggingDestination`**)
->   then **highlights the slot under the cursor** as you move and files there on
->   release — onto an app opens-with, onto a folder moves the file in, onto a slot adds
->   it (items, landing in that slot) or files it into the mirrored directory (folder).
->   It maps the drag location to a slot via `DrawerModel.slotFrames` (reported by the
->   SwiftUI content in the hosting view's coordinate space). **Why AppKit, not
+>   highlights the displayed target under the cursor and files there on release — onto
+>   an app opens-with, onto a folder moves the file in, otherwise it adds/files the
+>   drop. SwiftUI reports `DrawerModel.externalDropTargetFrames` for grids, lists, open
+>   groups, and flattened search results. Occupied targets carry item identity and only
+>   unambiguous top-level targets carry placement context; empty targets retain their
+>   context-local slot, but group-local empty slots do not become top-level placements.
+>   **Why AppKit, not
 >   SwiftUI `.onDrop`:** in this borderless panel (especially nested in a `ScrollView`)
 >   `.onDrop` fires unreliably and gives no hovered location — the same lesson as
 >   reordering (which uses a `DragGesture`). A **folder/app** target shows a distinct
