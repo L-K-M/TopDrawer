@@ -51,7 +51,7 @@ final class NewTabWindowController: NSObject, NSWindowDelegate {
         // already there put.
         let rightTabs = store.tabs.filter { $0.anchor.edge == .right && $0.anchor.displayUUID == uuid }
         let position = max(0.12, min(0.88, 0.5 - 0.08 * Double(rightTabs.count)))
-        let order = (rightTabs.map(\.anchor.order).max() ?? -1) + 1
+        let order = PersistedLayoutBounds.nextOrder(after: rightTabs.map(\.anchor.order).max())
 
         let glyph: TabGlyph
         switch config.kind {

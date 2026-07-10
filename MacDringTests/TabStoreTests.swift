@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import MacDring
 
@@ -89,21 +90,64 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(group.children.map(\.displayName), ["A", "B"])
     }
 
-    func testUpdateTabAssignsSlotsToNewlyAppendedItems() {
-        // The Settings editor appends items with an unassigned slot (-1) and commits
-        // via updateTab; they must get a real slot so they render without a restart.
+    func testUpdateTabMutationAssignsSlotsToNewlyAppendedItems() {
         let store = TabStore(storeURL: storeURL)
-        var tab = makeTab()
+        let tab = makeTab()
         store.addTab(tab)
 
-        tab = try! XCTUnwrap(store.tab(id: tab.id))
-        tab.items.append(DrawerItem.trash())               // slot defaults to -1
-        tab.items.append(DrawerItem(kind: .url, displayName: "Site", url: URL(string: "https://example.com")))
-        store.updateTab(tab)
+        store.updateTab(id: tab.id) {
+            $0.items.append(DrawerItem.trash())               // slot defaults to -1
+            $0.items.append(DrawerItem(kind: .url, displayName: "Site", url: URL(string: "https://example.com")))
+        }
 
         let saved = store.tab(id: tab.id)!
         XCTAssertTrue(saved.items.allSatisfy { $0.slot >= 0 }, "every item should get a real slot")
         XCTAssertEqual(Set(saved.items.map(\.slot)).count, saved.items.count, "slots should be distinct")
+    }
+
+    func testSettingsFieldMutationPreservesConcurrentFieldAndItem() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab("Before")
+        store.addTab(tab)
+        let originalItem = DrawerItem.trash()
+        store.addItem(originalItem, toTab: tab.id)
+        let settingsSnapshot = try XCTUnwrap(store.tab(id: tab.id))
+
+        let concurrentItem = DrawerItem(kind: .url, displayName: "Concurrent", url: URL(string: "https://example.com"))
+        store.setLocked(true, forTab: tab.id)
+        store.addItem(concurrentItem, toTab: tab.id)
+        store.removeItem(id: originalItem.id, fromTab: tab.id)
+        store.updateTab(id: tab.id) { $0.title = settingsSnapshot.title + " edited" }
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id))
+        XCTAssertEqual(saved.title, "Before edited")
+        XCTAssertTrue(saved.locked)
+        XCTAssertEqual(saved.items.map(\.id), [concurrentItem.id])
+    }
+
+    func testSettingsFolderMutationPreservesConcurrentTabData() throws {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        tab.kind = .folder
+        store.addTab(tab)
+
+        let concurrentAnchor = ScreenAnchor(displayUUID: "D2", edge: .left, position: 0.25, order: 3)
+        let concurrentItem = DrawerItem(kind: .file, displayName: "Concurrent")
+        store.setAnchor(concurrentAnchor, forTab: tab.id)
+        store.addItem(concurrentItem, toTab: tab.id)
+
+        let folderURL = URL(fileURLWithPath: "/tmp/Chosen")
+        let bookmark = Data([1, 2, 3])
+        store.updateTab(id: tab.id) {
+            $0.folderURL = folderURL
+            $0.folderBookmark = bookmark
+        }
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id))
+        XCTAssertEqual(saved.folderURL, folderURL)
+        XCTAssertEqual(saved.folderBookmark, bookmark)
+        XCTAssertEqual(saved.anchor, concurrentAnchor)
+        XCTAssertEqual(saved.items.map(\.id), [concurrentItem.id])
     }
 
     func testReplaceTabsNormalizesItemSlots() {
@@ -148,6 +192,54 @@ final class TabStoreTests: XCTestCase {
 
         store.removeItem(id: item.id, fromTab: tab.id)
         XCTAssertEqual(store.tab(id: tab.id)?.items.count, 0)
+    }
+
+    func testSettingCustomIconBookmarkClearsGeneratedStyle() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab()
+        let item = DrawerItem(kind: .file, displayName: "File",
+                              customIconBookmark: Data([1]),
+                              iconStyle: IconStyle(base: .folder, colorHex: "#112233", symbol: nil))
+        store.addTab(tab)
+        store.addItem(item, toTab: tab.id)
+
+        let bookmark = Data([2, 3])
+        store.setCustomIconBookmark(bookmark, forItem: item.id, inTab: tab.id)
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id)?.items.first)
+        XCTAssertEqual(saved.customIconBookmark, bookmark)
+        XCTAssertNil(saved.iconStyle)
+    }
+
+    func testSettingGeneratedIconStyleClearsImageBookmark() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab()
+        let item = DrawerItem(kind: .file, displayName: "File", customIconBookmark: Data([1]))
+        let style = IconStyle(base: .tile, colorHex: "#445566", symbol: "star.fill")
+        store.addTab(tab)
+        store.addItem(item, toTab: tab.id)
+
+        store.setIconStyle(style, forItem: item.id, inTab: tab.id)
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id)?.items.first)
+        XCTAssertEqual(saved.iconStyle, style)
+        XCTAssertNil(saved.customIconBookmark)
+    }
+
+    func testClearingGeneratedIconStyleClearsBothOverrides() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab()
+        let item = DrawerItem(kind: .file, displayName: "File",
+                              customIconBookmark: Data([1]),
+                              iconStyle: IconStyle(base: .folder, colorHex: "#112233", symbol: nil))
+        store.addTab(tab)
+        store.addItem(item, toTab: tab.id)
+
+        store.setIconStyle(nil, forItem: item.id, inTab: tab.id)
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id)?.items.first)
+        XCTAssertNil(saved.iconStyle)
+        XCTAssertNil(saved.customIconBookmark)
     }
 
     func testBookmarkRepairTraversesGroupChildrenAndRefreshesEveryBookmarkKind() throws {
@@ -371,6 +463,185 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, 4)  // existing item moved to the target
     }
 
+    // MARK: Ordered bulk drops
+
+    func testAddItemsPublishesAndNotifiesOnce() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let items = [
+            DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example")),
+            DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example")),
+            DrawerItem(kind: .url, displayName: "C", url: URL(string: "https://c.example")),
+        ]
+        var publications = 0
+        var changes = 0
+        let cancellable = store.objectWillChange.sink { publications += 1 }
+        store.onChange = { changes += 1 }
+
+        withExtendedLifetime(cancellable) {
+            _ = store.addItems(items, toTab: tab.id, startingAt: 5)
+        }
+
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(changes, 1)
+    }
+
+    func testAddItemsPreservesFirstSeenOrder() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let c = DrawerItem(kind: .url, displayName: "C", url: URL(string: "https://c.example"))
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        let ids = store.addItems([c, a, b], toTab: tab.id)
+
+        XCTAssertEqual(ids, [c.id, a.id, b.id])
+        XCTAssertEqual(store.tab(id: tab.id)?.items.map(\.id), [c.id, a.id, b.id])
+    }
+
+    func testAddItemsReusesExistingAndEarlierBatchDuplicates() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let existing = DrawerItem(kind: .url, displayName: "Existing", url: URL(string: "https://existing.example"))
+        store.addItem(existing, toTab: tab.id)
+        let existingDuplicate = DrawerItem(kind: .url, displayName: "Existing again", url: existing.url)
+        let new = DrawerItem(kind: .url, displayName: "New", url: URL(string: "https://new.example"))
+        let newDuplicate = DrawerItem(kind: .url, displayName: "New again", url: new.url)
+
+        let ids = store.addItems([existingDuplicate, new, newDuplicate], toTab: tab.id)
+
+        XCTAssertEqual(ids, [existing.id, new.id])
+        XCTAssertEqual(store.tab(id: tab.id)?.items.map(\.id), [existing.id, new.id])
+    }
+
+    func testAddItemsReusesDuplicateInsideGroup() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+        store.addItem(a, toTab: tab.id)
+        store.addItem(b, toTab: tab.id)
+        store.groupItems(draggedID: a.id, ontoTargetID: b.id, inTab: tab.id)
+
+        let duplicate = DrawerItem(kind: .url, displayName: "A again", url: a.url)
+        let new = DrawerItem(kind: .url, displayName: "New", url: URL(string: "https://new.example"))
+        let ids = store.addItems([duplicate, new], toTab: tab.id, startingAt: 1)
+        let saved = store.tab(id: tab.id)!.items
+
+        XCTAssertEqual(ids, [a.id, new.id])
+        XCTAssertEqual(saved.count, 2)
+        XCTAssertEqual(saved.first { $0.kind == .group }?.children.count, 2)
+        XCTAssertEqual(saved.first { $0.id == new.id }?.slot, 2)
+    }
+
+    func testAddItemsPlacesExistingAndNewItemsFromTarget() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let existing = DrawerItem(kind: .url, displayName: "Existing", url: URL(string: "https://existing.example"))
+        store.addItem(existing, toTab: tab.id)
+        let duplicate = DrawerItem(kind: .url, displayName: "Existing again", url: existing.url)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        let ids = store.addItems([duplicate, a, b], toTab: tab.id, startingAt: 4)
+        let saved = store.tab(id: tab.id)!.items
+
+        XCTAssertEqual(ids, [existing.id, a.id, b.id])
+        XCTAssertEqual(saved.first { $0.id == existing.id }?.slot, 4)
+        XCTAssertEqual(saved.first { $0.id == a.id }?.slot, 5)
+        XCTAssertEqual(saved.first { $0.id == b.id }?.slot, 6)
+    }
+
+    func testAddItemsPlacementSkipsBlockers() {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        let firstBlocker = DrawerItem(kind: .url, displayName: "K1", url: URL(string: "https://k1.example"), slot: 3)
+        let secondBlocker = DrawerItem(kind: .url, displayName: "K2", url: URL(string: "https://k2.example"), slot: 5)
+        tab.items = [firstBlocker, secondBlocker]
+        store.addTab(tab)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        store.addItems([a, b], toTab: tab.id, startingAt: 3)
+        let saved = store.tab(id: tab.id)!.items
+
+        XCTAssertEqual(saved.first { $0.id == firstBlocker.id }?.slot, 3)
+        XCTAssertEqual(saved.first { $0.id == secondBlocker.id }?.slot, 5)
+        XCTAssertEqual(saved.first { $0.id == a.id }?.slot, 4)
+        XCTAssertEqual(saved.first { $0.id == b.id }?.slot, 6)
+    }
+
+    func testAddItemsKeepsNewItemsWhenPlacementWouldOverflow() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        store.addItems([a, b], toTab: tab.id,
+                       startingAt: PersistedLayoutBounds.maximumSlotOrOrder)
+
+        let items = store.tab(id: tab.id)!.items
+        XCTAssertEqual(items.map(\.id), [a.id, b.id])
+        XCTAssertEqual(items.map(\.slot), [0, 1])
+    }
+
+    func testAddItemsCompleteDuplicateWithoutPlacementDoesNotMutate() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let existing = DrawerItem(kind: .url, displayName: "Existing", url: URL(string: "https://existing.example"))
+        store.addItem(existing, toTab: tab.id)
+        let before = store.document
+        var publications = 0
+        var changes = 0
+        let cancellable = store.objectWillChange.sink { publications += 1 }
+        store.onChange = { changes += 1 }
+
+        let duplicate = DrawerItem(kind: .url, displayName: "Existing again", url: existing.url)
+        let ids = withExtendedLifetime(cancellable) {
+            store.addItems([duplicate], toTab: tab.id)
+        }
+
+        XCTAssertEqual(ids, [existing.id])
+        XCTAssertEqual(store.document, before)
+        XCTAssertEqual(publications, 0)
+        XCTAssertEqual(changes, 0)
+    }
+
+    func testPlaceItemAcceptsMaximumAndRejectsInvalidSlots() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let item = DrawerItem(kind: .file, displayName: "A")
+        store.addItem(item, toTab: tab.id)
+
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        store.placeItem(item.id, atSlot: maximum, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, maximum)
+
+        store.placeItem(item.id, atSlot: Int.max, inTab: tab.id)
+        store.placeItem(item.id, atSlot: -2, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, maximum)
+    }
+
+    func testPlaceItemsStopsAtMaximumWithoutOverflow() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let a = DrawerItem(kind: .file, displayName: "A")
+        let b = DrawerItem(kind: .file, displayName: "B")
+        store.addItem(a, toTab: tab.id)
+        store.addItem(b, toTab: tab.id)
+
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        store.placeItems([a.id, b.id], startingAt: maximum - 1, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)?.items.map(\.slot), [maximum - 1, maximum])
+
+        store.placeItems([a.id, b.id], startingAt: Int.max, inTab: tab.id)
+
+        let items = try! XCTUnwrap(store.tab(id: tab.id)?.items)
+        XCTAssertEqual(items.first { $0.id == a.id }?.slot, maximum - 1)
+        XCTAssertEqual(items.first { $0.id == b.id }?.slot, maximum)
+        XCTAssertTrue(items.allSatisfy { $0.slot <= maximum })
+    }
+
     func testAssigningMissingSlotsFillsGapsAndKeepsValidSlots() {
         let items = [
             DrawerItem(kind: .file, displayName: "A", slot: -1),
@@ -390,6 +661,17 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(Set(items.map(\.slot)), Set([0, 1]))
     }
 
+    func testAssigningMissingSlotsLeavesOverflowUnassigned() {
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        var items = (0...maximum).map { DrawerItem(kind: .file, displayName: "Item", slot: $0) }
+        items.append(DrawerItem(kind: .file, displayName: "Overflow"))
+
+        let normalized = items.assigningMissingSlots()
+
+        XCTAssertEqual(normalized[maximum].slot, maximum)
+        XCTAssertEqual(normalized.last?.slot, -1)
+    }
+
     func testRemoveTab() {
         let store = TabStore(storeURL: storeURL)
         let tab = makeTab()
@@ -405,6 +687,22 @@ final class TabStoreTests: XCTestCase {
         store.addTab(makeTab())
         store.addItem(DrawerItem(kind: .file, displayName: "x"), toTab: store.tabs[0].id)
         XCTAssertEqual(changes, 2)
+    }
+
+    func testThrowingExportWritesCurrentDocument() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab("Exported")
+        store.addTab(tab)
+        let exportURL = storeURL.deletingLastPathComponent().appendingPathComponent("export.json")
+
+        try store.export(to: exportURL)
+
+        let exported = try JSONDecoder().decode(
+            LauncherDocument.self,
+            from: Data(contentsOf: exportURL)
+        )
+        XCTAssertEqual(exported.tabs.map(\.id), [tab.id])
+        XCTAssertEqual(exported.tabs.map(\.title), ["Exported"])
     }
 
     func testRecoversFromBackupWhenPrimaryCorrupt() throws {
@@ -429,6 +727,42 @@ final class TabStoreTests: XCTestCase {
         try FileManager.default.contentsOfDirectory(at: storeURL.deletingLastPathComponent(),
                                                     includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("launcher.corrupt-") }
+    }
+
+    private func assertRecoversFromBackupAndQuarantines(_ corruptJSON: String) throws {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Backed"))
+        store.saveNow()
+        store.addTab(makeTab("Second"))
+        store.saveNow()
+
+        try Data(corruptJSON.utf8).write(to: storeURL)
+
+        let recovered = TabStore(storeURL: storeURL)
+
+        XCTAssertTrue(recovered.loadedFromDisk)
+        XCTAssertEqual(recovered.tabs.map(\.title), ["Backed"])
+        let quarantined = try quarantineFiles()
+        XCTAssertEqual(quarantined.count, 1)
+        let preserved = try XCTUnwrap(quarantined.first)
+        XCTAssertEqual(try String(contentsOf: preserved, encoding: .utf8), corruptJSON)
+    }
+
+    func testRecoversFromBackupWhenLenientDecodingDropsEveryPrimaryTab() throws {
+        let corruptJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Missing Anchor" } ] }
+        """
+
+        try assertRecoversFromBackupAndQuarantines(corruptJSON)
+    }
+
+    func testMissingTabsPrimaryIsQuarantinedAndRecoversFromBackup() throws {
+        try assertRecoversFromBackupAndQuarantines(#"{ "version": 1 }"#)
+    }
+
+    func testNullTabsPrimaryIsQuarantinedAndRecoversFromBackup() throws {
+        try assertRecoversFromBackupAndQuarantines(#"{ "version": 1, "tabs": null }"#)
     }
 
     func testBackupHoldsPreviousVersionAfterSave() throws {
@@ -514,6 +848,50 @@ final class TabStoreTests: XCTestCase {
 
         XCTAssertFalse(store.importData(Data(futureJSON.utf8)))
         XCTAssertEqual(store.tabs.map(\.title), ["Existing"])
+    }
+
+    private func assertImportRejectedWithoutReplacingState(_ corruptJSON: String) {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Existing"))
+        let original = store.document
+
+        XCTAssertFalse(store.importData(Data(corruptJSON.utf8)))
+        XCTAssertEqual(store.document, original)
+    }
+
+    func testImportRejectsWhenLenientDecodingDropsEveryRawTab() {
+        let corruptJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Missing Anchor" } ] }
+        """
+
+        assertImportRejectedWithoutReplacingState(corruptJSON)
+    }
+
+    func testImportRejectsMissingTabsWithoutReplacingState() {
+        assertImportRejectedWithoutReplacingState(#"{ "version": 1 }"#)
+    }
+
+    func testImportRejectsNullTabsWithoutReplacingState() {
+        assertImportRejectedWithoutReplacingState(#"{ "version": 1, "tabs": null }"#)
+    }
+
+    func testRealEmptyTabsArrayLoadsAndImportsAsAnIntentionalEmptyLayout() throws {
+        let emptyJSON = """
+        { "version": 1, "tabs": [] }
+        """
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(emptyJSON.utf8).write(to: storeURL)
+
+        let store = TabStore(storeURL: storeURL)
+        XCTAssertTrue(store.loadedFromDisk)
+        XCTAssertTrue(store.tabs.isEmpty)
+        XCTAssertTrue(try quarantineFiles().isEmpty)
+
+        store.addTab(makeTab("Existing"))
+        XCTAssertTrue(store.importData(Data(emptyJSON.utf8)))
+        XCTAssertTrue(store.tabs.isEmpty)
     }
 
     func testImportAdoptsTheImportedVersionSoTheLayoutCanPersistAgain() throws {
