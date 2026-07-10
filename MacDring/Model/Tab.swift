@@ -16,8 +16,18 @@ struct Tab: Codable, Identifiable, Equatable {
     /// The drawer's grid size for this tab (width = columns, height = rows). Items
     /// are placed within this grid; it grows if items are placed beyond it. For a
     /// notes tab it sizes the text area.
-    var gridColumns: Int
-    var gridRows: Int
+    var gridColumns: Int {
+        didSet {
+            let bounded = PersistedLayoutBounds.clampedGridColumns(gridColumns)
+            if gridColumns != bounded { gridColumns = bounded }
+        }
+    }
+    var gridRows: Int {
+        didSet {
+            let bounded = PersistedLayoutBounds.clampedGridRows(gridRows)
+            if gridRows != bounded { gridRows = bounded }
+        }
+    }
 
     /// When locked, the tab can't be dragged to a new position.
     var locked: Bool
@@ -79,8 +89,8 @@ struct Tab: Codable, Identifiable, Equatable {
         self.items = items
         self.behavior = behavior
         self.hotkey = hotkey
-        self.gridColumns = gridColumns
-        self.gridRows = gridRows
+        self.gridColumns = PersistedLayoutBounds.clampedGridColumns(gridColumns)
+        self.gridRows = PersistedLayoutBounds.clampedGridRows(gridRows)
         self.locked = locked
         self.kind = kind
         self.layout = layout
@@ -110,8 +120,12 @@ struct Tab: Codable, Identifiable, Equatable {
         items = c.decodeLenient([FailableDrawerItem].self, forKey: .items, fallback: []).compactMap(\.item)
         behavior = c.decodeLenient(TabBehavior.self, forKey: .behavior, fallback: .default)
         hotkey = c.decodeLenient(HotkeySpec?.self, forKey: .hotkey, fallback: nil)
-        gridColumns = max(1, try c.decodeIfPresent(Int.self, forKey: .gridColumns) ?? 4)
-        gridRows = max(1, try c.decodeIfPresent(Int.self, forKey: .gridRows) ?? 2)
+        gridColumns = PersistedLayoutBounds.clampedGridColumns(
+            try c.decodeIfPresent(Int.self, forKey: .gridColumns) ?? 4
+        )
+        gridRows = PersistedLayoutBounds.clampedGridRows(
+            try c.decodeIfPresent(Int.self, forKey: .gridRows) ?? 2
+        )
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         kind = c.decodeLenient(TabKind.self, forKey: .kind, fallback: .items)
         // Older documents wrote a per-tab `useGlobal` (or nothing); both fall back to

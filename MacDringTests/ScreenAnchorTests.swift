@@ -30,4 +30,35 @@ final class ScreenAnchorTests: XCTestCase {
         XCTAssertEqual(decoded.order, 0)         // defaulted
         XCTAssertEqual(decoded.edge, .left)
     }
+
+    func testOrderBoundsMatchForInitializationMutationAndDecoding() throws {
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        let cases = [
+            (value: -1, expected: 0),
+            (value: 0, expected: 0),
+            (value: maximum, expected: maximum),
+            (value: Int.max, expected: maximum),
+        ]
+
+        for value in cases {
+            let anchor = ScreenAnchor(displayUUID: "D", edge: .left, position: 0.5, order: value.value)
+            XCTAssertEqual(anchor.order, value.expected)
+
+            var mutated = ScreenAnchor(displayUUID: "D", edge: .left, position: 0.5)
+            mutated.order = value.value
+            XCTAssertEqual(mutated.order, value.expected)
+
+            let json = #"{"displayUUID":"D","edge":"left","position":0.5,"order":\#(value.value)}"#.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(ScreenAnchor.self, from: json)
+            XCTAssertEqual(decoded.order, value.expected)
+        }
+    }
+
+    func testNextOrderSaturatesAtMaximumWithoutOverflow() {
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        XCTAssertEqual(PersistedLayoutBounds.nextOrder(after: nil), 0)
+        XCTAssertEqual(PersistedLayoutBounds.nextOrder(after: maximum - 1), maximum)
+        XCTAssertEqual(PersistedLayoutBounds.nextOrder(after: maximum), maximum)
+        XCTAssertEqual(PersistedLayoutBounds.nextOrder(after: Int.max), maximum)
+    }
 }

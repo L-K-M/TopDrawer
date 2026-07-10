@@ -32,8 +32,14 @@ struct DrawerItem: Codable, Identifiable, Equatable {
 
     /// The item's position in the drawer's grid (row-major linear index). Lets
     /// items be arranged freely with gaps. `-1` means "unassigned" — `TabStore`
-    /// fills it with the lowest free slot (used for new items and migration).
-    var slot: Int
+    /// fills it with the lowest free bounded slot when available (used for new items
+    /// and migration).
+    var slot: Int {
+        didSet {
+            let normalized = PersistedLayoutBounds.normalizedSlot(slot)
+            if slot != normalized { slot = normalized }
+        }
+    }
 
     /// A ranking/recency date for the item, when it has one — Date Added (Fresh),
     /// last used (system Recents), or modified (folder). Carried only on **transient**
@@ -65,7 +71,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         self.url = url
         self.customIconBookmark = customIconBookmark
         self.iconStyle = iconStyle
-        self.slot = slot
+        self.slot = PersistedLayoutBounds.normalizedSlot(slot)
         self.date = date
         self.children = children
     }
@@ -85,7 +91,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         displayName = name.isEmpty ? (url?.lastPathComponent ?? "Item") : name
         customIconBookmark = try c.decodeIfPresent(Data.self, forKey: .customIconBookmark)
         iconStyle = c.decodeLenient(IconStyle?.self, forKey: .iconStyle, fallback: nil)
-        slot = try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1
+        slot = PersistedLayoutBounds.normalizedSlot(try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1)
         date = try c.decodeIfPresent(Date.self, forKey: .date)
         children = try c.decodeIfPresent([DrawerItem].self, forKey: .children) ?? []
     }
@@ -114,9 +120,9 @@ struct DrawerItem: Codable, Identifiable, Equatable {
 }
 
 extension Array where Element == DrawerItem {
-    /// Returns the items with every `slot` valid and distinct: existing valid
-    /// slots are kept (preserving gaps), while unassigned (`-1`) or duplicate
-    /// slots are filled with the lowest free slots, in array order.
+    /// Keeps existing valid, distinct slots and fills unassigned (`-1`) or duplicate
+    /// slots with the lowest free bounded slots, in array order. Items beyond the
+    /// bounded grid's capacity remain unassigned.
     func assigningMissingSlots() -> [DrawerItem] {
         var used = Set<Int>()
         var result = self
@@ -131,7 +137,8 @@ extension Array where Element == DrawerItem {
         }
         var next = 0
         for i in result.indices where result[i].slot < 0 {
-            while used.contains(next) { next += 1 }
+            while next <= PersistedLayoutBounds.maximumSlotOrOrder, used.contains(next) { next += 1 }
+            guard next <= PersistedLayoutBounds.maximumSlotOrOrder else { break }
             result[i].slot = next
             used.insert(next)
         }

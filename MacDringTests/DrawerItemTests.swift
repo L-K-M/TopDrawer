@@ -38,6 +38,30 @@ final class DrawerItemTests: XCTestCase {
         XCTAssertEqual(items.first?.displayName, "Example")
     }
 
+    func testSlotBoundsMatchForInitializationMutationAndDecoding() throws {
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        let cases = [
+            (value: -2, expected: -1),
+            (value: -1, expected: -1),
+            (value: 0, expected: 0),
+            (value: maximum, expected: maximum),
+            (value: Int.max, expected: -1),
+        ]
+
+        for value in cases {
+            XCTAssertEqual(DrawerItem(kind: .file, displayName: "Item", slot: value.value).slot,
+                           value.expected)
+
+            var mutated = DrawerItem(kind: .file, displayName: "Item")
+            mutated.slot = value.value
+            XCTAssertEqual(mutated.slot, value.expected)
+
+            let json = #"{"kind":"file","displayName":"Item","slot":\#(value.value)}"#.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(DrawerItem.self, from: json)
+            XCTAssertEqual(decoded.slot, value.expected)
+        }
+    }
+
     // MARK: Stable transient ids
 
     func testStableIDIsDeterministicPerKindAndTarget() {

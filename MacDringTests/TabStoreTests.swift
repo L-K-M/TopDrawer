@@ -261,6 +261,41 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, 4)  // existing item moved to the target
     }
 
+    func testPlaceItemAcceptsMaximumAndRejectsInvalidSlots() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let item = DrawerItem(kind: .file, displayName: "A")
+        store.addItem(item, toTab: tab.id)
+
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        store.placeItem(item.id, atSlot: maximum, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, maximum)
+
+        store.placeItem(item.id, atSlot: Int.max, inTab: tab.id)
+        store.placeItem(item.id, atSlot: -2, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, maximum)
+    }
+
+    func testPlaceItemsStopsAtMaximumWithoutOverflow() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let a = DrawerItem(kind: .file, displayName: "A")
+        let b = DrawerItem(kind: .file, displayName: "B")
+        store.addItem(a, toTab: tab.id)
+        store.addItem(b, toTab: tab.id)
+
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        store.placeItems([a.id, b.id], startingAt: maximum - 1, inTab: tab.id)
+        XCTAssertEqual(store.tab(id: tab.id)?.items.map(\.slot), [maximum - 1, maximum])
+
+        store.placeItems([a.id, b.id], startingAt: Int.max, inTab: tab.id)
+
+        let items = try! XCTUnwrap(store.tab(id: tab.id)?.items)
+        XCTAssertEqual(items.first { $0.id == a.id }?.slot, maximum - 1)
+        XCTAssertEqual(items.first { $0.id == b.id }?.slot, maximum)
+        XCTAssertTrue(items.allSatisfy { $0.slot <= maximum })
+    }
+
     func testAssigningMissingSlotsFillsGapsAndKeepsValidSlots() {
         let items = [
             DrawerItem(kind: .file, displayName: "A", slot: -1),
@@ -278,6 +313,17 @@ final class TabStoreTests: XCTestCase {
             DrawerItem(kind: .file, displayName: "B", slot: 0),
         ].assigningMissingSlots()
         XCTAssertEqual(Set(items.map(\.slot)), Set([0, 1]))
+    }
+
+    func testAssigningMissingSlotsLeavesOverflowUnassigned() {
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        var items = (0...maximum).map { DrawerItem(kind: .file, displayName: "Item", slot: $0) }
+        items.append(DrawerItem(kind: .file, displayName: "Overflow"))
+
+        let normalized = items.assigningMissingSlots()
+
+        XCTAssertEqual(normalized[maximum].slot, maximum)
+        XCTAssertEqual(normalized.last?.slot, -1)
     }
 
     func testRemoveTab() {
