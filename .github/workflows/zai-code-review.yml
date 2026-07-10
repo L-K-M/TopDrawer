@@ -1,0 +1,35 @@
+name: GLM 5.2 PR Review
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    name: Review PR with GLM 5.2
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.draft == false }}
+    env:
+      ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+    steps:
+      - name: Z.ai Code Review
+        if: ${{ env.ZAI_API_KEY != '' }}
+        uses: tarmojussila/zai-code-review@v0.4.0
+        with:
+          ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
+          ZAI_MODEL: glm-5.2
+          ZAI_REVIEWER_NAME: GLM 5.2 Code Review
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Skip when Z.ai API key is unavailable
+        if: ${{ env.ZAI_API_KEY == '' }}
+        run: echo "Skipping Z.ai review because ZAI_API_KEY is not configured."
