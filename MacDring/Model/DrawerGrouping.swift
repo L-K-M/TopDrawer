@@ -64,6 +64,38 @@ enum DrawerGrouping {
         return dissolvingSmallGroups(result).assigningMissingSlots()
     }
 
+    /// Permanently removes an item at the top level or one level inside a group.
+    /// Deleting a child also dissolves its group when fewer than two children remain.
+    static func removingItem(_ items: [DrawerItem], id itemID: UUID) -> [DrawerItem] {
+        var result = items
+        if let index = result.firstIndex(where: { $0.id == itemID }) {
+            result.remove(at: index)
+            return result
+        }
+        guard let groupIndex = result.firstIndex(where: {
+            $0.kind == .group && $0.children.contains(where: { $0.id == itemID })
+        }) else { return items }
+        result[groupIndex].children.removeAll { $0.id == itemID }
+        return dissolvingSmallGroups(result)
+    }
+
+    /// Replaces an item at the top level or one level inside a group.
+    static func updatingItem(_ items: [DrawerItem], with item: DrawerItem) -> [DrawerItem] {
+        var result = items
+        if let index = result.firstIndex(where: { $0.id == item.id }) {
+            result[index] = item
+            return result
+        }
+        guard let groupIndex = result.firstIndex(where: {
+            $0.kind == .group && $0.children.contains(where: { $0.id == item.id })
+        }),
+              let childIndex = result[groupIndex].children.firstIndex(where: { $0.id == item.id }) else {
+            return items
+        }
+        result[groupIndex].children[childIndex] = item
+        return result
+    }
+
     /// Replaces any group with fewer than `dissolveThreshold` children by its lone
     /// remaining child (taking the group's slot), and drops an empty group entirely.
     static func dissolvingSmallGroups(_ items: [DrawerItem]) -> [DrawerItem] {
