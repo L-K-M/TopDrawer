@@ -254,12 +254,46 @@ extension DrawerItem {
     }
 
     /// Builds a `.url` item from a typed link, defaulting a missing scheme to https.
-    /// Returns `nil` if the string can't form a URL.
+    /// HTTP(S) links require a host; other explicit URL schemes remain supported.
     static func fromLink(_ string: String) -> DrawerItem? {
-        var trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if !trimmed.contains("://") { trimmed = "https://" + trimmed }
-        guard let url = URL(string: trimmed), url.scheme != nil else { return nil }
-        return DrawerItem(kind: .url, displayName: url.host ?? trimmed, url: url)
+
+        let normalized: String
+        if looksLikeCommonHostPort(trimmed) {
+            normalized = "https://" + trimmed
+        } else {
+            guard let enteredComponents = URLComponents(string: trimmed) else { return nil }
+            if enteredComponents.scheme != nil {
+                normalized = trimmed
+            } else {
+                // A scheme separator with no parseable scheme is malformed, not a host.
+                guard !trimmed.contains("://") else { return nil }
+                normalized = "https://" + trimmed
+            }
+        }
+
+        guard let components = URLComponents(string: normalized),
+              let scheme = components.scheme?.lowercased(),
+              let url = components.url else { return nil }
+        if scheme == "http" || scheme == "https" {
+            guard let host = components.host,
+                  !host.isEmpty,
+                  host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        }
+        return DrawerItem(kind: .url, displayName: url.host ?? normalized, url: url)
+    }
+
+    /// Disambiguates common scheme-less host:port input from a custom URL scheme.
+    private static func looksLikeCommonHostPort(_ string: String) -> Bool {
+        guard !string.contains("://"), let colon = string.firstIndex(of: ":") else { return false }
+        let host = string[..<colon]
+        guard host.lowercased() == "localhost" || host.contains(".") else { return false }
+
+        let remainder = string[string.index(after: colon)...]
+        let port = remainder.prefix(while: { $0.isNumber })
+        guard !port.isEmpty else { return false }
+        let suffix = remainder.dropFirst(port.count)
+        return suffix.first.map { "/?#".contains($0) } ?? true
     }
 }

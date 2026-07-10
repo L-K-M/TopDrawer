@@ -481,20 +481,39 @@ private struct TabEditor: View {
         draft.items.append(DrawerItem.trash())
     }
 
-    private var linkSheet: some View {
+    @ViewBuilder private var linkSheet: some View {
+        let linkItem = DrawerItem.fromLink(linkText)
+        let enteredText = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+
         VStack(alignment: .leading, spacing: 12) {
             Text("Add a Link").font(.headline)
             TextField("https://example.com", text: $linkText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 320)
+            if let destination = linkItem?.url?.absoluteString {
+                Text("Destination: \(destination)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 320, alignment: .leading)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text(enteredText.isEmpty ? "Enter a link." : "Enter a valid link.")
+                    .font(.caption)
+                    .foregroundStyle(enteredText.isEmpty ? Color.secondary : Color.red)
+                    .frame(width: 320, alignment: .leading)
+            }
+
             HStack {
                 Spacer()
                 Button("Cancel") { showingLinkSheet = false }
                 Button("Add") {
-                    if let item = DrawerItem.fromLink(linkText) { draft.items.appendDeduplicatingTarget(item) }
+                    guard let linkItem else { return }
+                    draft.items.appendDeduplicatingTarget(linkItem)
                     showingLinkSheet = false
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(linkItem == nil)
             }
         }
         .padding(20)
