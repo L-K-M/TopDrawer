@@ -474,6 +474,42 @@ final class TabStoreTests: XCTestCase {
             .filter { $0.lastPathComponent.hasPrefix("launcher.corrupt-") }
     }
 
+    private func assertRecoversFromBackupAndQuarantines(_ corruptJSON: String) throws {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Backed"))
+        store.saveNow()
+        store.addTab(makeTab("Second"))
+        store.saveNow()
+
+        try Data(corruptJSON.utf8).write(to: storeURL)
+
+        let recovered = TabStore(storeURL: storeURL)
+
+        XCTAssertTrue(recovered.loadedFromDisk)
+        XCTAssertEqual(recovered.tabs.map(\.title), ["Backed"])
+        let quarantined = try quarantineFiles()
+        XCTAssertEqual(quarantined.count, 1)
+        let preserved = try XCTUnwrap(quarantined.first)
+        XCTAssertEqual(try String(contentsOf: preserved, encoding: .utf8), corruptJSON)
+    }
+
+    func testRecoversFromBackupWhenLenientDecodingDropsEveryPrimaryTab() throws {
+        let corruptJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Missing Anchor" } ] }
+        """
+
+        try assertRecoversFromBackupAndQuarantines(corruptJSON)
+    }
+
+    func testMissingTabsPrimaryIsQuarantinedAndRecoversFromBackup() throws {
+        try assertRecoversFromBackupAndQuarantines(#"{ "version": 1 }"#)
+    }
+
+    func testNullTabsPrimaryIsQuarantinedAndRecoversFromBackup() throws {
+        try assertRecoversFromBackupAndQuarantines(#"{ "version": 1, "tabs": null }"#)
+    }
+
     func testBackupHoldsPreviousVersionAfterSave() throws {
         let store = TabStore(storeURL: storeURL)
         store.addTab(makeTab("First"))
@@ -557,6 +593,50 @@ final class TabStoreTests: XCTestCase {
 
         XCTAssertFalse(store.importData(Data(futureJSON.utf8)))
         XCTAssertEqual(store.tabs.map(\.title), ["Existing"])
+    }
+
+    private func assertImportRejectedWithoutReplacingState(_ corruptJSON: String) {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Existing"))
+        let original = store.document
+
+        XCTAssertFalse(store.importData(Data(corruptJSON.utf8)))
+        XCTAssertEqual(store.document, original)
+    }
+
+    func testImportRejectsWhenLenientDecodingDropsEveryRawTab() {
+        let corruptJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Missing Anchor" } ] }
+        """
+
+        assertImportRejectedWithoutReplacingState(corruptJSON)
+    }
+
+    func testImportRejectsMissingTabsWithoutReplacingState() {
+        assertImportRejectedWithoutReplacingState(#"{ "version": 1 }"#)
+    }
+
+    func testImportRejectsNullTabsWithoutReplacingState() {
+        assertImportRejectedWithoutReplacingState(#"{ "version": 1, "tabs": null }"#)
+    }
+
+    func testRealEmptyTabsArrayLoadsAndImportsAsAnIntentionalEmptyLayout() throws {
+        let emptyJSON = """
+        { "version": 1, "tabs": [] }
+        """
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(emptyJSON.utf8).write(to: storeURL)
+
+        let store = TabStore(storeURL: storeURL)
+        XCTAssertTrue(store.loadedFromDisk)
+        XCTAssertTrue(store.tabs.isEmpty)
+        XCTAssertTrue(try quarantineFiles().isEmpty)
+
+        store.addTab(makeTab("Existing"))
+        XCTAssertTrue(store.importData(Data(emptyJSON.utf8)))
+        XCTAssertTrue(store.tabs.isEmpty)
     }
 
     func testImportAdoptsTheImportedVersionSoTheLayoutCanPersistAgain() throws {
