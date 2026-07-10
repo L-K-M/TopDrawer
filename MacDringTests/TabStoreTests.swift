@@ -104,6 +104,54 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(store.tab(id: tab.id)?.items.count, 0)
     }
 
+    func testSettingCustomIconBookmarkClearsGeneratedStyle() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab()
+        let item = DrawerItem(kind: .file, displayName: "File",
+                              customIconBookmark: Data([1]),
+                              iconStyle: IconStyle(base: .folder, colorHex: "#112233", symbol: nil))
+        store.addTab(tab)
+        store.addItem(item, toTab: tab.id)
+
+        let bookmark = Data([2, 3])
+        store.setCustomIconBookmark(bookmark, forItem: item.id, inTab: tab.id)
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id)?.items.first)
+        XCTAssertEqual(saved.customIconBookmark, bookmark)
+        XCTAssertNil(saved.iconStyle)
+    }
+
+    func testSettingGeneratedIconStyleClearsImageBookmark() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab()
+        let item = DrawerItem(kind: .file, displayName: "File", customIconBookmark: Data([1]))
+        let style = IconStyle(base: .tile, colorHex: "#445566", symbol: "star.fill")
+        store.addTab(tab)
+        store.addItem(item, toTab: tab.id)
+
+        store.setIconStyle(style, forItem: item.id, inTab: tab.id)
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id)?.items.first)
+        XCTAssertEqual(saved.iconStyle, style)
+        XCTAssertNil(saved.customIconBookmark)
+    }
+
+    func testClearingGeneratedIconStyleClearsBothOverrides() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab()
+        let item = DrawerItem(kind: .file, displayName: "File",
+                              customIconBookmark: Data([1]),
+                              iconStyle: IconStyle(base: .folder, colorHex: "#112233", symbol: nil))
+        store.addTab(tab)
+        store.addItem(item, toTab: tab.id)
+
+        store.setIconStyle(nil, forItem: item.id, inTab: tab.id)
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id)?.items.first)
+        XCTAssertNil(saved.iconStyle)
+        XCTAssertNil(saved.customIconBookmark)
+    }
+
     func testSetAnchor() {
         let store = TabStore(storeURL: storeURL)
         let tab = makeTab()
