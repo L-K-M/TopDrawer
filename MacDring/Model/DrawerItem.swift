@@ -93,7 +93,8 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         iconStyle = c.decodeLenient(IconStyle?.self, forKey: .iconStyle, fallback: nil)
         slot = PersistedLayoutBounds.normalizedSlot(try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1)
         date = try c.decodeIfPresent(Date.self, forKey: .date)
-        children = try c.decodeIfPresent([DrawerItem].self, forKey: .children) ?? []
+        children = c.decodeLenient([FailableDrawerItem].self, forKey: .children, fallback: [])
+            .compactMap(\.item)
     }
 
     /// Encodes explicitly so `children` is written only for groups — keeping a plain

@@ -109,7 +109,8 @@ struct Tab: Codable, Identifiable, Equatable {
     /// doesn't know — degrades to its default via `decodeLenient` instead of
     /// throwing, and one unreadable item is dropped (`FailableDrawerItem`)
     /// rather than taking the whole tab — and, via `FailableTab` + the next
-    /// autosave, the user's arrangement — down with it.
+    /// autosave, the user's arrangement — down with it. Groups made too small
+    /// by that filtering are dissolved so invalid containers don't survive.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -117,7 +118,9 @@ struct Tab: Codable, Identifiable, Equatable {
         colorHex = try c.decodeIfPresent(String.self, forKey: .colorHex) ?? "#0A84FF"
         glyph = c.decodeLenient(TabGlyph.self, forKey: .glyph, fallback: .default)
         anchor = try c.decode(ScreenAnchor.self, forKey: .anchor)
-        items = c.decodeLenient([FailableDrawerItem].self, forKey: .items, fallback: []).compactMap(\.item)
+        let decodedItems = c.decodeLenient([FailableDrawerItem].self, forKey: .items, fallback: [])
+            .compactMap(\.item)
+        items = DrawerGrouping.dissolvingSmallGroups(decodedItems)
         behavior = c.decodeLenient(TabBehavior.self, forKey: .behavior, fallback: .default)
         hotkey = c.decodeLenient(HotkeySpec?.self, forKey: .hotkey, fallback: nil)
         gridColumns = PersistedLayoutBounds.clampedGridColumns(
