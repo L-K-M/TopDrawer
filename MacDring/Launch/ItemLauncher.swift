@@ -5,26 +5,101 @@ import AppKit
 /// permission.
 enum ItemLauncher {
 
-    /// Launches the item. Returns `false` if it couldn't be resolved to anything
-    /// openable (e.g. a broken bookmark).
-    @discardableResult
-    static func launch(_ item: DrawerItem) -> Bool {
-        guard let url = BookmarkResolver.url(for: item) else { return false }
+    enum LaunchError: Error {
+        case unresolvedTarget
+        case unsupportedItemKind(ItemKind)
+        case workspaceOpenFailed(URL)
+        case applicationOpenFailed(URL, Error)
+    }
+
+    typealias LaunchResult = Result<URL, LaunchError>
+    typealias LaunchCompletion = (LaunchResult) -> Void
+
+    /// Gates all completion paths so callers always receive one result on the main
+    /// thread, including the asynchronous application-open callback.
+    private final class CompletionRelay {
+        private let lock = NSLock()
+        private var didComplete = false
+        private let completion: LaunchCompletion
+
+        init(_ completion: @escaping LaunchCompletion) {
+            self.completion = completion
+        }
+
+        func complete(_ result: LaunchResult) {
+            lock.lock()
+            guard !didComplete else {
+                lock.unlock()
+                return
+            }
+            didComplete = true
+            lock.unlock()
+
+            let deliver = { self.completion(result) }
+            if Thread.isMainThread {
+                deliver()
+            } else {
+                DispatchQueue.main.async(execute: deliver)
+            }
+        }
+    }
+
+    /// Launches the item and reports the confirmed target URL, or the reason opening
+    /// failed. The completion fires exactly once on the main thread.
+    static func launch(_ item: DrawerItem, completion: @escaping LaunchCompletion) {
+        launch(
+            item,
+            resolveURL: { BookmarkResolver.url(for: $0) },
+            openApplication: { url, reply in
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = true
+                NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+                    reply(error)
+                }
+            },
+            openURL: { NSWorkspace.shared.open($0) },
+            completion: completion
+        )
+    }
+
+    /// Injectable workspace seams keep result handling deterministic in unit tests.
+    static func launch(
+        _ item: DrawerItem,
+        resolveURL: (DrawerItem) -> URL?,
+        openApplication: (URL, @escaping (Error?) -> Void) -> Void,
+        openURL: (URL) -> Bool,
+        completion: @escaping LaunchCompletion
+    ) {
+        let relay = CompletionRelay(completion)
+        guard item.kind != .group else {
+            relay.complete(.failure(.unsupportedItemKind(item.kind)))
+            return
+        }
+        guard let url = resolveURL(item) else {
+            relay.complete(.failure(.unresolvedTarget))
+            return
+        }
 
         switch item.kind {
         case .application:
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            openApplication(url) { error in
                 if let error {
                     NSLog("MacDring: failed to launch \(url.lastPathComponent): \(error.localizedDescription)")
+                    relay.complete(.failure(.applicationOpenFailed(url, error)))
+                } else {
+                    relay.complete(.success(url))
                 }
             }
-            return true
         case .file, .folder, .url, .trash, .disk, .cloud:
-            return NSWorkspace.shared.open(url)   // trash → Trash folder; disk → the volume; cloud → the folder, in Finder
+            // trash -> Trash folder; disk -> the volume; cloud -> the folder, in Finder
+            if openURL(url) {
+                relay.complete(.success(url))
+            } else {
+                NSLog("MacDring: failed to open \(url.lastPathComponent)")
+                relay.complete(.failure(.workspaceOpenFailed(url)))
+            }
         case .group:
-            return false   // a group isn't launchable — clicking it opens the group; unreachable (it has no URL)
+            break   // handled before URL resolution; groups open in the drawer instead
         }
     }
 

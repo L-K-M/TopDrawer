@@ -264,7 +264,9 @@ must not steal focus or churn the active-app order).
 - **Content:** SwiftUI grid (icon + label) or compact list. The grid renders one
   cell per **slot** (`DrawerMetrics.gridRowCount` rows incl. a spare row), so items
   can be **placed freely with gaps** and every cell is a drop target. Header shows
-  the tab title in the tab's color. Items launch via `ItemLauncher`.
+  the tab title in the tab's color. Items launch via `ItemLauncher`; every confirmed,
+  Recents-eligible open updates Recents, while drawer dismissal/refresh additionally
+  requires that the request still belongs to the current drawer session.
 - **Spring-loaded file drops:** hovering a tab while dragging a file opens its
   drawer (after ~0.5 s). File drops onto the drawer are handled at the **AppKit
   level** — the hosting view (`DrawerHostingView`) is an `NSDraggingDestination` that

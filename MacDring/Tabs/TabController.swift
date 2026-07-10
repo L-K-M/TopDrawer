@@ -23,6 +23,12 @@ final class TabController {
     /// changes so a new combination is retried.
     private var failedHotkeySpecs: [UUID: HotkeySpec] = [:]
     private var openTabID: UUID?
+    /// A new identity for every successful `openDrawer` call. It distinguishes a
+    /// reopened drawer from the previous session even when the tab id is unchanged.
+    private var drawerSessionID: UUID?
+    /// Only the newest launch request in the current drawer session may apply its
+    /// completion; a second launch supersedes the first.
+    private var activeLaunchRequestID: UUID?
     private var hotkeyCounter: UInt32 = 1
 
     private var globalClickMonitor: Any?
@@ -354,6 +360,8 @@ final class TabController {
         cancelReConceal(id)
         cancelSpringOpen()
         openTabID = id
+        drawerSessionID = UUID()
+        activeLaunchRequestID = nil
         restackTabs()   // re-seat the resting tabs (esp. a just-closed previous tab) below the new open one
         wc.reveal(duration: 0)   // restore a concealed (slid-off / sliver) tab to full size before opening
         wc.setOpen(true)
@@ -380,6 +388,8 @@ final class TabController {
             wc.animate(to: wc.restingFrame, duration: duration)   // slide the tab back to the edge
         }
         openTabID = nil
+        drawerSessionID = nil
+        activeLaunchRequestID = nil
         restackTabs()   // the tab rejoins its edge stack → restore the predictable z-order
         drawer.hide(duration: duration)
         stopMonitoring()
@@ -969,22 +979,40 @@ final class TabController {
     }
 
     private func launch(_ item: DrawerItem) {
-        ItemLauncher.launch(item)
-        recordRecent(item)
-        let keepOpen = openTabID.flatMap { store.tab(id: $0) }?.behavior.keepOpenAfterLaunch ?? false
-        if !keepOpen {
-            closeDrawer()
-        } else if openTabID.flatMap({ store.tab(id: $0) })?.kind == .recents {
-            refreshOpenDrawer()   // re-list so the just-opened item jumps to the top
+        guard let tabID = openTabID, let sessionID = drawerSessionID else { return }
+        let request = DrawerLaunchRequest(tabID: tabID, sessionID: sessionID)
+        activeLaunchRequestID = request.requestID
+        ItemLauncher.launch(item) { [weak self] result in
+            guard let self else { return }
+            let canUpdateDrawer = request.canUpdateDrawer(
+                openTabID: self.openTabID,
+                sessionID: self.drawerSessionID,
+                requestID: self.activeLaunchRequestID
+            )
+            guard case let .success(url) = result else {
+                if canUpdateDrawer { self.activeLaunchRequestID = nil }
+                return
+            }
+
+            // Recents tracks confirmed opens, even when a newer launch or drawer
+            // session has superseded the request that initiated this one.
+            self.recordRecent(item, url: url)
+            guard canUpdateDrawer else { return }
+            self.activeLaunchRequestID = nil
+            let tab = self.store.tab(id: request.tabID)
+            if tab?.behavior.keepOpenAfterLaunch != true {
+                self.closeDrawer()
+            } else if tab?.kind == .recents {
+                self.refreshOpenDrawer()   // re-list so the just-opened item jumps to the top
+            }
         }
     }
 
     /// Records an opened target into the Recents history. Only the kinds you'd want to
     /// re-open are tracked (apps/files/folders/links/cloud); volumes and the Trash are
-    /// skipped, as are items with no resolvable target.
-    private func recordRecent(_ item: DrawerItem) {
-        guard [.application, .file, .folder, .url, .cloud].contains(item.kind),
-              let url = BookmarkResolver.url(for: item) else { return }
+    /// skipped. `url` is the target whose launch was confirmed by `ItemLauncher`.
+    private func recordRecent(_ item: DrawerItem, url: URL) {
+        guard [.application, .file, .folder, .url, .cloud].contains(item.kind) else { return }
         RecentsStore.shared.record(RecentItem(url: url, kind: item.kind, name: item.displayName, date: Date()))
     }
 
@@ -1456,6 +1484,8 @@ final class TabController {
         stopSpotlightWatch()
         drawer.hide(duration: 0)     // instant on quit, no animation
         openTabID = nil
+        drawerSessionID = nil
+        activeLaunchRequestID = nil
         for (_, wc) in tabWindows { wc.close() }
         tabWindows.removeAll()
         for (_, entry) in hotkeys { entry.hotkey.unregister() }
