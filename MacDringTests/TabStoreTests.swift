@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import MacDring
 
@@ -259,6 +260,136 @@ final class TabStoreTests: XCTestCase {
         store.placeItems([resolved].compactMap { $0 }, startingAt: 4, inTab: tab.id)
         XCTAssertEqual(store.tab(id: tab.id)?.items.count, 1)        // still one item (deduped)
         XCTAssertEqual(store.tab(id: tab.id)?.items.first?.slot, 4)  // existing item moved to the target
+    }
+
+    // MARK: Ordered bulk drops
+
+    func testAddItemsPublishesAndNotifiesOnce() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let items = [
+            DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example")),
+            DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example")),
+            DrawerItem(kind: .url, displayName: "C", url: URL(string: "https://c.example")),
+        ]
+        var publications = 0
+        var changes = 0
+        let cancellable = store.objectWillChange.sink { publications += 1 }
+        store.onChange = { changes += 1 }
+
+        withExtendedLifetime(cancellable) {
+            _ = store.addItems(items, toTab: tab.id, startingAt: 5)
+        }
+
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(changes, 1)
+    }
+
+    func testAddItemsPreservesFirstSeenOrder() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let c = DrawerItem(kind: .url, displayName: "C", url: URL(string: "https://c.example"))
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        let ids = store.addItems([c, a, b], toTab: tab.id)
+
+        XCTAssertEqual(ids, [c.id, a.id, b.id])
+        XCTAssertEqual(store.tab(id: tab.id)?.items.map(\.id), [c.id, a.id, b.id])
+    }
+
+    func testAddItemsReusesExistingAndEarlierBatchDuplicates() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let existing = DrawerItem(kind: .url, displayName: "Existing", url: URL(string: "https://existing.example"))
+        store.addItem(existing, toTab: tab.id)
+        let existingDuplicate = DrawerItem(kind: .url, displayName: "Existing again", url: existing.url)
+        let new = DrawerItem(kind: .url, displayName: "New", url: URL(string: "https://new.example"))
+        let newDuplicate = DrawerItem(kind: .url, displayName: "New again", url: new.url)
+
+        let ids = store.addItems([existingDuplicate, new, newDuplicate], toTab: tab.id)
+
+        XCTAssertEqual(ids, [existing.id, new.id])
+        XCTAssertEqual(store.tab(id: tab.id)?.items.map(\.id), [existing.id, new.id])
+    }
+
+    func testAddItemsReusesDuplicateInsideGroup() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+        store.addItem(a, toTab: tab.id)
+        store.addItem(b, toTab: tab.id)
+        store.groupItems(draggedID: a.id, ontoTargetID: b.id, inTab: tab.id)
+
+        let duplicate = DrawerItem(kind: .url, displayName: "A again", url: a.url)
+        let new = DrawerItem(kind: .url, displayName: "New", url: URL(string: "https://new.example"))
+        let ids = store.addItems([duplicate, new], toTab: tab.id, startingAt: 1)
+        let saved = store.tab(id: tab.id)!.items
+
+        XCTAssertEqual(ids, [a.id, new.id])
+        XCTAssertEqual(saved.count, 2)
+        XCTAssertEqual(saved.first { $0.kind == .group }?.children.count, 2)
+        XCTAssertEqual(saved.first { $0.id == new.id }?.slot, 2)
+    }
+
+    func testAddItemsPlacesExistingAndNewItemsFromTarget() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let existing = DrawerItem(kind: .url, displayName: "Existing", url: URL(string: "https://existing.example"))
+        store.addItem(existing, toTab: tab.id)
+        let duplicate = DrawerItem(kind: .url, displayName: "Existing again", url: existing.url)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        let ids = store.addItems([duplicate, a, b], toTab: tab.id, startingAt: 4)
+        let saved = store.tab(id: tab.id)!.items
+
+        XCTAssertEqual(ids, [existing.id, a.id, b.id])
+        XCTAssertEqual(saved.first { $0.id == existing.id }?.slot, 4)
+        XCTAssertEqual(saved.first { $0.id == a.id }?.slot, 5)
+        XCTAssertEqual(saved.first { $0.id == b.id }?.slot, 6)
+    }
+
+    func testAddItemsPlacementSkipsBlockers() {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        let firstBlocker = DrawerItem(kind: .url, displayName: "K1", url: URL(string: "https://k1.example"), slot: 3)
+        let secondBlocker = DrawerItem(kind: .url, displayName: "K2", url: URL(string: "https://k2.example"), slot: 5)
+        tab.items = [firstBlocker, secondBlocker]
+        store.addTab(tab)
+        let a = DrawerItem(kind: .url, displayName: "A", url: URL(string: "https://a.example"))
+        let b = DrawerItem(kind: .url, displayName: "B", url: URL(string: "https://b.example"))
+
+        store.addItems([a, b], toTab: tab.id, startingAt: 3)
+        let saved = store.tab(id: tab.id)!.items
+
+        XCTAssertEqual(saved.first { $0.id == firstBlocker.id }?.slot, 3)
+        XCTAssertEqual(saved.first { $0.id == secondBlocker.id }?.slot, 5)
+        XCTAssertEqual(saved.first { $0.id == a.id }?.slot, 4)
+        XCTAssertEqual(saved.first { $0.id == b.id }?.slot, 6)
+    }
+
+    func testAddItemsCompleteDuplicateWithoutPlacementDoesNotMutate() {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab(); store.addTab(tab)
+        let existing = DrawerItem(kind: .url, displayName: "Existing", url: URL(string: "https://existing.example"))
+        store.addItem(existing, toTab: tab.id)
+        let before = store.document
+        var publications = 0
+        var changes = 0
+        let cancellable = store.objectWillChange.sink { publications += 1 }
+        store.onChange = { changes += 1 }
+
+        let duplicate = DrawerItem(kind: .url, displayName: "Existing again", url: existing.url)
+        let ids = withExtendedLifetime(cancellable) {
+            store.addItems([duplicate], toTab: tab.id)
+        }
+
+        XCTAssertEqual(ids, [existing.id])
+        XCTAssertEqual(store.document, before)
+        XCTAssertEqual(publications, 0)
+        XCTAssertEqual(changes, 0)
     }
 
     func testAssigningMissingSlotsFillsGapsAndKeepsValidSlots() {
