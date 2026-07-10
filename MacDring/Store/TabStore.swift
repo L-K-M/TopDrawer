@@ -371,6 +371,46 @@ final class TabStore: ObservableObject {
         }
     }
 
+    /// Sets an image override on a persistent item and clears its generated style, so
+    /// there is only one custom icon source. Passing `nil` clears both overrides.
+    func setCustomIconBookmark(_ bookmark: Data?, forItem itemID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            Self.mutateItem(itemID, in: &$0.tabs[ti].items) {
+                $0.customIconBookmark = bookmark
+                $0.iconStyle = nil
+            }
+        }
+    }
+
+    /// Sets a generated override on a persistent item and always clears its image
+    /// bookmark. A `nil` style is the generated editor's "Use Default" result.
+    func setIconStyle(_ style: IconStyle?, forItem itemID: UUID, inTab tabID: UUID) {
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            Self.mutateItem(itemID, in: &$0.tabs[ti].items) {
+                $0.iconStyle = style
+                $0.customIconBookmark = nil
+            }
+        }
+    }
+
+    /// Applies an item mutation at the top level or one level inside a group. Groups
+    /// cannot nest, and their children are persistent items too.
+    private static func mutateItem(_ itemID: UUID, in items: inout [DrawerItem],
+                                   _ change: (inout DrawerItem) -> Void) {
+        if let i = items.firstIndex(where: { $0.id == itemID }) {
+            change(&items[i])
+            return
+        }
+        for i in items.indices where items[i].kind == .group {
+            if let j = items[i].children.firstIndex(where: { $0.id == itemID }) {
+                change(&items[i].children[j])
+                return
+            }
+        }
+    }
+
     /// Sets (or clears, with `nil`) the generated-icon override for a **live** item —
     /// one produced by a folder/disks/network/cloud listing — keyed by its path on
     /// the owning tab. Persistent `.items` carry their override on the item instead
