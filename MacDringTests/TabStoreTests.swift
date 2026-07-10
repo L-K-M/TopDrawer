@@ -297,6 +297,22 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(changes, 2)
     }
 
+    func testThrowingExportWritesCurrentDocument() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab("Exported")
+        store.addTab(tab)
+        let exportURL = storeURL.deletingLastPathComponent().appendingPathComponent("export.json")
+
+        try store.export(to: exportURL)
+
+        let exported = try JSONDecoder().decode(
+            LauncherDocument.self,
+            from: Data(contentsOf: exportURL)
+        )
+        XCTAssertEqual(exported.tabs.map(\.id), [tab.id])
+        XCTAssertEqual(exported.tabs.map(\.title), ["Exported"])
+    }
+
     func testRecoversFromBackupWhenPrimaryCorrupt() throws {
         // Write a good document, then corrupt the primary file; the .bak should load.
         let store = TabStore(storeURL: storeURL)

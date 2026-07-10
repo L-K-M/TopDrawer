@@ -87,13 +87,20 @@ struct TabsView: View {
     // MARK: Import / export
 
     private func exportLayout() {
-        guard let data = store.exportData() else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "MacDring Layout.json"
         panel.message = "Export your tabs and items as a JSON layout file"
-        if panel.runModal() == .OK, let url = panel.url {
-            try? data.write(to: url)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try store.export(to: url)
+        } catch {
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = "Couldn't export layout"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
         }
     }
 

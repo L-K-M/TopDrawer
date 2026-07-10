@@ -211,11 +211,12 @@ final class TabStore: ObservableObject {
 
     // MARK: Import / export
 
-    /// The current document encoded as pretty-printed JSON, for backup/export.
-    func exportData() -> Data? {
+    /// Encodes the current document as pretty-printed JSON and writes it atomically.
+    func export(to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try? encoder.encode(document)
+        let data = try encoder.encode(document)
+        try data.write(to: url, options: .atomic)
     }
 
     /// Replaces all tabs from an exported document. Decodes leniently (the same
