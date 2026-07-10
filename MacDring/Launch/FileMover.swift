@@ -60,12 +60,17 @@ enum FileMover {
     /// Moves dropped files to the Trash (recoverable — `trashItem`, not a hard
     /// delete). Used when files are dropped onto a Trash item.
     @discardableResult
-    static func trash(_ urls: [URL]) -> Bool {
-        let fileManager = FileManager.default
+    static func trash(_ urls: [URL],
+                      trashItem: (URL) throws -> Void = { url in
+                          try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                      }) -> Bool {
+        let fileURLs = urls.filter(\.isFileURL)
+        guard !fileURLs.isEmpty else { return false }
+
         var allSucceeded = true
-        for url in urls where url.isFileURL {
+        for url in fileURLs {
             do {
-                try fileManager.trashItem(at: url, resultingItemURL: nil)
+                try trashItem(url)
             } catch {
                 allSucceeded = false
                 NSLog("MacDring: couldn't trash \(url.lastPathComponent): \(error.localizedDescription)")

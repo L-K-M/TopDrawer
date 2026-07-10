@@ -15,6 +15,72 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertNil(model.item(atSlot: 2))
     }
 
+    // MARK: External drop targets
+
+    func testExternalDropTargetResolvesIdentityOnlyInVisibleContext() {
+        let model = DrawerModel()
+        let topLevel = DrawerItem(kind: .application, displayName: "Top", slot: 0)
+        let child = DrawerItem(kind: .folder, displayName: "Child", slot: 0)
+        let group = DrawerItem(kind: .group, displayName: "Group", slot: 1, children: [child])
+        model.items = [topLevel, group]
+
+        XCTAssertEqual(model.item(forExternalDropTarget: .occupiedItem(
+            id: topLevel.id, topLevelPlacementSlot: topLevel.slot))?.id,
+                       topLevel.id)
+        XCTAssertNil(model.item(forExternalDropTarget: .occupiedItem(
+            id: child.id, topLevelPlacementSlot: nil)))
+        XCTAssertNil(model.item(forExternalDropTarget: .emptySlot(
+            localSlot: 2, topLevelPlacementSlot: 2)))
+        XCTAssertNil(model.item(forExternalDropTarget: nil))
+
+        model.openGroupID = group.id
+        XCTAssertEqual(model.item(forExternalDropTarget: .occupiedItem(
+            id: child.id, topLevelPlacementSlot: nil))?.id,
+                       child.id)
+        XCTAssertNil(model.item(forExternalDropTarget: .occupiedItem(
+            id: topLevel.id, topLevelPlacementSlot: topLevel.slot)))
+    }
+
+    func testExternalDropTargetResolvesFlattenedSearchResult() {
+        let model = DrawerModel()
+        let topLevel = DrawerItem(kind: .file, displayName: "Unrelated", slot: 0)
+        let child = DrawerItem(kind: .application, displayName: "Needle App", slot: 0)
+        let group = DrawerItem(kind: .group, displayName: "Group", slot: 1, children: [child])
+        model.items = [topLevel, group]
+        model.searchQuery = "needle"
+
+        XCTAssertEqual(model.displayedItems.map(\.id), [child.id])
+        XCTAssertEqual(model.item(forExternalDropTarget: .occupiedItem(
+            id: child.id, topLevelPlacementSlot: nil))?.id,
+                       child.id)
+        XCTAssertNil(model.item(forExternalDropTarget: .occupiedItem(
+            id: topLevel.id, topLevelPlacementSlot: nil)))
+    }
+
+    func testExternalDropTargetPlacementContextFollowsDisplayedContext() {
+        let model = DrawerModel()
+        let topLevel = DrawerItem(kind: .file, displayName: "Top", slot: 3)
+        let child = DrawerItem(kind: .file, displayName: "Nested", slot: 3)
+        let group = DrawerItem(kind: .group, displayName: "Group", slot: 0, children: [child])
+        model.items = [topLevel, group]
+
+        XCTAssertEqual(model.externalDropTarget(for: topLevel, atLocalSlot: 3),
+                       .occupiedItem(id: topLevel.id, topLevelPlacementSlot: 3))
+        XCTAssertEqual(model.externalDropTarget(for: nil, atLocalSlot: 4),
+                       .emptySlot(localSlot: 4, topLevelPlacementSlot: 4))
+
+        model.openGroupID = group.id
+        XCTAssertEqual(model.externalDropTarget(for: child, atLocalSlot: 3),
+                       .occupiedItem(id: child.id, topLevelPlacementSlot: nil))
+        XCTAssertEqual(model.externalDropTarget(for: nil, atLocalSlot: 4),
+                       .emptySlot(localSlot: 4, topLevelPlacementSlot: nil))
+
+        model.openGroupID = nil
+        model.searchQuery = "top"
+        XCTAssertEqual(model.externalDropTarget(for: topLevel, atLocalSlot: 3),
+                       .occupiedItem(id: topLevel.id, topLevelPlacementSlot: nil))
+    }
+
     // MARK: Groups
 
     func testVisibleItemsFollowsTheOpenGroup() {

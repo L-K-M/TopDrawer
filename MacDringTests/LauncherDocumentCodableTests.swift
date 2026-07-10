@@ -55,6 +55,35 @@ final class LauncherDocumentCodableTests: XCTestCase {
         XCTAssertEqual(decoded.version, LauncherDocument.currentVersion)
     }
 
+    func testGridDimensionBoundsMatchForInitializationMutationAndDecoding() throws {
+        let cases = [
+            (columns: -2, rows: -3, expectedColumns: 1, expectedRows: 1),
+            (columns: 1, rows: 1, expectedColumns: 1, expectedRows: 1),
+            (columns: 12, rows: 16, expectedColumns: 12, expectedRows: 16),
+            (columns: Int.max, rows: Int.max, expectedColumns: 12, expectedRows: 16),
+        ]
+
+        for value in cases {
+            let tab = Tab(title: "Bounds", colorHex: "#0A84FF",
+                          anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                          gridColumns: value.columns, gridRows: value.rows)
+            XCTAssertEqual(tab.gridColumns, value.expectedColumns)
+            XCTAssertEqual(tab.gridRows, value.expectedRows)
+
+            var mutated = Tab(title: "Mutation", colorHex: "#0A84FF",
+                              anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5))
+            mutated.gridColumns = value.columns
+            mutated.gridRows = value.rows
+            XCTAssertEqual(mutated.gridColumns, value.expectedColumns)
+            XCTAssertEqual(mutated.gridRows, value.expectedRows)
+
+            let json = #"{"anchor":{"displayUUID":"D","edge":"right","position":0.5},"gridColumns":\#(value.columns),"gridRows":\#(value.rows)}"#.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(Tab.self, from: json)
+            XCTAssertEqual(decoded.gridColumns, value.expectedColumns)
+            XCTAssertEqual(decoded.gridRows, value.expectedRows)
+        }
+    }
+
     func testLayoutRoundTripsAndMigratesLegacyValues() throws {
         let tab = Tab(title: "Fresh", colorHex: "#FF9F0A",
                       anchor: ScreenAnchor(displayUUID: "U", edge: .right, position: 0.5),

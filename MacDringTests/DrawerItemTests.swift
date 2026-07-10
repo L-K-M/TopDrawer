@@ -23,10 +23,44 @@ final class DrawerItemTests: XCTestCase {
         XCTAssertEqual(item.url?.path, "/usr/bin")
     }
 
-    func testFromLinkDefaultsScheme() {
-        let item = DrawerItem.fromLink("example.com")
+    func testFromLinkDefaultsSchemeAndTrimsInput() {
+        let item = DrawerItem.fromLink("  example.com/path  ")
         XCTAssertEqual(item?.kind, .url)
-        XCTAssertEqual(item?.url?.scheme, "https")
+        XCTAssertEqual(item?.url?.absoluteString, "https://example.com/path")
+        XCTAssertEqual(item?.displayName, "example.com")
+    }
+
+    func testFromLinkTreatsCommonHostPortInputsAsHTTPS() {
+        XCTAssertEqual(DrawerItem.fromLink("localhost:3000")?.url?.absoluteString,
+                       "https://localhost:3000")
+        XCTAssertEqual(DrawerItem.fromLink("example.com:8080")?.url?.absoluteString,
+                       "https://example.com:8080")
+    }
+
+    func testFromLinkRejectsMalformedSchemesAndHTTPHosts() {
+        let malformed = [
+            "://example.com",
+            "1http://example.com",
+            "https://",
+            "https:///path",
+            "http://?query",
+            "https://exa mple.com"
+        ]
+
+        for link in malformed {
+            XCTAssertNil(DrawerItem.fromLink(link), "Expected \(link) to be invalid")
+        }
+    }
+
+    func testFromLinkKeepsLegitimateNonHTTPSchemes() {
+        XCTAssertEqual(DrawerItem.fromLink("mailto:user@example.com")?.url?.absoluteString,
+                       "mailto:user@example.com")
+        XCTAssertEqual(DrawerItem.fromLink("ftp://example.com/file")?.url?.absoluteString,
+                       "ftp://example.com/file")
+        XCTAssertEqual(DrawerItem.fromLink("myapp:foo")?.url?.absoluteString,
+                       "myapp:foo")
+        XCTAssertEqual(DrawerItem.fromLink("myapp:3000")?.url?.absoluteString,
+                       "myapp:3000")
     }
 
     func testAppendDeduplicatingTargetSkipsExistingURL() {
@@ -36,6 +70,30 @@ final class DrawerItemTests: XCTestCase {
 
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.displayName, "Example")
+    }
+
+    func testSlotBoundsMatchForInitializationMutationAndDecoding() throws {
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        let cases = [
+            (value: -2, expected: -1),
+            (value: -1, expected: -1),
+            (value: 0, expected: 0),
+            (value: maximum, expected: maximum),
+            (value: Int.max, expected: -1),
+        ]
+
+        for value in cases {
+            XCTAssertEqual(DrawerItem(kind: .file, displayName: "Item", slot: value.value).slot,
+                           value.expected)
+
+            var mutated = DrawerItem(kind: .file, displayName: "Item")
+            mutated.slot = value.value
+            XCTAssertEqual(mutated.slot, value.expected)
+
+            let json = #"{"kind":"file","displayName":"Item","slot":\#(value.value)}"#.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(DrawerItem.self, from: json)
+            XCTAssertEqual(decoded.slot, value.expected)
+        }
     }
 
     // MARK: Stable transient ids

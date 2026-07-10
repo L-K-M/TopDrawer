@@ -53,6 +53,7 @@ struct ItemView: View {
     @State private var sparkleOpacity: Double = 0
     /// Up to four child icons for a `.group`'s mini-preview (resolved off the render path).
     @State private var groupPreviewIcons: [NSImage] = []
+    @State private var groupPreviewItemID: UUID?
 
     /// Finder-style small icon for the list layout, regardless of the grid's icon size.
     static let listIconSize: CGFloat = 16
@@ -125,10 +126,14 @@ struct ItemView: View {
                 if item.isGroup {
                     // A group renders a mini-preview of its children, not a single icon.
                     // Resolve them off the main actor too (bounded to the first four).
+                    let itemID = item.id
                     let children = Array(item.children.prefix(4))
-                    groupPreviewIcons = await Task.detached(priority: .userInitiated) {
+                    let previews = await Task.detached(priority: .userInitiated) {
                         children.map { ItemView.resolveIcon($0) }
                     }.value
+                    guard !Task.isCancelled else { return }
+                    groupPreviewIcons = previews
+                    groupPreviewItemID = itemID
                     broken = false
                     return
                 }
@@ -266,7 +271,7 @@ struct ItemView: View {
 
     @ViewBuilder
     private func previewSlot(_ index: Int, _ size: CGFloat) -> some View {
-        if index < groupPreviewIcons.count {
+        if groupPreviewItemID == item.id, index < groupPreviewIcons.count {
             Image(nsImage: groupPreviewIcons[index])
                 .resizable()
                 .interpolation(.high)

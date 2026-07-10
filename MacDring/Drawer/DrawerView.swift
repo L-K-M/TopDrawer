@@ -20,8 +20,8 @@ struct DrawerView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var slotFrames: [Int: CGRect] = [:]
     @State private var dropTargetSlot: Int?      // internal reorder target
-    // The external file-drop target slot lives on the model (`model.fileDropSlot`)
-    // so the AppKit-driven drop delegate can update it during a drag.
+    // The external file-drop target lives on the model so the AppKit-driven drop
+    // delegate can update it during a drag without sharing internal reorder slots.
 
     /// The occupied slot a drag has *dwelled* over long enough to form a group on drop
     /// (iOS-folder-style). `nil` until the dwell timer fires; drives the target's
@@ -39,7 +39,7 @@ struct DrawerView: View {
     private enum Field { case search, notes, groupName }
 
     private let contentSpace = "macdring.drawer.content"
-    private var columns: Int { max(1, model.columns) }
+    private var columns: Int { PersistedLayoutBounds.clampedGridColumns(model.columns) }
     /// The items the grid/list currently shows: an open group's children, else the top
     /// level. Everything below (`maxSlot`, `rows`, slot lookup) works over this.
     private var contextItems: [DrawerItem] { model.visibleItems }
@@ -47,6 +47,9 @@ struct DrawerView: View {
     private var rows: Int {
         DrawerMetrics.gridRowCount(configuredRows: model.rows, maxSlot: maxSlot,
                                    itemCount: contextItems.count, columns: columns)
+    }
+    private var renderedSlotCount: Int {
+        DrawerMetrics.renderedGridSlotCount(rows: rows, columns: columns)
     }
     private var cellHeight: CGFloat { CGFloat(preferences.iconSize) + 26 }
     /// Only `.items` tabs support internal reorder / remove (and groups only ever live
@@ -87,14 +90,13 @@ struct DrawerView: View {
         .onHover { inside in
             if inside { model.onMouseEntered?() } else { model.onMouseExited?() }
         }
-        // Report slot frames in this outermost coordinate space — which fills the
-        // hosting view — so the AppKit drag destination (`DrawerHostingView`) can map
-        // a window-space drop location to a slot. The dragged-item overlay and the
-        // reorder gesture share the same space. (File drops themselves are handled in
-        // AppKit, not via SwiftUI `.onDrop`, which is unreliable in this panel.)
+        // Report frames in this outermost coordinate space, which fills the hosting
+        // view. Internal reorder keeps integer slots; AppKit file drops use a separate
+        // identity-aware target map. (SwiftUI `.onDrop` is unreliable in this panel.)
         .coordinateSpace(name: contentSpace)
         .overlay(alignment: .topLeading) { draggedOverlay }
-        .onPreferenceChange(SlotFramesKey.self) { slotFrames = $0; model.slotFrames = $0 }
+        .onPreferenceChange(SlotFramesKey.self) { slotFrames = $0 }
+        .onPreferenceChange(ExternalDropTargetFramesKey.self) { model.externalDropTargetFrames = $0 }
     }
 
     @ViewBuilder
@@ -156,12 +158,23 @@ struct DrawerView: View {
                 } else {
                     VStack(spacing: 2) {
                         ForEach(results) { item in
+                            let target = model.externalDropTarget(for: item, atLocalSlot: item.slot)
                             itemView(item, layout: .list)
                                 .padding(.vertical, 3)
                                 .padding(.horizontal, 6)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.primary.opacity(model.fileDropTarget == target ? 0.12 : 0)))
+                                .background(RoundedRectangle(cornerRadius: 8)
                                     .fill(item.id == model.selectedItemID ? Color.accentColor.opacity(0.30) : .clear))
+                                .overlay {
+                                    if model.fileDropTarget == target,
+                                       item.kind == .folder || item.kind == .application {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(Color(hexString: model.colorHex), lineWidth: 2)
+                                    }
+                                }
+                                .background(externalDropTargetFrameReporter(target))
                                 .id(item.id)
                         }
                     }
@@ -356,7 +369,7 @@ struct DrawerView: View {
         if model.layout == .grid {
             let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: columns)
             LazyVGrid(columns: gridColumns, spacing: 12) {
-                ForEach(Array(0..<(rows * columns)), id: \.self) { slot in
+                ForEach(Array(0..<renderedSlotCount), id: \.self) { slot in
                     gridSlot(slot)
                 }
             }
@@ -383,7 +396,8 @@ struct DrawerView: View {
 
     /// One row of the list layout: the item plus its file-drop highlight ring.
     private func listRow(_ item: DrawerItem) -> some View {
-        let fileDropHere = model.fileDropSlot == item.slot
+        let target = model.externalDropTarget(for: item, atLocalSlot: item.slot)
+        let fileDropHere = model.fileDropTarget == target
         // Match the grid: a file dragged onto a folder/app is a
         // "file into / open with" target — give it a distinct ring.
         let intoTarget = fileDropHere && (item.kind == .folder || item.kind == .application)
@@ -399,12 +413,14 @@ struct DrawerView: View {
                 }
             }
             .background(slotFrameReporter(item.slot))
+            .background(externalDropTargetFrameReporter(target))
     }
 
     private func gridSlot(_ slot: Int) -> some View {
         let item = model.visibleItem(atSlot: slot)
+        let externalTarget = model.externalDropTarget(for: item, atLocalSlot: slot)
         let reorderHere = dropTargetSlot == slot && dragging?.slot != slot
-        let fileDropHere = model.fileDropSlot == slot
+        let fileDropHere = model.fileDropTarget == externalTarget
         // A file dragged onto a folder/app is a "file into / open with" target, not a
         // plain slot drop — give it a distinct ring so the difference is obvious.
         let intoTarget = fileDropHere && (item?.kind == .folder || item?.kind == .application || item?.kind == .trash)
@@ -436,6 +452,7 @@ struct DrawerView: View {
             }
         }
         .background(slotFrameReporter(slot))
+        .background(externalDropTargetFrameReporter(externalTarget))
     }
 
     /// An item in its home cell. `.items` tabs reorder by dragging; `.folder`
@@ -465,6 +482,13 @@ struct DrawerView: View {
     private func slotFrameReporter(_ slot: Int) -> some View {
         GeometryReader { proxy in
             Color.clear.preference(key: SlotFramesKey.self, value: [slot: proxy.frame(in: .named(contentSpace))])
+        }
+    }
+
+    private func externalDropTargetFrameReporter(_ target: ExternalDropTarget) -> some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: ExternalDropTargetFramesKey.self,
+                                   value: [target: proxy.frame(in: .named(contentSpace))])
         }
     }
 
@@ -639,14 +663,5 @@ struct DrawerView: View {
         default:
             return "Drag apps & files here"
         }
-    }
-}
-
-/// Collects each slot's frame (in the drawer content space) so the reorder
-/// gesture and the AppKit drag destination can find the slot under a point.
-private struct SlotFramesKey: PreferenceKey {
-    static var defaultValue: [Int: CGRect] = [:]
-    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }

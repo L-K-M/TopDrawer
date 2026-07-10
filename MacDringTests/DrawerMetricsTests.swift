@@ -26,6 +26,53 @@ final class DrawerMetricsTests: XCTestCase {
         XCTAssertEqual(DrawerMetrics.gridRowCount(configuredRows: 1, maxSlot: -1, itemCount: 0, columns: 4), 1)
     }
 
+    func testGridRowCountBoundsHostileValuesBeforeArithmetic() {
+        XCTAssertEqual(DrawerMetrics.gridRowCount(configuredRows: Int.max, maxSlot: Int.max,
+                                                  itemCount: 0, columns: Int.max), 16)
+        XCTAssertEqual(DrawerMetrics.gridRowCount(configuredRows: -2, maxSlot: -2,
+                                                  itemCount: 0, columns: -2), 1)
+
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        XCTAssertEqual(DrawerMetrics.gridRowCount(configuredRows: 16, maxSlot: maximum,
+                                                  itemCount: 0, columns: 12),
+                       maximum / 12 + 1)
+        XCTAssertEqual(DrawerMetrics.gridRowCount(configuredRows: 1, maxSlot: -1,
+                                                  itemCount: Int.max, columns: 1),
+                       PersistedLayoutBounds.maximumSlotCount)
+    }
+
+    func testRenderedGridDestinationsEndAtMaximumSlot() {
+        XCTAssertEqual(DrawerMetrics.renderedGridSlotCount(rows: 2, columns: 4), 8)
+
+        let maximum = PersistedLayoutBounds.maximumSlotOrOrder
+        let rows = DrawerMetrics.gridRowCount(configuredRows: 16, maxSlot: maximum,
+                                              itemCount: 0, columns: 12)
+        let slotCount = DrawerMetrics.renderedGridSlotCount(rows: rows, columns: 12)
+        XCTAssertEqual(slotCount, PersistedLayoutBounds.maximumSlotCount)
+        XCTAssertEqual(slotCount - 1, maximum)
+        XCTAssertEqual(DrawerMetrics.renderedGridSlotCount(rows: Int.max, columns: Int.max),
+                       PersistedLayoutBounds.maximumSlotCount)
+        XCTAssertEqual(DrawerMetrics.renderedGridSlotCount(rows: -1, columns: -1), 0)
+    }
+
+    func testContentSizeBoundsHostileDimensions() {
+        let maximum = DrawerMetrics.contentSize(itemCount: 0, maxSlot: Int.max,
+                                                configuredRows: Int.max, layout: .grid,
+                                                iconSize: 64, columns: Int.max, in: visible)
+        let upperBoundary = DrawerMetrics.contentSize(itemCount: 0, maxSlot: -1,
+                                                      configuredRows: 16, layout: .grid,
+                                                      iconSize: 64, columns: 12, in: visible)
+        XCTAssertEqual(maximum, upperBoundary)
+
+        let negative = DrawerMetrics.contentSize(itemCount: 0, maxSlot: -2,
+                                                 configuredRows: Int.min, layout: .list,
+                                                 iconSize: 64, columns: Int.min, in: visible)
+        let lowerBoundary = DrawerMetrics.contentSize(itemCount: 0, maxSlot: -1,
+                                                      configuredRows: 1, layout: .list,
+                                                      iconSize: 64, columns: 1, in: visible)
+        XCTAssertEqual(negative, lowerBoundary)
+    }
+
     func testSizeIsClampedToScreen() {
         let small = CGRect(x: 0, y: 0, width: 400, height: 300)
         let size = DrawerMetrics.contentSize(itemCount: 200, maxSlot: 199, configuredRows: 50, layout: .grid, iconSize: 128, columns: 8, in: small)

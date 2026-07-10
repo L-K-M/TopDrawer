@@ -57,20 +57,43 @@ final class GitHubReleaseTests: XCTestCase {
         XCTAssertTrue(release.assets.isEmpty)
     }
 
-    func testPreferredAssetPrefersDiskImageThenZip() throws {
+    func testPreferredAssetPreservesDMGZIPPKGRanking() throws {
         let release = try decode("""
         {
           "tag_name": "1.0", "html_url": "https://e.com", "prerelease": false, "draft": false,
           "assets": [
+            {"name":"App.pkg","content_type":"application/vnd.apple.installer+xml","size":1,"browser_download_url":"https://e.com/App.pkg"},
             {"name":"App.zip","content_type":"application/zip","size":1,"browser_download_url":"https://e.com/App.zip"},
             {"name":"App.dmg","content_type":"application/x-apple-diskimage","size":1,"browser_download_url":"https://e.com/App.dmg"}
           ]
         }
         """)
         XCTAssertEqual(release.preferredAsset?.name, "App.dmg")
+
+        let withoutDMG = try decode("""
+        {
+          "tag_name": "1.0", "html_url": "https://e.com", "prerelease": false, "draft": false,
+          "assets": [
+            {"name":"App.pkg","content_type":"application/vnd.apple.installer+xml","size":1,"browser_download_url":"https://e.com/App.pkg"},
+            {"name":"App.zip","content_type":"application/zip","size":1,"browser_download_url":"https://e.com/App.zip"}
+          ]
+        }
+        """)
+        XCTAssertEqual(withoutDMG.preferredAsset?.name, "App.zip")
+
+        let pkgOnly = try decode("""
+        {
+          "tag_name": "1.0", "html_url": "https://e.com", "prerelease": false, "draft": false,
+          "assets": [
+            {"name":"notes.txt","content_type":"text/plain","size":1,"browser_download_url":"https://e.com/notes.txt"},
+            {"name":"App.pkg","content_type":"application/vnd.apple.installer+xml","size":1,"browser_download_url":"https://e.com/App.pkg"}
+          ]
+        }
+        """)
+        XCTAssertEqual(pkgOnly.preferredAsset?.name, "App.pkg")
     }
 
-    func testPreferredAssetFallsBackToFirstWhenNoKnownType() throws {
+    func testPreferredAssetNilWhenNoSupportedType() throws {
         let release = try decode("""
         {
           "tag_name": "1.0", "html_url": "https://e.com", "prerelease": false, "draft": false,
@@ -79,7 +102,7 @@ final class GitHubReleaseTests: XCTestCase {
           ]
         }
         """)
-        XCTAssertEqual(release.preferredAsset?.name, "notes.txt")
+        XCTAssertNil(release.preferredAsset)
     }
 
     func testPreferredAssetNilWhenNoAssets() throws {

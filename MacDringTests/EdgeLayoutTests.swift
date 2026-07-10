@@ -265,6 +265,74 @@ final class EdgeLayoutTests: XCTestCase {
         XCTAssertEqual(recovered, 0.7, accuracy: 0.02)
     }
 
+    func testPositionForTabFrameReturnsExactEndpointsOnEveryEdge() {
+        for edge in Edge.allCases {
+            let size = edge.isVertical ? pill : CGSize(width: pill.height, height: pill.width)
+            let start = EdgeLayout.tabFrame(edge: edge, position: 0, size: size, in: visible)
+            let end = EdgeLayout.tabFrame(edge: edge, position: 1, size: size, in: visible)
+
+            XCTAssertEqual(EdgeLayout.position(forTabFrame: start, edge: edge, in: visible), 0,
+                           "start endpoint was not exact on \(edge)")
+            XCTAssertEqual(EdgeLayout.position(forTabFrame: end, edge: edge, in: visible), 1,
+                           "end endpoint was not exact on \(edge)")
+        }
+    }
+
+    func testPositionForTabFrameUsesCenterForInteriorPointsOnEveryEdge() {
+        for edge in Edge.allCases {
+            let size = edge.isVertical ? pill : CGSize(width: pill.height, height: pill.width)
+            for position in [0.2, 0.5, 0.8] {
+                let frame = EdgeLayout.tabFrame(edge: edge, position: position, size: size, in: visible)
+                let recovered = EdgeLayout.position(forTabFrame: frame, edge: edge, in: visible)
+                XCTAssertEqual(recovered, position, accuracy: 0.000_001,
+                               "interior position did not round-trip on \(edge)")
+            }
+        }
+    }
+
+    func testPositionForTabFrameToleratesFloatNoiseAtEveryEndpoint() {
+        let noise: CGFloat = 0.0005
+        for edge in Edge.allCases {
+            let size = edge.isVertical ? pill : CGSize(width: pill.height, height: pill.width)
+            for delta in [-noise, noise] {
+                var start = EdgeLayout.tabFrame(edge: edge, position: 0, size: size, in: visible)
+                var end = EdgeLayout.tabFrame(edge: edge, position: 1, size: size, in: visible)
+                if edge.isVertical {
+                    start.origin.y += delta
+                    end.origin.y += delta
+                } else {
+                    start.origin.x += delta
+                    end.origin.x += delta
+                }
+
+                XCTAssertEqual(EdgeLayout.position(forTabFrame: start, edge: edge, in: visible), 0,
+                               "start float noise lost the endpoint on \(edge)")
+                XCTAssertEqual(EdgeLayout.position(forTabFrame: end, edge: edge, in: visible), 1,
+                               "end float noise lost the endpoint on \(edge)")
+            }
+        }
+    }
+
+    func testPositionForTabFrameRoundTripsAcrossChangedResolution() {
+        let oldVisible = CGRect(x: 1440, y: 75, width: 1920, height: 1040)
+        let newVisible = CGRect(x: -1280, y: -40, width: 1280, height: 700)
+
+        for edge in Edge.allCases {
+            let size = edge.isVertical ? pill : CGSize(width: pill.height, height: pill.width)
+            for original in [0.0, 0.37, 1.0] {
+                let oldFrame = EdgeLayout.tabFrame(edge: edge, position: original, size: size, in: oldVisible)
+                let persisted = EdgeLayout.position(forTabFrame: oldFrame, edge: edge, in: oldVisible)
+                let restored = EdgeLayout.tabFrame(edge: edge, position: persisted, size: size, in: newVisible)
+                let roundTripped = EdgeLayout.position(forTabFrame: restored, edge: edge, in: newVisible)
+
+                XCTAssertEqual(persisted, original, accuracy: 0.000_001,
+                               "old resolution changed the anchor on \(edge)")
+                XCTAssertEqual(roundTripped, original, accuracy: 0.000_001,
+                               "new resolution changed the anchor on \(edge)")
+            }
+        }
+    }
+
     func testPlacementWorksWithOffsetVisibleFrame() {
         // A secondary display's visibleFrame has a non-zero origin.
         let secondary = CGRect(x: 1440, y: 100, width: 1280, height: 700)
@@ -404,8 +472,8 @@ final class EdgeLayoutTests: XCTestCase {
     }
 
     func testPersistedPositionRebuildsTheSameFrame() {
-        // The controller persists a de-overlapped frame by storing the fractional
-        // position of its centre (`position(forPoint:)`) and rebuilding it next
+        // The controller persists a de-overlapped frame with the frame-aware inverse
+        // (`position(forTabFrame:)`) and rebuilds it next
         // reconcile (`tabFrame(position:)`). That inverse must be pixel-exact, or the
         // rebuilt frame drifts, re-snaps, and the tab-jumping bug returns. The fold
         // idempotency test assumes this identity; pin it directly at sub-pixel tolerance
@@ -419,7 +487,7 @@ final class EdgeLayoutTests: XCTestCase {
                                                           edge: edge, gap: EdgeLayout.minTabGap, in: visible))
             }
             for f in placed {
-                let pos = EdgeLayout.position(forPoint: CGPoint(x: f.midX, y: f.midY), edge: edge, in: visible)
+                let pos = EdgeLayout.position(forTabFrame: f, edge: edge, in: visible)
                 let rebuilt = EdgeLayout.tabFrame(edge: edge, position: pos, size: size, in: visible)
                 XCTAssertEqual(rebuilt.minX, f.minX, accuracy: 0.001, "drift on \(edge)")
                 XCTAssertEqual(rebuilt.minY, f.minY, accuracy: 0.001, "drift on \(edge)")

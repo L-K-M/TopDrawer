@@ -3,19 +3,67 @@ import Foundation
 /// Downloads a release asset into the user's Downloads folder, picking a
 /// non-colliding filename. Reusable across apps — depends only on Foundation.
 struct UpdateDownloader {
-    var session: URLSession = .shared
+    enum DownloadError: LocalizedError {
+        case nonHTTPSURL(URL)
+        case invalidResponse
+        case badResponse(Int)
+        case fileSizeUnavailable
+        case sizeMismatch(expected: Int, actual: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .nonHTTPSURL:
+                return "The update asset URL must use HTTPS."
+            case .invalidResponse:
+                return "The update download returned an invalid response."
+            case .badResponse(let code):
+                return "The update download returned HTTP \(code)."
+            case .fileSizeUnavailable:
+                return "Couldn't determine the downloaded update's file size."
+            case .sizeMismatch(let expected, let actual):
+                return "The downloaded update has an unexpected size (expected \(expected) bytes, got \(actual) bytes)."
+            }
+        }
+    }
+
+    var session: any UpdateDownloadSession = URLSession.shared
     var fileManager: FileManager = .default
 
     /// Downloads `asset` to `~/Downloads`, returning the saved file URL.
     func downloadToDownloads(_ asset: GitHubRelease.Asset) async throws -> URL {
-        let (tempURL, response) = try await session.download(from: asset.browserDownloadURL)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw GitHubReleaseClient.ClientError.badResponse(http.statusCode)
+        guard asset.browserDownloadURL.scheme?.lowercased() == "https" else {
+            throw DownloadError.nonHTTPSURL(asset.browserDownloadURL)
         }
+
+        let (tempURL, response) = try await session.downloadAsset(from: asset.browserDownloadURL)
+        var shouldRemoveTemp = true
+        defer {
+            if shouldRemoveTemp {
+                try? fileManager.removeItem(at: tempURL)
+            }
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw DownloadError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw DownloadError.badResponse(http.statusCode)
+        }
+        if asset.size > 0 {
+            let attributes = try fileManager.attributesOfItem(atPath: tempURL.path)
+            guard let actualSize = (attributes[.size] as? NSNumber)?.intValue else {
+                throw DownloadError.fileSizeUnavailable
+            }
+            guard actualSize == asset.size else {
+                throw DownloadError.sizeMismatch(expected: asset.size, actual: actualSize)
+            }
+        }
+
         let downloads = try fileManager.url(for: .downloadsDirectory, in: .userDomainMask,
                                             appropriateFor: nil, create: true)
         let destination = Self.uniqueDestination(in: downloads, fileName: asset.name, fileManager: fileManager)
         try fileManager.moveItem(at: tempURL, to: destination)
+        shouldRemoveTemp = false
         return destination
     }
 

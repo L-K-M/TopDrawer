@@ -32,8 +32,14 @@ struct DrawerItem: Codable, Identifiable, Equatable {
 
     /// The item's position in the drawer's grid (row-major linear index). Lets
     /// items be arranged freely with gaps. `-1` means "unassigned" — `TabStore`
-    /// fills it with the lowest free slot (used for new items and migration).
-    var slot: Int
+    /// fills it with the lowest free bounded slot when available (used for new items
+    /// and migration).
+    var slot: Int {
+        didSet {
+            let normalized = PersistedLayoutBounds.normalizedSlot(slot)
+            if slot != normalized { slot = normalized }
+        }
+    }
 
     /// A ranking/recency date for the item, when it has one — Date Added (Fresh),
     /// last used (system Recents), or modified (folder). Carried only on **transient**
@@ -65,7 +71,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         self.url = url
         self.customIconBookmark = customIconBookmark
         self.iconStyle = iconStyle
-        self.slot = slot
+        self.slot = PersistedLayoutBounds.normalizedSlot(slot)
         self.date = date
         self.children = children
     }
@@ -85,7 +91,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         displayName = name.isEmpty ? (url?.lastPathComponent ?? "Item") : name
         customIconBookmark = try c.decodeIfPresent(Data.self, forKey: .customIconBookmark)
         iconStyle = c.decodeLenient(IconStyle?.self, forKey: .iconStyle, fallback: nil)
-        slot = try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1
+        slot = PersistedLayoutBounds.normalizedSlot(try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1)
         date = try c.decodeIfPresent(Date.self, forKey: .date)
         children = c.decodeLenient([FailableDrawerItem].self, forKey: .children, fallback: [])
             .compactMap(\.item)
@@ -115,9 +121,9 @@ struct DrawerItem: Codable, Identifiable, Equatable {
 }
 
 extension Array where Element == DrawerItem {
-    /// Returns the items with every `slot` valid and distinct: existing valid
-    /// slots are kept (preserving gaps), while unassigned (`-1`) or duplicate
-    /// slots are filled with the lowest free slots, in array order.
+    /// Keeps existing valid, distinct slots and fills unassigned (`-1`) or duplicate
+    /// slots with the lowest free bounded slots, in array order. Items beyond the
+    /// bounded grid's capacity remain unassigned.
     func assigningMissingSlots() -> [DrawerItem] {
         var used = Set<Int>()
         var result = self
@@ -132,7 +138,8 @@ extension Array where Element == DrawerItem {
         }
         var next = 0
         for i in result.indices where result[i].slot < 0 {
-            while used.contains(next) { next += 1 }
+            while next <= PersistedLayoutBounds.maximumSlotOrOrder, used.contains(next) { next += 1 }
+            guard next <= PersistedLayoutBounds.maximumSlotOrOrder else { break }
             result[i].slot = next
             used.insert(next)
         }
@@ -161,8 +168,8 @@ extension Array where Element == DrawerItem {
     }
 
     /// Appends `item` unless this array already contains an item pointing at the same
-    /// resolved target — counting items nested inside groups too, so a Settings draft
-    /// doesn't re-add something already tucked into a folder. Mirrors `TabStore.addItem`.
+    /// resolved target — counting items nested inside groups too, so callers don't
+    /// re-add something already tucked into a folder. Mirrors `TabStore.addItem`.
     mutating func appendDeduplicatingTarget(_ item: DrawerItem) {
         if let target = BookmarkResolver.url(for: item)?.standardized,
            flattenedLaunchable().contains(where: { BookmarkResolver.url(for: $0)?.standardized == target }) {
@@ -255,12 +262,46 @@ extension DrawerItem {
     }
 
     /// Builds a `.url` item from a typed link, defaulting a missing scheme to https.
-    /// Returns `nil` if the string can't form a URL.
+    /// HTTP(S) links require a host; other explicit URL schemes remain supported.
     static func fromLink(_ string: String) -> DrawerItem? {
-        var trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if !trimmed.contains("://") { trimmed = "https://" + trimmed }
-        guard let url = URL(string: trimmed), url.scheme != nil else { return nil }
-        return DrawerItem(kind: .url, displayName: url.host ?? trimmed, url: url)
+
+        let normalized: String
+        if looksLikeCommonHostPort(trimmed) {
+            normalized = "https://" + trimmed
+        } else {
+            guard let enteredComponents = URLComponents(string: trimmed) else { return nil }
+            if enteredComponents.scheme != nil {
+                normalized = trimmed
+            } else {
+                // A scheme separator with no parseable scheme is malformed, not a host.
+                guard !trimmed.contains("://") else { return nil }
+                normalized = "https://" + trimmed
+            }
+        }
+
+        guard let components = URLComponents(string: normalized),
+              let scheme = components.scheme?.lowercased(),
+              let url = components.url else { return nil }
+        if scheme == "http" || scheme == "https" {
+            guard let host = components.host,
+                  !host.isEmpty,
+                  host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        }
+        return DrawerItem(kind: .url, displayName: url.host ?? normalized, url: url)
+    }
+
+    /// Disambiguates common scheme-less host:port input from a custom URL scheme.
+    private static func looksLikeCommonHostPort(_ string: String) -> Bool {
+        guard !string.contains("://"), let colon = string.firstIndex(of: ":") else { return false }
+        let host = string[..<colon]
+        guard host.lowercased() == "localhost" || host.contains(".") else { return false }
+
+        let remainder = string[string.index(after: colon)...]
+        let port = remainder.prefix(while: { $0.isNumber })
+        guard !port.isEmpty else { return false }
+        let suffix = remainder.dropFirst(port.count)
+        return suffix.first.map { "/?#".contains($0) } ?? true
     }
 }

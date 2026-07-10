@@ -142,8 +142,8 @@ struct Tab: Codable, Identifiable {
     var items: [DrawerItem]
     var behavior: TabBehavior              // open-on-hover vs click, auto-hide, pinned
     var hotkey: HotkeySpec?                // optional, no Accessibility (Carbon)
-    var gridColumns: Int                   // drawer grid width
-    var gridRows: Int                      // drawer grid height (grows if items overflow)
+    var gridColumns: Int                   // drawer grid width, clamped to UI range 1...12
+    var gridRows: Int                      // drawer grid height, clamped to UI range 1...16
     var locked: Bool                       // if set, the tab can't be dragged to a new spot
     var kind: TabKind                      // .items | .notes | .folder | .disks | .network | .cloud | .recents | .fresh
     var notes: String                      // text for a .notes tab
@@ -170,7 +170,7 @@ struct DrawerItem: Codable, Identifiable {
     var url: URL?                          // for .url kind, or fallback path
     var customIconBookmark: Data?          // optional icon override (an image file)
     var iconStyle: IconStyle?              // optional generated icon (base + color + SF Symbol)
-    var slot: Int                          // grid position (row-major); enables free placement + gaps
+    var slot: Int                          // grid position 0...10,000; invalid values become unassigned (-1)
 }
 
 // IconStyle: a generated icon — base (.folder/.tile) + colorHex + optional SF Symbol.
@@ -186,7 +186,7 @@ struct ScreenAnchor: Codable {             // see §6 — the stable-restore cor
     var displayUUID: String                // CGDisplayCreateUUIDFromDisplayID, stable across reboots
     var edge: Edge                         // .left .right .top .bottom
     var position: Double                   // 0…1 fraction along the edge (of visibleFrame)
-    var order: Int                         // tie-break / stack order for tabs sharing an edge
+    var order: Int                         // edge stack order, clamped to 0...10,000
 }
 
 enum Edge: String, Codable { case left, right, top, bottom }
@@ -264,16 +264,21 @@ must not steal focus or churn the active-app order).
 - **Content:** SwiftUI grid (icon + label) or compact list. The grid renders one
   cell per **slot** (`DrawerMetrics.gridRowCount` rows incl. a spare row), so items
   can be **placed freely with gaps** and every cell is a drop target. Header shows
-  the tab title in the tab's color. Items launch via `ItemLauncher`.
+  the tab title in the tab's color. Items launch via `ItemLauncher`; every confirmed,
+  Recents-eligible open updates Recents, while drawer dismissal/refresh additionally
+  requires that the request still belongs to the current drawer session.
 - **Spring-loaded file drops:** hovering a tab while dragging a file opens its
   drawer (after ~0.5 s). File drops onto the drawer are handled at the **AppKit
   level** — the hosting view (`DrawerHostingView`) is an `NSDraggingDestination` that
-  maps the drag location to a **slot under the cursor** (via `DrawerModel.slotFrames`,
-  reported by the SwiftUI content in the hosting view's coordinate space), highlights
-  it, and on release files there — dropping onto an **app** opens it with that app,
-  onto a **folder** files it into that folder, and onto an empty slot / outside the
-  grid adds it (items tab, landing in that slot) or files it into the mirrored
-  directory (folder tab). SwiftUI's `.onDrop` is **not** used here: it fires
+  maps the drag location through `DrawerModel.externalDropTargetFrames`, reported by
+  the displayed grid, list, open group, or flattened search results. Occupied targets
+  carry an item UUID plus an optional unambiguous top-level placement slot; empty cells
+  retain a context-local slot for targeting, but only top-level cells carry placement
+  context. Thus group children/search results resolve by identity, and group-local
+  empty cells never become ambiguous top-level placements. Dropping onto an **app**
+  opens with it, onto a **folder** files into it, and otherwise adds/files the drop;
+  top-level placement context preserves placement near the hovered cell. SwiftUI's
+  `.onDrop` is **not** used here: it fires
   unreliably in the borderless panel (especially nested in a `ScrollView`) and gives
   no hovered location — the same reason reordering uses a `DragGesture`. Folder items
   are also draggable **out** to Finder/other apps. (Dropping onto a folder **moves**
@@ -293,11 +298,12 @@ must not steal focus or churn the active-app order).
   earlier one snaps — to the **nearest legal gap** (≥ `minTabGap`) — so the
   most-recently-stacked tab (a drop, a new tab, or a move-to-edge, all bumped to the top
   `order`) is the one that yields while the tabs already there stay put. A drag previews
-  this same snapped slot live and commits it on release (WYSIWYG). The settled positions
-  are **persisted back**, so the stored layout is itself legal and the pass is idempotent:
-  re-running it — or dragging one tab away — re-derives the same frames and nothing
-  drifts. `visibleFrame` keeps tabs clear of the menu bar and the macOS Dock; if a tab's
-  edge collides with the Dock's edge, nudge inward and warn in Settings.
+  this same snapped slot live and commits it on release (WYSIWYG). A frame-aware inverse
+  preserves exact `0`/`1` anchors for tabs touching an along-edge boundary. The settled
+  positions are **persisted back**, so the stored layout is itself legal and the pass is
+  idempotent: re-running it — or dragging one tab away — re-derives the same frames and
+  nothing drifts. `visibleFrame` keeps tabs clear of the menu bar and the macOS Dock; if
+  a tab's edge collides with the Dock's edge, nudge inward and warn in Settings.
 
 ---
 
@@ -437,7 +443,10 @@ Colors persist as hex via a reused **`ColorHex`** helper (`NSColor(hex:)` / `.he
   `NSWorkspace`; reading dropped files uses ordinary file access (non-sandboxed build).
   This is a deliberate advantage over Zap (which needs Accessibility for its event tap).
 - **Optional global hotkeys** use Carbon `RegisterEventHotKey` — **no Accessibility
-  grant required** (the same no-permission path Zap uses only as a fallback).
+  grant required** (the same no-permission path Zap uses only as a fallback). Duplicate
+  specs already owned by another MacDring tab are tracked separately from external
+  Carbon failures and receive one bounded retry after reconciliation, so releasing or
+  changing the owner transfers the hotkey without retry/log spam.
 - **`LSUIElement = true`** / `.accessory` activation policy: no Dock icon, menu-bar only.
 - **Launch at login** via `SMAppService.mainApp` (macOS 13+).
 - **Distribution:** Developer ID signing + notarization for direct download (hardened
@@ -611,7 +620,7 @@ MacDring/
 >   the slot under it is found from the cells' reported frames; `TabStore.placeItem`
 >   moves it there, swapping if that slot is occupied, on release). SwiftUI's
 >   `.onDrop` is **not** used for reorder — its drop callbacks don't fire inside a
->   borderless panel's grid. (External file drops to *add* items still use `.onDrop`.)
+>   borderless panel's grid. External file drops use the AppKit target-frame path below.
 >   Because cells are keyed by slot index (reused on swap), `ItemView` reloads its
 >   cached icon via `.task(id: item.id)` so the **icon follows the item** on a swap
 >   (otherwise names swap but icons stay put).
@@ -659,11 +668,13 @@ MacDring/
 >   to set the name, color, type, and (for a folder) the directory, then creates it.
 > - **Spring-loaded file drops** — hovering a tab while dragging opens its drawer;
 >   the drawer's hosting view (`DrawerHostingView`, an **AppKit `NSDraggingDestination`**)
->   then **highlights the slot under the cursor** as you move and files there on
->   release — onto an app opens-with, onto a folder moves the file in, onto a slot adds
->   it (items, landing in that slot) or files it into the mirrored directory (folder).
->   It maps the drag location to a slot via `DrawerModel.slotFrames` (reported by the
->   SwiftUI content in the hosting view's coordinate space). **Why AppKit, not
+>   highlights the displayed target under the cursor and files there on release — onto
+>   an app opens-with, onto a folder moves the file in, otherwise it adds/files the
+>   drop. SwiftUI reports `DrawerModel.externalDropTargetFrames` for grids, lists, open
+>   groups, and flattened search results. Occupied targets carry item identity and only
+>   unambiguous top-level targets carry placement context; empty targets retain their
+>   context-local slot, but group-local empty slots do not become top-level placements.
+>   **Why AppKit, not
 >   SwiftUI `.onDrop`:** in this borderless panel (especially nested in a `ScrollView`)
 >   `.onDrop` fires unreliably and gives no hovered location — the same lesson as
 >   reordering (which uses a `DragGesture`). A **folder/app** target shows a distinct
@@ -710,8 +721,8 @@ MacDring/
 
 > Pure logic (layout math, anchor clamping/coding, Codable + forward-compat, bookmark
 > staleness, store load/save, prefs) is unit-tested. Windowing, multi-monitor, Spaces,
-> fullscreen, drag-to-reposition, and drag-and-drop need a real macOS GUI session and are
-> verified manually (see §14).
+> fullscreen, drag-to-reposition, drag-and-drop, and Carbon hotkey conflict handoff need
+> a real macOS GUI session and are verified manually (see §14).
 
 > **One scoping note vs. the original design:** repositioning a tab is supported both by
 > dragging the pill on screen *and* via the Tabs pane (edge / display / position
