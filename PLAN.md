@@ -142,8 +142,8 @@ struct Tab: Codable, Identifiable {
     var items: [DrawerItem]
     var behavior: TabBehavior              // open-on-hover vs click, auto-hide, pinned
     var hotkey: HotkeySpec?                // optional, no Accessibility (Carbon)
-    var gridColumns: Int                   // drawer grid width
-    var gridRows: Int                      // drawer grid height (grows if items overflow)
+    var gridColumns: Int                   // drawer grid width, clamped to UI range 1...12
+    var gridRows: Int                      // drawer grid height, clamped to UI range 1...16
     var locked: Bool                       // if set, the tab can't be dragged to a new spot
     var kind: TabKind                      // .items | .notes | .folder | .disks | .network | .cloud | .recents | .fresh
     var notes: String                      // text for a .notes tab
@@ -170,7 +170,7 @@ struct DrawerItem: Codable, Identifiable {
     var url: URL?                          // for .url kind, or fallback path
     var customIconBookmark: Data?          // optional icon override (an image file)
     var iconStyle: IconStyle?              // optional generated icon (base + color + SF Symbol)
-    var slot: Int                          // grid position (row-major); enables free placement + gaps
+    var slot: Int                          // grid position 0...10,000; invalid values become unassigned (-1)
 }
 
 // IconStyle: a generated icon — base (.folder/.tile) + colorHex + optional SF Symbol.
@@ -186,7 +186,7 @@ struct ScreenAnchor: Codable {             // see §6 — the stable-restore cor
     var displayUUID: String                // CGDisplayCreateUUIDFromDisplayID, stable across reboots
     var edge: Edge                         // .left .right .top .bottom
     var position: Double                   // 0…1 fraction along the edge (of visibleFrame)
-    var order: Int                         // tie-break / stack order for tabs sharing an edge
+    var order: Int                         // edge stack order, clamped to 0...10,000
 }
 
 enum Edge: String, Codable { case left, right, top, bottom }

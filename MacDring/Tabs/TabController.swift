@@ -719,7 +719,7 @@ final class TabController {
         let orders = store.tabs
             .filter { $0.id != id && $0.anchor.edge == edge && $0.anchor.displayUUID == uuid }
             .map(\.anchor.order)
-        return (orders.max() ?? -1) + 1
+        return PersistedLayoutBounds.nextOrder(after: orders.max())
     }
 
     /// The screen / edge / position the dragged pill should snap to, from the

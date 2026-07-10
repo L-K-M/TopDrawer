@@ -99,8 +99,8 @@ final class TabStore: ObservableObject {
         }
     }
 
-    /// Ensures every item in every tab has a valid, distinct grid slot (migrates
-    /// older documents saved before items had slots).
+    /// Normalizes item slots in every tab, assigning missing slots while bounded
+    /// capacity remains (and migrating documents saved before items had slots).
     private static func normalizingSlots(_ document: LauncherDocument) -> LauncherDocument {
         var doc = document
         for i in doc.tabs.indices {
@@ -327,21 +327,30 @@ final class TabStore: ObservableObject {
     /// Places `ids` at consecutive free grid slots starting at `start` — skipping any
     /// slot held by an item *not* in `ids` — preserving their order. Used when several
     /// items are dropped onto a slot together so they land in a tidy run from the
-    /// target instead of scattering. See ANALYSIS.md I4.
+    /// target instead of scattering. If the complete run cannot fit below the slot
+    /// bound, no items move. See ANALYSIS.md I4.
     func placeItems(_ ids: [UUID], startingAt start: Int, inTab tabID: UUID) {
         guard !ids.isEmpty else { return }
-        mutate {
-            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
-            let moving = Set(ids)
-            var blocked = Set($0.tabs[ti].items.filter { !moving.contains($0.id) }.map(\.slot))
-            var slot = max(0, start)
-            for id in ids {
-                while blocked.contains(slot) { slot += 1 }   // next slot free of a non-moving item
-                if let ii = $0.tabs[ti].items.firstIndex(where: { $0.id == id }) {
-                    $0.tabs[ti].items[ii].slot = slot
+        mutate { document in
+            guard let ti = document.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            let itemIndices = ids.compactMap { id in
+                document.tabs[ti].items.firstIndex(where: { $0.id == id })
+            }
+            guard !itemIndices.isEmpty else { return }
+            let moving = Set(itemIndices.map { document.tabs[ti].items[$0].id })
+            var blocked = Set(document.tabs[ti].items.filter { !moving.contains($0.id) }.map(\.slot))
+            var slot = min(max(0, start), PersistedLayoutBounds.maximumSlotOrOrder)
+            var placements: [(index: Int, slot: Int)] = []
+            for index in itemIndices {
+                while blocked.contains(slot) {
+                    guard slot < PersistedLayoutBounds.maximumSlotOrOrder else { return }
+                    slot += 1   // next slot free of a non-moving item
                 }
+                placements.append((index, slot))
                 blocked.insert(slot)
-                slot += 1
+            }
+            for placement in placements {
+                document.tabs[ti].items[placement.index].slot = placement.slot
             }
         }
     }
@@ -379,6 +388,7 @@ final class TabStore: ObservableObject {
     /// slot is empty the item simply moves there, leaving a gap. This is what makes
     /// free arrangement with gaps possible.
     func placeItem(_ itemID: UUID, atSlot slot: Int, inTab tabID: UUID) {
+        guard PersistedLayoutBounds.normalizedSlot(slot) == slot else { return }
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
                   let ii = $0.tabs[ti].items.firstIndex(where: { $0.id == itemID }) else { return }
@@ -427,6 +437,7 @@ final class TabStore: ObservableObject {
     /// Reorders a child within its group's sub-grid, with the same swap-or-move-into-a-
     /// gap semantics as `placeItem` one level down.
     func placeItemInGroup(_ itemID: UUID, atSlot slot: Int, groupID: UUID, inTab tabID: UUID) {
+        guard PersistedLayoutBounds.normalizedSlot(slot) == slot else { return }
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
                   let gi = $0.tabs[ti].items.firstIndex(where: { $0.id == groupID && $0.kind == .group }),

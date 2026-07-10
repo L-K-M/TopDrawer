@@ -128,7 +128,7 @@ struct TabsView: View {
         // so the de-overlap pass snaps the newcomer into a legal gap and leaves the
         // existing tabs put.
         let rightTabs = store.tabs.filter { $0.anchor.edge == .right && $0.anchor.displayUUID == uuid }
-        let order = (rightTabs.map(\.anchor.order).max() ?? -1) + 1
+        let order = PersistedLayoutBounds.nextOrder(after: rightTabs.map(\.anchor.order).max())
         let tab = Tab(
             title: "New Tab",
             colorHex: preferences.defaultTabColorHex,
@@ -151,7 +151,9 @@ struct TabsView: View {
     private func moveTabs(from offsets: IndexSet, to destination: Int) {
         var tabs = store.tabs
         tabs.move(fromOffsets: offsets, toOffset: destination)
-        for index in tabs.indices { tabs[index].anchor.order = index }
+        for index in tabs.indices {
+            tabs[index].anchor.order = PersistedLayoutBounds.clampedOrder(index)
+        }
         store.replaceTabs(tabs)
     }
 }
