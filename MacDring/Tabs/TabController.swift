@@ -17,10 +17,10 @@ final class TabController {
 
     private var tabWindows: [UUID: TabWindowController] = [:]
     private var hotkeys: [UUID: (hotkey: CarbonHotkey, spec: HotkeySpec)] = [:]
-    /// Specs macOS already refused to register this session (a system-reserved combo,
-    /// or one another app/tab owns). Cached so a reconcile doesn't re-attempt — and
-    /// re-log — the same failing spec on every store mutation; cleared when the spec
-    /// changes so a new combination is retried.
+    /// Specs Carbon already refused to register this session (a system-reserved combo
+    /// or one another app owns). Cached so a reconcile doesn't re-attempt — and re-log
+    /// — the same external failure on every store mutation. Conflicts with another
+    /// MacDring tab are detected before calling Carbon and are never cached here.
     private var failedHotkeySpecs: [UUID: HotkeySpec] = [:]
     private var openTabID: UUID?
     private var hotkeyCounter: UInt32 = 1
@@ -141,6 +141,7 @@ final class TabController {
     func reconcile() {
         let tabs = store.tabs
         let liveIDs = Set(tabs.map(\.id))
+        var internallyBlockedHotkeyTabs: [Tab] = []
 
         for (id, wc) in tabWindows where !liveIDs.contains(id) {
             wc.close()
@@ -165,6 +166,16 @@ final class TabController {
                 wc.hide()                      // park until the display returns
                 if openTabID == tab.id { closeDrawer() }
             }
+            if registerHotkeyIfNeeded(for: tab) {
+                internallyBlockedHotkeyTabs.append(tab)
+            }
+        }
+
+        // A blocked tab may precede its owner in `tabs`. By the end of the first pass
+        // every changed/removed owner has released its old registration, so retry only
+        // known MacDring conflicts once. Keeping this as a bounded pass avoids a nested
+        // or re-entrant reconcile while still handling swaps and longer change cycles.
+        for tab in internallyBlockedHotkeyTabs {
             registerHotkeyIfNeeded(for: tab)
         }
 
@@ -863,16 +874,34 @@ final class TabController {
 
     // MARK: Hotkeys
 
-    private func registerHotkeyIfNeeded(for tab: Tab) {
+    /// Returns `true` only when another live MacDring registration owns the spec and
+    /// the caller should include the tab in the bounded second registration pass.
+    @discardableResult
+    private func registerHotkeyIfNeeded(for tab: Tab) -> Bool {
         guard let spec = tab.hotkey,
               KeyCodes.isUsableHotkey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) else {
             unregisterHotkey(tab.id)
-            return
+            return false
         }
-        if let existing = hotkeys[tab.id], existing.spec == spec { return }
-        // Already tried and failed this exact spec — don't retry/re-log until it changes.
-        if failedHotkeySpecs[tab.id] == spec { return }
-        unregisterHotkey(tab.id)
+        if let existing = hotkeys[tab.id] {
+            if existing.spec == spec { return false }
+            // Release a stale registration before checking ownership. This lets two or
+            // more tabs swap/cycle specs without retaining registrations that block one
+            // another for the entire reconciliation pass.
+            unregisterHotkey(tab.id)
+        }
+
+        // A changed spec gets one Carbon attempt; an unchanged external failure remains
+        // cached for the session so unrelated reconciles cannot retry or re-log it.
+        if failedHotkeySpecs[tab.id] == spec { return false }
+        failedHotkeySpecs[tab.id] = nil
+
+        // Do not ask Carbon to confirm a conflict MacDring already owns. Besides avoiding
+        // a misleading failure log, keeping this out of `failedHotkeySpecs` allows the
+        // bounded pass above to retry as soon as the owner releases or changes the spec.
+        if hotkeys.contains(where: { $0.key != tab.id && $0.value.spec == spec }) {
+            return true
+        }
 
         let hotkey = CarbonHotkey(identifier: hotkeyCounter)
         hotkeyCounter += 1
@@ -884,6 +913,7 @@ final class TabController {
         } else {
             failedHotkeySpecs[tab.id] = spec
         }
+        return false
     }
 
     private func unregisterHotkey(_ id: UUID) {
