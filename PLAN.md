@@ -442,7 +442,10 @@ Colors persist as hex via a reused **`ColorHex`** helper (`NSColor(hex:)` / `.he
   `NSWorkspace`; reading dropped files uses ordinary file access (non-sandboxed build).
   This is a deliberate advantage over Zap (which needs Accessibility for its event tap).
 - **Optional global hotkeys** use Carbon `RegisterEventHotKey` — **no Accessibility
-  grant required** (the same no-permission path Zap uses only as a fallback).
+  grant required** (the same no-permission path Zap uses only as a fallback). Duplicate
+  specs already owned by another MacDring tab are tracked separately from external
+  Carbon failures and receive one bounded retry after reconciliation, so releasing or
+  changing the owner transfers the hotkey without retry/log spam.
 - **`LSUIElement = true`** / `.accessory` activation policy: no Dock icon, menu-bar only.
 - **Launch at login** via `SMAppService.mainApp` (macOS 13+).
 - **Distribution:** Developer ID signing + notarization for direct download (hardened
@@ -717,8 +720,8 @@ MacDring/
 
 > Pure logic (layout math, anchor clamping/coding, Codable + forward-compat, bookmark
 > staleness, store load/save, prefs) is unit-tested. Windowing, multi-monitor, Spaces,
-> fullscreen, drag-to-reposition, and drag-and-drop need a real macOS GUI session and are
-> verified manually (see §14).
+> fullscreen, drag-to-reposition, drag-and-drop, and Carbon hotkey conflict handoff need
+> a real macOS GUI session and are verified manually (see §14).
 
 > **One scoping note vs. the original design:** repositioning a tab is supported both by
 > dragging the pill on screen *and* via the Tabs pane (edge / display / position
