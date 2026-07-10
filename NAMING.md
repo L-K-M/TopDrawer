@@ -1,0 +1,109 @@
+# Naming: finding a better name than "MacDring"
+
+The current name has problems worth fixing:
+
+- **It doesn't say anything.** "Dring" reads as a typo or a doorbell sound; nothing
+  in the name hints at edge tabs, drawers, or launching.
+- **The "Mac" prefix is dated.** Modern Mac apps almost never carry it (compare
+  Raycast, Yoink, Bartender, Ice) — the platform is implied by where the app runs.
+- **It's awkward to say out loud** and hard to remember after hearing it once.
+
+## What a good name needs
+
+1. **Evokes the core idea** — things tucked at the screen edge that slide out when
+   you need them (tabs → drawers → your stuff).
+2. **One or two words, pleasant to say**, works bare as `Name.app` without a "Mac"
+   prefix.
+3. **No collisions** with existing Mac apps — especially not in the
+   dock/launcher/shelf category — and no famous trademark in an adjacent space.
+4. **Searchable**: "«name» mac app" should be winnable.
+5. Bonus: keeps a little of DragThing's playful, physical-object spirit.
+
+## Candidates vetted (July 2026)
+
+Every name below was checked against the Mac App Store, indie Mac app sites, and
+general web search.
+
+### Eliminated — direct collisions
+
+| Name | Why not |
+|---|---|
+| Alcove | Well-known Mac "Dynamic Island" app (tryalcove.com) |
+| Pegboard | MonoTools menu-bar command center for Mac |
+| Sideboard | MTG app + a meetings menu-bar app; also confusable with "Sidebar", an existing dock replacement |
+| Cubby | LogMeIn's (dead) sync product, plus several active projects |
+| Sill | At least three current apps (link aggregator, social app, plant game) |
+| Tuck | Two current Mac apps — one literally docks windows to screen edges |
+| Berth | Current open-source Mac container GUI |
+| Quay | Rainer Brockerhoff's classic Dock extender — dead, but same category |
+| Wharf | A macOS **adware** family; the web is full of "remove Wharf.app" guides |
+| Tansu | Kafka broker (tansu.io), document tool (tansu.co), Mac synth |
+| Jetty | Eclipse Jetty web server owns the word for developers |
+| Dovetail | Large research SaaS (dovetail.com) |
+| Shelf / Dockside / Sidebar | All existing Mac shelf/dock apps |
+
+### Shortlist — clean names, ranked
+
+#### 1. Top Drawer  ⭐ recommended
+
+The top drawer is where you keep the things you reach for constantly — which is
+exactly what this app is. And **"top-drawer" is an idiom meaning first-rate**, so
+the name compliments itself. It is warm, physical, and a little wry — the same
+register DragThing lived in.
+
+- No Mac app of this name exists (verified July 2026); nearest neighbors are
+  "Drawers" (drawers.computer, a project-workspace switcher — different category)
+  and Google's dormant 2009 "Top Draw" wallpaper generator.
+- Reads naturally in every UI string: *"Top Drawer Settings…"*, *"New Items Tab"*,
+  menu bar tooltip "Top Drawer".
+- Tagline options: *"Your Mac, top drawer."* / *"Everything you reach for,
+  right at the edge."*
+- Bundle/product name `TopDrawer`, display name "Top Drawer".
+
+#### 2. Bureau
+
+A bureau *is* a chest of drawers (and a writing desk). One elegant word, zero Mac
+app collisions found. Downsides: FBI/government connotation in the US, lots of
+design agencies named "Bureau", and a generic dictionary word is harder to win in
+search than a two-word phrase.
+
+#### 3. Hutch
+
+A hutch is a cabinet with shelves that sits against a wall — short, friendly,
+slightly quirky. No Mac app collision. Downsides: "Hutch" is a major Hutchison
+telecom brand in Asia, and the rabbit-cage reading arrives first for many people.
+
+#### 4. Credenza
+
+Furniture that stands against the wall and holds your things — precisely the
+metaphor. Zero software collisions at all. Downsides: four syllables, a touch
+formal, harder to type.
+
+### Honorable mention
+
+- **DrawerThing** — the maximal DragThing homage (drawers + Thing). Guaranteed to
+  make old DragThing users smile, but it's derivative and "…Thing" names read as
+  90s-shareware today. Kept here in case sentiment should win.
+
+## Recommendation
+
+**Top Drawer.** It is the only candidate that scores on all five criteria: it
+names the app's literal UI (drawers), carries a built-in quality pun, has no
+collisions, is easy to say and search, and keeps the playful physical-object
+spirit of DragThing without borrowing its letters.
+
+Before committing to it: spend 10 minutes on a trademark screen (USPTO TESS /
+Swissreg) and grab a domain — `topdrawer.app` or a `get…`/`use…` variant.
+
+## What a rename touches (whenever one happens)
+
+- `MacDring.xcodeproj` — project, targets, schemes, product name.
+- `PRODUCT_BUNDLE_IDENTIFIER` (`com.macdring.MacDring`) — **changing the bundle ID
+  resets user defaults, saved layouts, and Accessibility/permission grants**; the
+  migration needs to copy the old defaults domain and re-prompt gracefully, or the
+  bundle ID stays as-is under the new display name.
+- ~27 Swift files mention the name (mostly UI strings and comments), plus the
+  entitlements file, README, docs/, screenshots, and CI (`CICD.md`, scripts/).
+- The in-app updater: release asset names and the GitHub repo URL it polls.
+- GitHub repo rename (old URL redirects automatically) and the hotkey-owner
+  strings surfaced in conflict messages.
