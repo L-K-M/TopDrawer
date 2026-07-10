@@ -168,8 +168,8 @@ extension Array where Element == DrawerItem {
     }
 
     /// Appends `item` unless this array already contains an item pointing at the same
-    /// resolved target — counting items nested inside groups too, so a Settings draft
-    /// doesn't re-add something already tucked into a folder. Mirrors `TabStore.addItem`.
+    /// resolved target — counting items nested inside groups too, so callers don't
+    /// re-add something already tucked into a folder. Mirrors `TabStore.addItem`.
     mutating func appendDeduplicatingTarget(_ item: DrawerItem) {
         if let target = BookmarkResolver.url(for: item)?.standardized,
            flattenedLaunchable().contains(where: { BookmarkResolver.url(for: $0)?.standardized == target }) {

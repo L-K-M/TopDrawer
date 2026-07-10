@@ -89,21 +89,64 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(group.children.map(\.displayName), ["A", "B"])
     }
 
-    func testUpdateTabAssignsSlotsToNewlyAppendedItems() {
-        // The Settings editor appends items with an unassigned slot (-1) and commits
-        // via updateTab; they must get a real slot so they render without a restart.
+    func testUpdateTabMutationAssignsSlotsToNewlyAppendedItems() {
         let store = TabStore(storeURL: storeURL)
-        var tab = makeTab()
+        let tab = makeTab()
         store.addTab(tab)
 
-        tab = try! XCTUnwrap(store.tab(id: tab.id))
-        tab.items.append(DrawerItem.trash())               // slot defaults to -1
-        tab.items.append(DrawerItem(kind: .url, displayName: "Site", url: URL(string: "https://example.com")))
-        store.updateTab(tab)
+        store.updateTab(id: tab.id) {
+            $0.items.append(DrawerItem.trash())               // slot defaults to -1
+            $0.items.append(DrawerItem(kind: .url, displayName: "Site", url: URL(string: "https://example.com")))
+        }
 
         let saved = store.tab(id: tab.id)!
         XCTAssertTrue(saved.items.allSatisfy { $0.slot >= 0 }, "every item should get a real slot")
         XCTAssertEqual(Set(saved.items.map(\.slot)).count, saved.items.count, "slots should be distinct")
+    }
+
+    func testSettingsFieldMutationPreservesConcurrentFieldAndItem() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeTab("Before")
+        store.addTab(tab)
+        let originalItem = DrawerItem.trash()
+        store.addItem(originalItem, toTab: tab.id)
+        let settingsSnapshot = try XCTUnwrap(store.tab(id: tab.id))
+
+        let concurrentItem = DrawerItem(kind: .url, displayName: "Concurrent", url: URL(string: "https://example.com"))
+        store.setLocked(true, forTab: tab.id)
+        store.addItem(concurrentItem, toTab: tab.id)
+        store.removeItem(id: originalItem.id, fromTab: tab.id)
+        store.updateTab(id: tab.id) { $0.title = settingsSnapshot.title + " edited" }
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id))
+        XCTAssertEqual(saved.title, "Before edited")
+        XCTAssertTrue(saved.locked)
+        XCTAssertEqual(saved.items.map(\.id), [concurrentItem.id])
+    }
+
+    func testSettingsFolderMutationPreservesConcurrentTabData() throws {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        tab.kind = .folder
+        store.addTab(tab)
+
+        let concurrentAnchor = ScreenAnchor(displayUUID: "D2", edge: .left, position: 0.25, order: 3)
+        let concurrentItem = DrawerItem(kind: .file, displayName: "Concurrent")
+        store.setAnchor(concurrentAnchor, forTab: tab.id)
+        store.addItem(concurrentItem, toTab: tab.id)
+
+        let folderURL = URL(fileURLWithPath: "/tmp/Chosen")
+        let bookmark = Data([1, 2, 3])
+        store.updateTab(id: tab.id) {
+            $0.folderURL = folderURL
+            $0.folderBookmark = bookmark
+        }
+
+        let saved = try XCTUnwrap(store.tab(id: tab.id))
+        XCTAssertEqual(saved.folderURL, folderURL)
+        XCTAssertEqual(saved.folderBookmark, bookmark)
+        XCTAssertEqual(saved.anchor, concurrentAnchor)
+        XCTAssertEqual(saved.items.map(\.id), [concurrentItem.id])
     }
 
     func testReplaceTabsNormalizesItemSlots() {
@@ -477,6 +520,42 @@ final class TabStoreTests: XCTestCase {
             .filter { $0.lastPathComponent.hasPrefix("launcher.corrupt-") }
     }
 
+    private func assertRecoversFromBackupAndQuarantines(_ corruptJSON: String) throws {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Backed"))
+        store.saveNow()
+        store.addTab(makeTab("Second"))
+        store.saveNow()
+
+        try Data(corruptJSON.utf8).write(to: storeURL)
+
+        let recovered = TabStore(storeURL: storeURL)
+
+        XCTAssertTrue(recovered.loadedFromDisk)
+        XCTAssertEqual(recovered.tabs.map(\.title), ["Backed"])
+        let quarantined = try quarantineFiles()
+        XCTAssertEqual(quarantined.count, 1)
+        let preserved = try XCTUnwrap(quarantined.first)
+        XCTAssertEqual(try String(contentsOf: preserved, encoding: .utf8), corruptJSON)
+    }
+
+    func testRecoversFromBackupWhenLenientDecodingDropsEveryPrimaryTab() throws {
+        let corruptJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Missing Anchor" } ] }
+        """
+
+        try assertRecoversFromBackupAndQuarantines(corruptJSON)
+    }
+
+    func testMissingTabsPrimaryIsQuarantinedAndRecoversFromBackup() throws {
+        try assertRecoversFromBackupAndQuarantines(#"{ "version": 1 }"#)
+    }
+
+    func testNullTabsPrimaryIsQuarantinedAndRecoversFromBackup() throws {
+        try assertRecoversFromBackupAndQuarantines(#"{ "version": 1, "tabs": null }"#)
+    }
+
     func testBackupHoldsPreviousVersionAfterSave() throws {
         let store = TabStore(storeURL: storeURL)
         store.addTab(makeTab("First"))
@@ -560,6 +639,50 @@ final class TabStoreTests: XCTestCase {
 
         XCTAssertFalse(store.importData(Data(futureJSON.utf8)))
         XCTAssertEqual(store.tabs.map(\.title), ["Existing"])
+    }
+
+    private func assertImportRejectedWithoutReplacingState(_ corruptJSON: String) {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Existing"))
+        let original = store.document
+
+        XCTAssertFalse(store.importData(Data(corruptJSON.utf8)))
+        XCTAssertEqual(store.document, original)
+    }
+
+    func testImportRejectsWhenLenientDecodingDropsEveryRawTab() {
+        let corruptJSON = """
+        { "version": 1,
+          "tabs": [ { "title": "Missing Anchor" } ] }
+        """
+
+        assertImportRejectedWithoutReplacingState(corruptJSON)
+    }
+
+    func testImportRejectsMissingTabsWithoutReplacingState() {
+        assertImportRejectedWithoutReplacingState(#"{ "version": 1 }"#)
+    }
+
+    func testImportRejectsNullTabsWithoutReplacingState() {
+        assertImportRejectedWithoutReplacingState(#"{ "version": 1, "tabs": null }"#)
+    }
+
+    func testRealEmptyTabsArrayLoadsAndImportsAsAnIntentionalEmptyLayout() throws {
+        let emptyJSON = """
+        { "version": 1, "tabs": [] }
+        """
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(emptyJSON.utf8).write(to: storeURL)
+
+        let store = TabStore(storeURL: storeURL)
+        XCTAssertTrue(store.loadedFromDisk)
+        XCTAssertTrue(store.tabs.isEmpty)
+        XCTAssertTrue(try quarantineFiles().isEmpty)
+
+        store.addTab(makeTab("Existing"))
+        XCTAssertTrue(store.importData(Data(emptyJSON.utf8)))
+        XCTAssertTrue(store.tabs.isEmpty)
     }
 
     func testImportAdoptsTheImportedVersionSoTheLayoutCanPersistAgain() throws {

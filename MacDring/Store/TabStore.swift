@@ -62,7 +62,7 @@ final class TabStore: ObservableObject {
             self.document = TabStore.normalizingSlots(doc)
             self.loadedFromDisk = true
         } else {
-            // A primary that *exists* but won't decode is quarantined (renamed
+            // A primary that *exists* but won't decode safely is quarantined (renamed
             // aside), never overwritten: it may be hand-recoverable (e.g. JSON
             // truncated by a crash), and leaving it in place would let the next
             // save destroy it — first by rotating it over the good `.bak`, then,
@@ -83,7 +83,7 @@ final class TabStore: ObservableObject {
         }
     }
 
-    /// Moves an undecodable launcher file aside as `launcher.corrupt-<stamp>.json`
+    /// Moves a corrupt launcher file aside as `launcher.corrupt-<stamp>.json`
     /// so no save path can ever overwrite it. User data is never deleted here.
     private static func quarantine(_ url: URL, fileManager: FileManager) {
         let formatter = DateFormatter()
@@ -93,9 +93,9 @@ final class TabStore: ObservableObject {
             .appendingPathComponent("launcher.corrupt-\(formatter.string(from: Date())).json")
         do {
             try fileManager.moveItem(at: url, to: dest)
-            NSLog("MacDring: launcher document couldn't be decoded — preserved it at \(dest.lastPathComponent)")
+            NSLog("MacDring: corrupt launcher document preserved at \(dest.lastPathComponent)")
         } catch {
-            NSLog("MacDring: couldn't quarantine undecodable launcher document: \(error.localizedDescription)")
+            NSLog("MacDring: couldn't quarantine corrupt launcher document: \(error.localizedDescription)")
         }
     }
 
@@ -122,7 +122,17 @@ final class TabStore: ObservableObject {
 
     private static func decode(_ data: Data) -> LauncherDocument? {
         do {
-            return try JSONDecoder().decode(LauncherDocument.self, from: data)
+            let document = try JSONDecoder().decode(LauncherDocument.self, from: data)
+            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let rawTabs = root["tabs"] as? [Any] else {
+                NSLog("MacDring: launcher document is missing a tabs array")
+                return nil
+            }
+            if !rawTabs.isEmpty, document.tabs.isEmpty {
+                NSLog("MacDring: launcher document contained tabs but none could be decoded")
+                return nil
+            }
+            return document
         } catch {
             NSLog("MacDring: couldn't decode launcher document: \(error)")
             return nil
@@ -149,18 +159,14 @@ final class TabStore: ObservableObject {
         mutate { $0.tabs.removeAll { $0.id == id } }
     }
 
-    /// Replaces a tab (matched by id) with an updated value. Items get any missing
-    /// slots filled while bounded capacity remains (the Settings editor appends items
-    /// with an unassigned slot),
-    /// matching `addItem` and the on-disk load so they render immediately — not
-    /// only after a restart re-normalizes the document.
-    func updateTab(_ tab: Tab) {
+    /// Mutates the current value of a tab in place. Reading the tab inside the
+    /// store prevents a Settings edit from replacing unrelated changes made since
+    /// the editor was shown. Items get any missing slots filled after the change.
+    func updateTab(id tabID: UUID, _ change: (inout Tab) -> Void) {
         mutate {
-            if let i = $0.tabs.firstIndex(where: { $0.id == tab.id }) {
-                var tab = tab
-                tab.items = tab.items.assigningMissingSlots()
-                $0.tabs[i] = tab
-            }
+            guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            change(&$0.tabs[i])
+            $0.tabs[i].items = $0.tabs[i].items.assigningMissingSlots()
         }
     }
 
@@ -275,7 +281,7 @@ final class TabStore: ObservableObject {
 
     /// Replaces all tabs from an exported document. Decodes leniently (the same
     /// forward/again-compatible path as a normal load) and normalizes slots.
-    /// Returns `false` without changing anything if the data can't be decoded.
+    /// Returns `false` without changing anything if the data can't be decoded safely.
     @discardableResult
     func importData(_ data: Data) -> Bool {
         guard let doc = TabStore.decode(data) else { return false }
