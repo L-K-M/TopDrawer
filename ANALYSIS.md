@@ -3,8 +3,8 @@
 Canonical, forward-looking backlog after the full review at `main` commit `512bff0`
 on 2026-07-10. The review snapshot, evidence, exact source references, implemented
 patch set, and naming research live in [`sol.md`](sol.md). Completed work is kept out
-of the active backlog below; open PRs and historical references have compact indexes
-so source comments and earlier analysis IDs do not lose their context.
+of the active backlog below; implemented PRs and historical references have compact
+indexes so source comments and earlier analysis IDs do not lose their context.
 
 Severity: **P0** data loss, **P1** major correctness/security/accessibility,
 **P2** robustness/performance/UX, **P3** polish. Labels:
@@ -17,17 +17,16 @@ macOS CI is the source of truth for compilation and unit tests. Multi-monitor
 windowing, focus, Spaces/fullscreen, AppKit drag sessions, Carbon/ServiceManagement,
 accessibility, and visual behavior need the manual matrix in section 7.
 
-## 1. Implemented, Awaiting Review
+## 1. Implemented Review Set
 
-These findings are implemented in isolated PRs and are not duplicated in the active
-backlog. Remove each row after merge; any review follow-up becomes a new active item.
+These findings were implemented and merged through isolated PRs and are not duplicated
+in the active backlog. Any review follow-up becomes a new active item.
 
-At this snapshot, #85 passes macOS CI. The other branches were opened from a `main`
-whose new group tests contain UUID type errors corrected by #85, so rerun their checks
-after #85 lands rather than treating the initial base-compilation failure as a patch
-failure.
+PRs #85-#100 were updated onto the advancing `main` and passed macOS Build & Test
+before merge. Integration conflicts retained both sides' tests and behavior; #97 also
+gained a regression test for bounded batch placement.
 
-| Finding | Pull request | Scope |
+| Finding | Merged pull request | Scope |
 |---|---|---|
 | SOL-B04 | [#85](https://github.com/L-K-M/MacDring/pull/85) | Group child decode/mutation/bookmark integrity; also fixes current group-test UUID compilation |
 | SOL-B01 | [#86](https://github.com/L-K-M/MacDring/pull/86) | Field-wise Settings edits prevent stale whole-tab overwrites |
@@ -621,13 +620,14 @@ known crowded/colliding names listed in `sol.md` section 9.
 
 ## 9. Historical Index
 
-The original B1-B12 parity work and later robustness/delight work through PR #84 are
-merged. `fable-is-awesome.md` retains the detailed FB/FP/FV/FU/FF/FI mapping and PR
-links; `awesome.md` retains earlier device/design observations now consolidated above.
+The original B1-B12 parity work, later robustness/delight work through PR #84, and the
+review set in PRs #85-#100 are merged. `fable-is-awesome.md` retains the detailed
+FB/FP/FV/FU/FF/FI mapping and PR links; `awesome.md` retains earlier device/design
+observations now consolidated above.
 Notable merged batches include Trash, import/export, tab reorder/Move to Edge,
 auto-hide/fade, Disks/Network/Cloud, per-tab behavior, custom icons, Recents/Fresh,
 search, stable transient IDs, adaptive drawer chrome, status-menu tab access, and the
 Welcome/checklist/delight batch.
 
 Do not treat old “nothing P0-P1 remains” or “through PR #32” statements as current.
-The active backlog in this file plus the awaiting-review table is the source of truth.
+The active backlog in this file plus the implemented review index is the source of truth.

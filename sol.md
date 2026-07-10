@@ -895,32 +895,32 @@ Taboret, and Sidelatch.
 
 ## 10. Selected Implementation Set
 
-Each selected entry was implemented in a separate branch/PR. The branches keep
-model/store, drag identity, controller behaviors, UI validation, and updater changes in
-their own commits and avoid opportunistic formatting.
+Each selected entry was implemented and merged through a separate branch/PR. The
+patches keep model/store, drag identity, controller behaviors, UI validation, and
+updater changes in their own commits and avoid opportunistic formatting.
 
 | Entry | Pull request | Coverage / follow-up |
 |---|---|---|
-| SOL-B01 | [#86](https://github.com/L-K-M/MacDring/pull/86) Field-wise Settings edits | Store regression; rerun CI after #85 |
+| SOL-B01 | [#86](https://github.com/L-K-M/MacDring/pull/86) Field-wise Settings edits | Store regression; macOS CI passed |
 | SOL-B02 | [#87](https://github.com/L-K-M/MacDring/pull/87) Loss-aware recovery/import | TabStore tests |
 | SOL-B03 | [#88](https://github.com/L-K-M/MacDring/pull/88) Persisted layout bounds | Codable/metrics tests |
 | SOL-B04 | [#85](https://github.com/L-K-M/MacDring/pull/85) Group integrity | Codable/group/store tests |
 | SOL-B05 | [#91](https://github.com/L-K-M/MacDring/pull/91) Identity-bearing drop targets | Model tests + device follow-up |
-| SOL-B09 | [#90](https://github.com/L-K-M/MacDring/pull/90) Confirmed launch results | Launcher/session tests; rerun CI after #85 |
-| SOL-B10 | [#93](https://github.com/L-K-M/MacDring/pull/93) Hotkey conflict retry | Carbon device follow-up; rerun CI after #85 |
-| SOL-B11 | [#92](https://github.com/L-K-M/MacDring/pull/92) Keyed Spotlight queries | Device follow-up; rerun CI after #85 |
+| SOL-B09 | [#90](https://github.com/L-K-M/MacDring/pull/90) Confirmed launch results | Launcher/session tests; macOS CI passed |
+| SOL-B10 | [#93](https://github.com/L-K-M/MacDring/pull/93) Hotkey conflict retry | macOS CI passed; Carbon device follow-up |
+| SOL-B11 | [#92](https://github.com/L-K-M/MacDring/pull/92) Keyed Spotlight queries | macOS CI passed; device follow-up |
 | SOL-B12 | [#89](https://github.com/L-K-M/MacDring/pull/89) Icon round-trip | Store tests + device window follow-up |
 | SOL-B15 | [#94](https://github.com/L-K-M/MacDring/pull/94) Exact edge endpoints | EdgeLayout tests |
 | SOL-B17 | [#95](https://github.com/L-K-M/MacDring/pull/95) Export errors | Store test + manual failure path |
 | SOL-B18 | [#96](https://github.com/L-K-M/MacDring/pull/96) No-op Trash rejection | FileMover tests |
 | SOL-B26 | [#98](https://github.com/L-K-M/MacDring/pull/98) Update asset validation | Release/downloader tests |
 | SOL-P01 | [#97](https://github.com/L-K-M/MacDring/pull/97) Batch drop mutation | Notification/placement tests |
-| SOL-P02 | [#100](https://github.com/L-K-M/MacDring/pull/100) Group preview cancellation | Device follow-up; rerun CI after #85 |
-| SOL-U05 | [#99](https://github.com/L-K-M/MacDring/pull/99) Add Link validation | Model tests; rerun CI after #85 |
+| SOL-P02 | [#100](https://github.com/L-K-M/MacDring/pull/100) Group preview cancellation | macOS CI passed; device follow-up |
+| SOL-U05 | [#99](https://github.com/L-K-M/MacDring/pull/99) Add Link validation | Model tests; macOS CI passed |
 
-At documentation time, #85 passed macOS CI. The other PRs were opened from the same
-`main`, whose newly added group tests contain UUID type errors fixed by #85; their CI
-runs are therefore blocked until #85 lands and the checks are rerun.
+Before merge, every selected PR passed macOS Build & Test on a branch containing #85's
+group-test correction. Integration conflicts were resolved against the accumulating
+`main` and the affected branches passed CI again.
 
 The remaining entries are intentionally not drive-by implementations. They need a Mac,
 a product decision, a reusable operation/status model, or a coherent accessibility and
