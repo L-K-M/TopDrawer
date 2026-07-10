@@ -43,6 +43,52 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.tabs.first?.id, tab.id)
     }
 
+    func testLoadDissolvesGroupsAfterLenientChildFiltering() throws {
+        let json = """
+        {
+          "version": 1,
+          "tabs": [ {
+            "title": "T",
+            "anchor": { "displayUUID": "D1", "edge": "right", "position": 0.5 },
+            "items": [
+              { "kind": "group", "displayName": "Promote", "slot": 4,
+                "children": [
+                  { "kind": "file", "displayName": "Survivor", "slot": 0 },
+                  { "id": 1, "kind": "file", "displayName": "Bad", "slot": 1 }
+                ] },
+              { "kind": "group", "displayName": "Remove", "slot": 5,
+                "children": [
+                  { "id": 2, "kind": "file", "displayName": "Bad" },
+                  { "id": 3, "kind": "folder", "displayName": "Also Bad" }
+                ] },
+              { "kind": "group", "displayName": "Keep Grouped", "slot": 6,
+                "children": [
+                  { "kind": "file", "displayName": "A", "slot": 0 },
+                  { "kind": "folder", "displayName": "B", "slot": 1 }
+                ] }
+            ]
+          } ]
+        }
+        """
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(json.utf8).write(to: storeURL)
+
+        let store = TabStore(storeURL: storeURL)
+
+        XCTAssertTrue(store.loadedFromDisk)
+        let items = try XCTUnwrap(store.tabs.first?.items)
+        XCTAssertEqual(items.count, 2)
+        let survivor = try XCTUnwrap(items.first { $0.displayName == "Survivor" })
+        XCTAssertEqual(survivor.kind, .file)
+        XCTAssertEqual(survivor.slot, 4)
+        XCTAssertFalse(items.contains { $0.displayName == "Remove" })
+        let group = try XCTUnwrap(items.first { $0.displayName == "Keep Grouped" })
+        XCTAssertEqual(group.kind, .group)
+        XCTAssertEqual(group.slot, 6)
+        XCTAssertEqual(group.children.map(\.displayName), ["A", "B"])
+    }
+
     func testUpdateTabAssignsSlotsToNewlyAppendedItems() {
         // The Settings editor appends items with an unassigned slot (-1) and commits
         // via updateTab; they must get a real slot so they render without a restart.
@@ -102,6 +148,70 @@ final class TabStoreTests: XCTestCase {
 
         store.removeItem(id: item.id, fromTab: tab.id)
         XCTAssertEqual(store.tab(id: tab.id)?.items.count, 0)
+    }
+
+    func testBookmarkRepairTraversesGroupChildrenAndRefreshesEveryBookmarkKind() throws {
+        let folder = Data([1]), target = Data([2]), icon = Data([3])
+        let childTarget = Data([4]), childIcon = Data([5])
+        let replacements = [
+            folder: Data([11]), target: Data([12]), icon: Data([13]),
+            childTarget: Data([14]), childIcon: Data([15]),
+        ]
+        let top = DrawerItem(kind: .file, displayName: "Top", bookmark: target,
+                             customIconBookmark: icon)
+        let child = DrawerItem(kind: .folder, displayName: "Child", bookmark: childTarget,
+                               customIconBookmark: childIcon)
+        let group = DrawerItem(kind: .group, displayName: "Group",
+                               children: [child, DrawerItem(kind: .file, displayName: "Other")])
+        var tab = makeTab()
+        tab.folderBookmark = folder
+        tab.items = [top, group]
+        var document = LauncherDocument(tabs: [tab])
+
+        let repairs = TabStore.makeBookmarkRepairs(in: document.tabs) { replacements[$0] }
+        TabStore.applyBookmarkRepairs(repairs, to: &document)
+
+        let repairedTab = try XCTUnwrap(document.tabs.first)
+        XCTAssertEqual(repairedTab.folderBookmark, replacements[folder])
+        XCTAssertEqual(repairedTab.items[0].bookmark, replacements[target])
+        XCTAssertEqual(repairedTab.items[0].customIconBookmark, replacements[icon])
+        let repairedChild = try XCTUnwrap(repairedTab.items[1].children.first { $0.id == child.id })
+        XCTAssertEqual(repairedChild.bookmark, replacements[childTarget])
+        XCTAssertEqual(repairedChild.customIconBookmark, replacements[childIcon])
+    }
+
+    func testBookmarkRepairCompareAndSwapPreservesNewChoicesAndRefreshesUnchangedFields() throws {
+        let folder = Data([1]), target = Data([2]), icon = Data([3])
+        let childTarget = Data([4]), childIcon = Data([5])
+        let replacements = [
+            folder: Data([11]), target: Data([12]), icon: Data([13]),
+            childTarget: Data([14]), childIcon: Data([15]),
+        ]
+        let top = DrawerItem(kind: .file, displayName: "Top", bookmark: target,
+                             customIconBookmark: icon)
+        let child = DrawerItem(kind: .folder, displayName: "Child", bookmark: childTarget,
+                               customIconBookmark: childIcon)
+        let group = DrawerItem(kind: .group, displayName: "Group",
+                               children: [child, DrawerItem(kind: .file, displayName: "Other")])
+        var tab = makeTab()
+        tab.folderBookmark = folder
+        tab.items = [top, group]
+        let snapshot = LauncherDocument(tabs: [tab])
+        let repairs = TabStore.makeBookmarkRepairs(in: snapshot.tabs) { replacements[$0] }
+
+        let newFolder = Data([21]), newTarget = Data([22]), newChildIcon = Data([25])
+        var current = snapshot
+        current.tabs[0].folderBookmark = newFolder
+        current.tabs[0].items[0].bookmark = newTarget
+        current.tabs[0].items[1].children[0].customIconBookmark = newChildIcon
+
+        TabStore.applyBookmarkRepairs(repairs, to: &current)
+
+        XCTAssertEqual(current.tabs[0].folderBookmark, newFolder)
+        XCTAssertEqual(current.tabs[0].items[0].bookmark, newTarget)
+        XCTAssertEqual(current.tabs[0].items[0].customIconBookmark, replacements[icon])
+        XCTAssertEqual(current.tabs[0].items[1].children[0].bookmark, replacements[childTarget])
+        XCTAssertEqual(current.tabs[0].items[1].children[0].customIconBookmark, newChildIcon)
     }
 
     func testSetAnchor() {
@@ -488,9 +598,9 @@ final class TabStoreTests: XCTestCase {
         store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)   // group A+B
         let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
 
-        store.groupItems(draggedID: c, ontoTargetID: groupID, inTab: tab.id)   // drop C into it
+        store.groupItems(draggedID: c.id, ontoTargetID: groupID, inTab: tab.id)   // drop C into it
         let group = store.tab(id: tab.id)!.items.first { $0.kind == .group }!
-        XCTAssertEqual(Set(group.children.map(\.id)), [a, b, c])
+        XCTAssertEqual(Set(group.children.map(\.id)), [a, b, c.id])
         XCTAssertEqual(store.tab(id: tab.id)!.items.count, 1)   // only the group remains
     }
 
@@ -525,14 +635,58 @@ final class TabStoreTests: XCTestCase {
         store.addItem(c, toTab: tab.id)
         store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
         let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
-        store.groupItems(draggedID: c, ontoTargetID: groupID, inTab: tab.id)   // group of 3
+        store.groupItems(draggedID: c.id, ontoTargetID: groupID, inTab: tab.id)   // group of 3
 
-        store.removeFromGroup(childID: c, groupID: groupID, inTab: tab.id)     // → group of 2
+        store.removeFromGroup(childID: c.id, groupID: groupID, inTab: tab.id)     // → group of 2
         let items = store.tab(id: tab.id)!.items
         let group = items.first { $0.kind == .group }
         XCTAssertNotNil(group)
         XCTAssertEqual(Set(group!.children.map(\.id)), [a, b])
-        XCTAssertTrue(items.contains { $0.id == c && $0.kind != .group })      // C back at top level
+        XCTAssertTrue(items.contains { $0.id == c.id && $0.kind != .group })      // C back at top level
+    }
+
+    func testUpdateItemUpdatesAGroupChild() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let group = store.tab(id: tab.id)!.items[0]
+        var child = group.children.first { $0.id == a }!
+        child.displayName = "Updated"
+
+        store.updateItem(child, inTab: tab.id)
+
+        let updatedGroup = store.tab(id: tab.id)!.items[0]
+        XCTAssertEqual(updatedGroup.children.first { $0.id == a }?.displayName, "Updated")
+        XCTAssertEqual(updatedGroup.children.first { $0.id == b }?.displayName, "B")
+    }
+
+    func testRemoveItemDeletesAGroupChildAndDissolvesThePair() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+
+        store.removeItem(id: a, fromTab: tab.id)
+
+        let items = store.tab(id: tab.id)!.items
+        XCTAssertEqual(items.map(\.id), [b])
+        XCTAssertTrue(items.allSatisfy { $0.kind != .group })
+    }
+
+    func testRemoveItemDeletesAGroupChildAndKeepsTwoChildGroup() {
+        let (tab, a, b) = tabWithTwoItems()
+        let store = groupStore!
+        let c = DrawerItem(kind: .file, displayName: "C")
+        store.addItem(c, toTab: tab.id)
+        store.groupItems(draggedID: a, ontoTargetID: b, inTab: tab.id)
+        let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
+        store.groupItems(draggedID: c.id, ontoTargetID: groupID, inTab: tab.id)
+
+        store.removeItem(id: c.id, fromTab: tab.id)
+
+        let items = store.tab(id: tab.id)!.items
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].kind, .group)
+        XCTAssertEqual(Set(items[0].children.map(\.id)), [a, b])
     }
 
     func testPlaceItemInGroupSwapsChildSlots() {
@@ -558,8 +712,8 @@ final class TabStoreTests: XCTestCase {
         let groupID = store.tab(id: tab.id)!.items.first { $0.kind == .group }!.id
 
         // Dragging a group onto another item must not nest — a no-op.
-        store.groupItems(draggedID: groupID, ontoTargetID: c, inTab: tab.id)
+        store.groupItems(draggedID: groupID, ontoTargetID: c.id, inTab: tab.id)
         XCTAssertEqual(store.tab(id: tab.id)!.items.count, 2)   // group + C, unchanged
-        XCTAssertTrue(store.tab(id: tab.id)!.items.contains { $0.id == c && $0.kind != .group })
+        XCTAssertTrue(store.tab(id: tab.id)!.items.contains { $0.id == c.id && $0.kind != .group })
     }
 }

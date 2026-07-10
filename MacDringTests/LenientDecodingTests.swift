@@ -71,6 +71,36 @@ final class LenientDecodingTests: XCTestCase {
         XCTAssertEqual(doc.tabs[0].items.map(\.displayName), ["Good", "Also Good"])
     }
 
+    func testOneUnreadableGroupChildIsDroppedWithoutDroppingTheGroup() throws {
+        let items = #""items": [ { "kind": "group", "displayName": "Work", "slot": 0, "children": [ { "kind": "file", "displayName": "Good", "slot": 0 }, { "id": 12345, "kind": "file", "displayName": "Bad", "slot": 1 }, { "kind": "folder", "displayName": "Also Good", "slot": 2 } ] } ]"#
+        let doc = try decodeDocument(document(tabFields: items))
+
+        XCTAssertEqual(doc.tabs[0].items.count, 1)
+        let group = try XCTUnwrap(doc.tabs[0].items.first)
+        XCTAssertEqual(group.kind, .group)
+        XCTAssertEqual(group.displayName, "Work")
+        XCTAssertEqual(group.children.map(\.displayName), ["Good", "Also Good"])
+    }
+
+    func testUnreadableChildInTwoChildGroupPromotesSurvivorAtGroupSlot() throws {
+        let items = #""items": [ { "kind": "group", "displayName": "Work", "slot": 7, "children": [ { "kind": "file", "displayName": "Good", "slot": 0 }, { "id": 12345, "kind": "file", "displayName": "Bad", "slot": 1 } ] } ]"#
+        let doc = try decodeDocument(document(tabFields: items))
+
+        XCTAssertEqual(doc.tabs[0].items.count, 1)
+        let survivor = try XCTUnwrap(doc.tabs[0].items.first)
+        XCTAssertEqual(survivor.kind, .file)
+        XCTAssertEqual(survivor.displayName, "Good")
+        XCTAssertEqual(survivor.slot, 7)
+    }
+
+    func testAllUnreadableGroupChildrenRemoveEmptyGroup() throws {
+        let items = #""items": [ { "kind": "file", "displayName": "Keep", "slot": 0 }, { "kind": "group", "displayName": "Empty", "slot": 1, "children": [ { "id": 12345, "kind": "file", "displayName": "Bad" }, { "id": 67890, "kind": "folder", "displayName": "Also Bad" } ] } ]"#
+        let doc = try decodeDocument(document(tabFields: items))
+
+        XCTAssertEqual(doc.tabs[0].items.map(\.displayName), ["Keep"])
+        XCTAssertFalse(doc.tabs[0].items.contains { $0.kind == .group })
+    }
+
     func testMissingItemNameFallsBackToURL() throws {
         let items = #""items": [ { "kind": "file", "url": "file:///tmp/report.pdf" } ]"#
         let doc = try decodeDocument(document(tabFields: items))
