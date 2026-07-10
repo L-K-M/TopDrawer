@@ -96,6 +96,41 @@ final class DrawerGroupingTests: XCTestCase {
         XCTAssertFalse(result.contains { $0.id == empty.id })           // empty dropped
     }
 
+    func testRemovingItemDeletesAChildAndDissolvesAPair() {
+        let a = app("A", slot: 0), b = app("B", slot: 1)
+        let group = DrawerItem(kind: .group, displayName: "G", slot: 4, children: [a, b])
+
+        let result = DrawerGrouping.removingItem([group], id: a.id)
+
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].id, b.id)
+        XCTAssertEqual(result[0].slot, group.slot)
+        XCTAssertFalse(result.contains { $0.id == a.id || $0.kind == .group })
+    }
+
+    func testRemovingItemKeepsAGroupWithTwoRemainingChildren() {
+        let a = app("A", slot: 0), b = app("B", slot: 1), c = app("C", slot: 2)
+        let group = DrawerItem(kind: .group, displayName: "G", slot: 4, children: [a, b, c])
+
+        let result = DrawerGrouping.removingItem([group], id: b.id)
+
+        XCTAssertEqual(result[0].kind, .group)
+        XCTAssertEqual(result[0].children.map(\.id), [a.id, c.id])
+    }
+
+    func testUpdatingItemFindsAChildInAnyGroup() {
+        let a = app("A"), b = app("B"), c = app("C"), d = app("D")
+        let first = DrawerItem(kind: .group, displayName: "First", children: [a, b])
+        let second = DrawerItem(kind: .group, displayName: "Second", children: [c, d])
+        var updated = d
+        updated.displayName = "Updated"
+
+        let result = DrawerGrouping.updatingItem([first, second], with: updated)
+
+        XCTAssertEqual(result[0], first)
+        XCTAssertEqual(result[1].children.first { $0.id == d.id }?.displayName, "Updated")
+    }
+
     func testRenaming() {
         let group = DrawerItem(kind: .group, displayName: "Old", slot: 0, children: [app("A"), app("B")])
         let result = DrawerGrouping.renaming([group], groupID: group.id, to: "Work")
