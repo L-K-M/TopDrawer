@@ -85,6 +85,48 @@ formal, harder to type.
   make old DragThing users smile, but it's derivative and "…Thing" names read as
   90s-shareware today. Kept here in case sentiment should win.
 
+## Other models' shortlists, vetted
+
+**GPT 5.6** (see `sol.md` §9) proposed coined portmanteaus: Drawledge, Brimfold,
+ScreenSill, Ledgelet, Railnook, Tabstead, Drawrail, Screenstead, Selvedge, Corner
+Store. Verified clean: Drawledge and Brimfold (nothing but a dormant blog and a
+knitting pattern). But the coinages mostly repeat MacDring's core flaw — invented
+mashups that mean nothing until explained — and the only existing use of
+"Drawledge" online is a *drawing* blog, confirming it misreads as a sketching app.
+Best of the list: **Drawledge** (with that caveat), **Brimfold** (clean but
+abstract), Corner Store (most human, but the app lives on edges, not corners).
+
+**GLM 5.2** proposed real words with physical imagery: Edgeways, Fringe,
+Verge/Brink, Tether, Latch, Sleeve, Tray, Holster, Cubby/Nook, Pier, Quay/Wharf,
+Mooring, Caddy, Stash. Best ear of the three explorations, but no clearance was
+done and most entries collide:
+
+| Name | Status |
+|---|---|
+| Pier | ❌ "App Pier" (Mac keyboard launcher — same category) + "Pier" menu-bar monitor |
+| Latch | ❌ Latch Systems trademark covers software design/development + smart home |
+| Sleeve | ❌ Popular Replay Software now-playing Mac app |
+| Quay / Wharf / Cubby | ❌ Already eliminated above (Wharf is macOS adware) |
+| Tether | ❌ The stablecoin owns the word |
+| Verge / Nook / Caddy / Stash / Tray / Brink / Fringe | ❌/⚠️ The Verge, B&N Nook, Caddy server, Stash investing + git stash, system-tray genericism, Brink's, Fox's Fringe |
+| **Edgeways** | ✅ No exact collision — the survivor, and a genuine contender |
+
+**Edgeways** is the one outside suggestion worth shortlisting: a real word meaning
+exactly what the app does, with the "get a word in edgeways" idiom. Caveats: US
+English says *edgewise* (a taken name — Edgewise card game, EdgeWise Connect,
+edgewise.app domain squatted), so half the audience types the wrong, occupied
+spelling; and the Edge* software neighborhood is crowded (Microsoft Edge, Edgy,
+EdgeView).
+
+## Updated overall ranking
+
+1. **Top Drawer** — real phrase, names the UI, built-in quality pun, clean.
+2. **Edgeways** (GLM) — real word, names the placement, clean in the strict sense;
+   dinged for the edgewise-spelling split and the Edge* crowd.
+3. **Brimfold** (GPT) — cleanest coined option if an abstract brand is preferred.
+4. **Bureau / Hutch / Credenza** — clean furniture words, each with a caveat above.
+5. **Drawledge** (GPT) — most characterful coinage; misreads as a drawing app.
+
 ## Recommendation
 
 **Top Drawer.** It is the only candidate that scores on all five criteria: it
