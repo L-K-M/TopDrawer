@@ -236,7 +236,7 @@ extension DrawerItem {
     /// tab): detects the kind + name but **skips the bookmark**. Folder items are
     /// never persisted, and every read path (`launch`, `reveal`, `isBroken`, drag-out)
     /// falls back to `url` when there's no bookmark — so this avoids ~N
-    /// `makeBookmark` syscalls per refresh on a large directory. See ANALYSIS.md I1.
+    /// `makeBookmark` syscalls per refresh on a large directory. See BACKLOG.md's legacy ID index (I1).
     /// The id is **stable** (path-derived), so a re-list preserves item identity.
     static func transientFileItem(_ url: URL) -> DrawerItem {
         let (kind, name) = kindAndName(for: url)

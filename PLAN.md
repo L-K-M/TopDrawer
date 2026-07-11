@@ -385,7 +385,7 @@ auto-hide, pinned-open, optional hotkey.
 > reverts it. `TabBehavior.resolved(openOnHoverDefault:autoHideDefault:)` does the
 > fallback, read live by `TabController` at interaction time — so changing a global
 > default takes effect at once without rewriting any stored tab (the old
-> `updateAllBehaviors` bulk-overwrite is gone). See ANALYSIS.md I3.
+> `updateAllBehaviors` bulk-overwrite is gone). See BACKLOG.md's legacy ID index (I3).
 
 **Global (`Preferences`):**
 

@@ -45,7 +45,7 @@ enum FolderLister {
         let entries = sorted(urls.map(entry(for:)), by: tab.folderSort)
         let items = entries.prefix(limit).enumerated().map { index, entry -> DrawerItem in
             // Transient items skip the per-file bookmark — folder items are never
-            // persisted and every read path falls back to `url`. See ANALYSIS.md I1.
+            // persisted and every read path falls back to `url`. See BACKLOG.md's legacy ID index (I1).
             var item = DrawerItem.transientFileItem(entry.url)
             item.slot = index
             item.date = entry.modified   // Date Modified — shown by the list layout

@@ -6,7 +6,7 @@ import Foundation
 ///
 /// **Not used by the live Fresh tab.** Listing `~/Downloads`, `~/Desktop`, or
 /// `~/Documents` directly trips macOS's folder-access (TCC) consent dialogs —
-/// breaking the app's no-permission promise (fable-is-awesome.md FB1) — so the Fresh
+/// breaking the app's no-permission promise (FB1 / PR #61) — so the Fresh
 /// pipeline is Spotlight-only (index reads never prompt). This stays as tested pure
 /// logic for a possible future *opt-in* "works without Spotlight" mode that would
 /// own the prompt explicitly.

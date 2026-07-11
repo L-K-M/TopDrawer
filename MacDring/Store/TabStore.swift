@@ -394,7 +394,7 @@ final class TabStore: ObservableObject {
     /// slot held by an item *not* in `ids` — preserving their order. Used when several
     /// items are dropped onto a slot together so they land in a tidy run from the
     /// target instead of scattering. If the complete run cannot fit below the slot
-    /// bound, no items move. See ANALYSIS.md I4.
+    /// bound, no items move. See BACKLOG.md's legacy ID index (I4).
     func placeItems(_ ids: [UUID], startingAt start: Int, inTab tabID: UUID) {
         guard !ids.isEmpty else { return }
         mutate { document in

@@ -36,7 +36,7 @@ struct ItemView: View {
     // Icon and broken-ness are resolved in `.task` (once per item change) on a
     // *detached* task and cached here, so neither `body` nor the main thread does
     // disk I/O per cell — important for a large or network-volume folder tab.
-    // See ANALYSIS.md I2 and fable-is-awesome.md FP1.
+    // See BACKLOG.md's legacy ID index (I2) and FP1 / PR #65.
     @State private var icon: NSImage?
     @State private var broken = false
     /// An app item's bundle id (resolved off the render path, like the icon), so the

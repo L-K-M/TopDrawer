@@ -45,7 +45,7 @@ final class TabWindowController {
     private var intendedFrame: CGRect = .zero
     /// Number of in-flight frame animations. A *count* (not a bool) so overlapping
     /// animations — a rapid open/close/switch — don't let the first one's completion
-    /// re-arm the frame-defender while a later one is still running. See ANALYSIS.md B8.
+    /// re-arm the frame-defender while a later one is still running. See BACKLOG.md's legacy ID index (B8).
     private var frameAdjustmentDepth = 0
     private var frameObservers: [NSObjectProtocol] = []
 

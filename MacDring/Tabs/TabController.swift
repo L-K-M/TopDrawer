@@ -402,7 +402,7 @@ final class TabController {
               // Resolve the tab's screen *live* rather than trusting a possibly-stale
               // `currentScreen`: a parked tab (its display disconnected, default policy)
               // keeps its old screen reference, so a hotkey/spring-open must not slide a
-              // drawer out onto a detached display. See ANALYSIS.md B3.
+              // drawer out onto a detached display. See BACKLOG.md's legacy ID index (B3).
               let screen = resolvedScreen(for: tab) else { return }
         drawerInteractionGeneration &+= 1
         if let prev = openTabID, prev != id {
@@ -473,7 +473,7 @@ final class TabController {
     /// A tab's behavior with the hover / auto-hide fields it doesn't override filled
     /// in from the global defaults (`Preferences.newTabOpenOnHover` / `newTabAutoHide`).
     /// Read live at interaction time, so changing a global default takes effect on the
-    /// next hover / click-outside without touching any stored tab. See ANALYSIS.md I3.
+    /// next hover / click-outside without touching any stored tab. See BACKLOG.md's legacy ID index (I3).
     private func effectiveBehavior(_ tab: Tab) -> TabBehavior {
         tab.behavior.resolved(openOnHoverDefault: preferences.newTabOpenOnHover,
                               autoHideDefault: preferences.newTabAutoHide)
@@ -1320,7 +1320,7 @@ final class TabController {
     /// Lights every Fresh tab pill's dot when the newest item in the (shared) Fresh
     /// scopes landed within `freshRecentWindow`. Asks **Spotlight** (index-only, so it
     /// can never trigger a folder-access prompt — unlike a direct directory scan, see
-    /// fable-is-awesome.md FB1); one lookup covers all Fresh tabs.
+    /// FB1 / PR #61); one lookup covers all Fresh tabs.
     private func refreshFreshBadges() {
         let freshTabIDs = store.tabs.filter { $0.kind == .fresh }.map(\.id)
         guard !freshTabIDs.isEmpty else { return }
@@ -1395,7 +1395,7 @@ final class TabController {
         case .fresh:
             // Spotlight-only: reading the index can never trigger a folder-access
             // (TCC) prompt, unlike a direct scan of ~/Downloads & co. — the reason
-            // the FreshScanner path was retired from the live app (FB1).
+            // the FreshScanner path was retired from the live app (FB1 / PR #61).
             spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
                 self?.applySpotlightResult(.fresh(FreshLister.items(from: results)), for: key)
             }

@@ -11,7 +11,7 @@ extension NSApplication {
     /// window remains — means closing one of those windows while another is still
     /// open no longer drops the Dock presence the open one needs. The borderless,
     /// non-activating tab/drawer panels can't become main, so they're never counted.
-    /// See ANALYSIS.md C2.
+    /// See BACKLOG.md's legacy ID index (C2).
     func revertToAccessoryIfNoOrdinaryWindows(excluding window: NSWindow?) {
         // `isVisible` is false for a miniaturized window, but a minimized
         // Settings window still needs the app to stay `.regular` — dropping to

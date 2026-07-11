@@ -1,7 +1,7 @@
 # Top Drawer: Open Backlog
 
 The canonical, forward-looking backlog for **Top Drawer** (formerly MacDring — the
-product rename shipped in July 2026; see [`NAMING.md`](NAMING.md)). This file
+product rename shipped in July 2026; record in section 7). This file
 consolidates and supersedes the earlier review documents `awesome.md`,
 `fable-is-awesome.md`, and `sol.md` (deleted 2026-07-11; their full text remains in
 git history). Completed work is cleared from the active sections; section 7 keeps a
@@ -11,8 +11,8 @@ not lose their context.
 Evidence baselines: the fable review read `main` @ `3803678` (2026-07-02); the sol
 review read `main` @ `512bff0` (2026-07-10). `file:line` references cite those
 snapshots — expect small drift. Code identifiers, the Xcode target/scheme, the
-`MacDring/` folder, and the bundle ID intentionally still say MacDring
-(`NAMING.md` § "Deliberately unchanged").
+`MacDring/` folder, and the bundle ID intentionally still say MacDring (the rename
+record in section 7 lists what stays and why).
 
 Severity: **P0** data loss, **P1** major correctness/security/accessibility,
 **P2** robustness/performance/UX, **P3** polish. Labels:
@@ -697,7 +697,7 @@ blocker A7, and localization stays conditional per U18.)
 
 ### Engineering/release cleanup
 
-- **Finish the rename machinery (NAMING.md "Phase 3").** The GitHub repo is now
+- **Finish the rename machinery (rename phase 3; record in section 7).** The GitHub repo is now
   `L-K-M/TopDrawer`, but the updater still queries `repo: "MacDring"`
   (`AppDelegate.swift:14` — works only via GitHub's rename redirect) and the README
   release link still points at `L-K-M/MacDring/releases`. Update both; take a new
@@ -775,18 +775,37 @@ This section preserves the context of finished work so source comments, PLAN
 references, and old finding IDs stay meaningful. Everything here is **done** — any
 follow-up becomes a new item in the active sections above. Full prose for each
 finding lives in git history (`git log --diff-filter=D -- awesome.md
-fable-is-awesome.md sol.md` and earlier revisions of this file). Old status claims in
+fable-is-awesome.md sol.md NAMING.md`, and earlier revisions of this file — named
+`ANALYSIS.md` until 2026-07-11, so use `git log --follow`). Old status claims in
 those historical revisions ("nothing P0-P1 remains", "through PR #32") were wrong
 when written and must not be treated as current.
 
 ### Product rename (July 2026)
 
-MacDring → **Top Drawer**. Finalists were Top Drawer and Corner Store; research,
-vetting tables, decision rationale, and the remaining machinery live in
-[`NAMING.md`](NAMING.md). Phases 1 (user-visible identity) and 2 (built product
-`Top Drawer.app`, release pipeline, icon artwork) are done; phase 3 leftovers are an
-active item in section 6. An earlier model-generated shortlist (Drawledge, Brimfold,
-ScreenSill, …) was vetted and declined in NAMING.md.
+MacDring → **Top Drawer**. Finalists were Top Drawer and Corner Store; Corner Store
+was eliminated on clearance (existing CornerStore apps, and convenience-retail POS
+software owning the phrase in search) and on accuracy (the app lives on edges, not
+corners). An earlier model-generated shortlist (Drawledge, Brimfold, ScreenSill, …)
+was vetted and declined. The full research and vetting tables lived in `NAMING.md`,
+deleted 2026-07-11 — recoverable from git history like the review documents above.
+
+Phases 1 (user-visible identity) and 2 (built product `Top Drawer.app`, release
+pipeline, icon artwork) are done; the phase 3 leftovers are an active item in
+section 6.
+
+**Deliberately unchanged, with reasons** — don't "finish" these without a migration
+plan:
+
+- Bundle ID `com.macdring.MacDring`: changing it resets user defaults, saved
+  layouts, and Automation/permission grants. Keep, or ship a migration.
+- Application Support directory `MacDring/` (`TabStore.defaultStoreURL`): renaming
+  it orphans every user's saved layout. Keep, or migrate on launch.
+- The Swift module: `PRODUCT_MODULE_NAME` is pinned to `MacDring`. (The rename sweep
+  briefly let it derive as `Top_Drawer` from the new product name, which broke every
+  test's `@testable import` and blocked the v2.0.0 release gate.)
+- Code identifiers (`RecentsSource.macDring`, `includesMacDring`, `MacDringMain`):
+  `.macDring` is a persisted raw value in saved documents; rename only with Xcode.
+- Frame autosave name `MacDringSettingsWindow`: a defaults key.
 
 ### Early history (pre-review batches)
 
@@ -867,9 +886,11 @@ U19→U14, U20→U15, U21→U18, U22→U19.
 
 ### Legacy source-comment ID index
 
-Source comments (and `PLAN.md`) still cite IDs from pre-consolidation documents,
-including revisions squashed out of git history. Meanings, reconstructed from the
-citing sites:
+Source comments (and `PLAN.md`) cite legacy finding IDs that originated in the
+pre-consolidation documents named below — including revisions squashed out of git
+history — and point at this index to resolve them (FB1/FP1 citations also carry
+their PR links inline; the ex-B28 citation points at the open item R14). Meanings,
+reconstructed from the citing sites:
 
 | Cited as | Meaning (all shipped unless noted) | Cited from |
 |---|---|---|

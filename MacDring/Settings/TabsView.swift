@@ -241,7 +241,7 @@ private struct TabEditor: View {
                 // "Open on hover" and "Close on click-outside" follow the global
                 // default (General → Drawers) unless this tab overrides them. Picking
                 // "Use global default" reverts the override — the clear way to undo a
-                // local change. See ANALYSIS.md I3.
+                // local change. See BACKLOG.md's legacy ID index (I3).
                 Picker("Open on hover", selection: openOnHoverModeBinding) {
                     Text("Use global default (\(globalText(preferences.newTabOpenOnHover)))").tag(BehaviorMode.useGlobal)
                     Text("On").tag(BehaviorMode.on)

@@ -8,7 +8,7 @@ import Darwin
 ///
 /// This drives the Trash item's full/empty icon and whether "Empty Trash…" is
 /// enabled, so both now match what Empty Trash would actually do. Replaces the old
-/// home-`~/.Trash`-only, subdirectory-only check. See ANALYSIS.md I5.
+/// home-`~/.Trash`-only, subdirectory-only check. See BACKLOG.md's legacy ID index (I5).
 enum TrashInspector {
 
     /// Whether the whole Trash is empty: true only when every trash directory Finder
@@ -20,7 +20,7 @@ enum TrashInspector {
     /// The total number of items across every trash Finder's "Empty Trash" clears —
     /// for the Trash item's count badge. Sums each directory's metadata entry count
     /// (no listing → no prompt). Like the full/empty icon it inherits the
-    /// `.DS_Store`-counting caveat (ANALYSIS.md / awesome.md B28).
+    /// `.DS_Store`-counting caveat (BACKLOG.md R14, ex-B28).
     static func trashCount(fileManager: FileManager = .default) -> Int {
         trashDirectories(fileManager: fileManager).reduce(0) { $0 + (entryCount(of: $1) ?? 0) }
     }

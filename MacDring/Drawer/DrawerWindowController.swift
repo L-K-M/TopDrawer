@@ -215,7 +215,7 @@ final class DrawerWindowController {
     /// refresh can be triggered by an *unrelated* reconcile (a screen or preference
     /// change, or a mutation to another tab) while the user is typing, and the model
     /// is the freshest source for an open notes drawer — overwriting it would reset
-    /// the editor's selection / in-flight input. See ANALYSIS.md B7.
+    /// the editor's selection / in-flight input. See BACKLOG.md's legacy ID index (B7).
     func refresh(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen) {
         guard isVisible else { return }
         apply(tab: tab, preserveLiveNotes: true)
@@ -350,7 +350,7 @@ final class DrawerWindowController {
             // Filled asynchronously by the controller's Spotlight watch (via
             // `updateLiveItems`). Spotlight reads the index only, so it can never
             // trigger a folder-access (TCC) prompt — the direct FreshScanner seed
-            // prompted for Downloads/Desktop/Documents and was retired (FB1). On a
+            // prompted for Downloads/Desktop/Documents and was retired (FB1 / PR #61). On a
             // refresh of the already-open drawer (`preserveLiveNotes`), the current
             // items stay put so the list doesn't blank out while a gather is running.
             if !preserveLiveNotes {

@@ -266,7 +266,7 @@ struct TabStripView: View {
 /// so a file dragged from Finder and a link dragged from a browser both arrive.
 func loadDroppedURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
     // Slot results by provider index so the callback order (non-deterministic across
-    // async loads) doesn't scramble the drop order. See ANALYSIS.md I4.
+    // async loads) doesn't scramble the drop order. See BACKLOG.md's legacy ID index (I4).
     var results = [URL?](repeating: nil, count: providers.count)
     let lock = NSLock()
     let group = DispatchGroup()

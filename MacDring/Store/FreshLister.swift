@@ -18,7 +18,7 @@ enum FreshLister {
         let newestFirst = results.sorted { $0.date > $1.date }
         return newestFirst.prefix(limit).enumerated().map { index, result in
             // Transient items skip the per-file bookmark — never persisted, and every
-            // read path falls back to `url`. See ANALYSIS.md I1 / FolderLister.
+            // read path falls back to `url`. See BACKLOG.md's legacy ID index (I1) / FolderLister.
             var item = DrawerItem.transientFileItem(result.url)
             item.slot = index
             item.date = result.date   // Date Added — shown by the list layout
@@ -31,7 +31,7 @@ enum FreshLister {
     /// de-duplicated by file URL. When the same file appears in both, the newer date
     /// wins (they agree on Date Added, so this is just a tie-break). **Unused by the
     /// live app** since the direct scan was retired (it triggered folder-access
-    /// prompts — fable-is-awesome.md FB1); kept, tested, for a future opt-in mode.
+    /// prompts — FB1 / PR #61); kept, tested, for a future opt-in mode.
     static func merge(_ scanned: [SpotlightQuery.Result], _ spotlight: [SpotlightQuery.Result]) -> [SpotlightQuery.Result] {
         var seen = Set<URL>()
         return (scanned + spotlight)

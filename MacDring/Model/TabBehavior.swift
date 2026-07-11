@@ -4,7 +4,7 @@ import Foundation
 /// the global defaults** in `Preferences` (`newTabOpenOnHover` / `newTabAutoHide`);
 /// a tab can opt out and pin its own value via the `overrides…` flags (set in the
 /// Tabs pane). This replaces the old "global toggle rewrites every tab" model — the
-/// global setting is now a live default, overridable per tab. See ANALYSIS.md I3.
+/// global setting is now a live default, overridable per tab. See BACKLOG.md's legacy ID index (I3).
 struct TabBehavior: Codable, Equatable {
 
     /// Open the drawer on hover instead of requiring a click. Honored only when
