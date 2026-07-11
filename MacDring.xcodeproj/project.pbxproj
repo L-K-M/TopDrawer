@@ -17,7 +17,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		AA0000000000000000000006 /* MacDring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacDring.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000006 /* Top Drawer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Top Drawer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000007 /* MacDringTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacDringTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -56,7 +56,7 @@
 		AA0000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA0000000000000000000006 /* MacDring.app */,
+				AA0000000000000000000006 /* Top Drawer.app */,
 				AA0000000000000000000007 /* MacDringTests.xctest */,
 			);
 			name = Products;
@@ -82,7 +82,7 @@
 			);
 			name = MacDring;
 			productName = MacDring;
-			productReference = AA0000000000000000000006 /* MacDring.app */;
+			productReference = AA0000000000000000000006 /* Top Drawer.app */;
 			productType = "com.apple.product-type.application";
 		};
 		AA0000000000000000000009 /* MacDringTests */ = {
@@ -346,7 +346,7 @@
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Top Drawer asks Finder to empty the Trash when you choose Empty Trash.";
 				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Top Drawer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
