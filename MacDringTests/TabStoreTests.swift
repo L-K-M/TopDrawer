@@ -1,6 +1,6 @@
 import Combine
 import XCTest
-@testable import Top Drawer
+@testable import MacDring
 
 final class TabStoreTests: XCTestCase {
 

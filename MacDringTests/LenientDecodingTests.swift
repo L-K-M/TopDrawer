@@ -1,5 +1,5 @@
 import XCTest
-@testable import Top Drawer
+@testable import MacDring
 
 /// Forward-compatibility: documents written by a **newer** Top Drawer (unknown
 /// enum raw values, unreadable items) must degrade gracefully instead of
