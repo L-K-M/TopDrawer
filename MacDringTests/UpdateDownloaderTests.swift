@@ -112,7 +112,7 @@ final class UpdateDownloaderTests: XCTestCase {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
 
-        let nested = UpdateDownloader.uniqueDestination(in: dir, fileName: "../../MacDring.dmg", fileManager: fm)
+        let nested = UpdateDownloader.uniqueDestination(in: dir, fileName: "../../Top Drawer.dmg", fileManager: fm)
         // Compare paths, not URLs: `deletingLastPathComponent()` always yields a
         // trailing slash that `dir` (built via `appendingPathComponent`) lacks, so a
         // direct URL equality would fail on the trailing-slash difference alone.

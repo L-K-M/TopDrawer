@@ -24,7 +24,7 @@ final class GitHubReleaseTests: XCTestCase {
               "name": "Top Drawer.dmg",
               "content_type": "application/x-apple-diskimage",
               "size": 1048576,
-              "browser_download_url": "https://github.com/L-K-M/MacDring/releases/download/v1.3.0/MacDring.dmg"
+              "browser_download_url": "https://github.com/L-K-M/MacDring/releases/download/v1.3.0/Top%20Drawer.dmg"
             }
           ]
         }
