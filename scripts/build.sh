@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds MacDring.app from the command line and reveals it in Finder on success.
+# Builds "Top Drawer.app" from the command line and reveals it in Finder on success.
 # Incremental Release build by default; --clean resets the wedged Swift Build service
 # (the CreateBuildDescription / clang-probe hang) and wipes build/ before building.
 # Thin stub for the shared lkm-build engine.
@@ -7,7 +7,7 @@
 # Usage: scripts/build.sh [--clean] [--debug] [--run] [--install] [--zip] [--dmg]
 # Shared engine: https://github.com/L-K-M/release-tool (this stub only sets config).
 set -euo pipefail
-export BUILD_APP_NAME="MacDring"
+export BUILD_APP_NAME="Top Drawer"
 export BUILD_KIND="xcode"
 export BUILD_XCODE_PROJECT="MacDring.xcodeproj"
 export BUILD_XCODE_SCHEME="MacDring"

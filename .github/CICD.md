@@ -36,8 +36,8 @@ The workflow then:
 2. builds the Release configuration with `CODE_SIGNING_ALLOWED=NO`;
 3. **ad-hoc signs** the app (`codesign --sign -`) — this needs no certificate or key but is
    required for the app to launch on Apple Silicon;
-4. packages `MacDring-1.2.0.dmg` and `MacDring-1.2.0.zip`;
-5. publishes a GitHub Release named `MacDring 1.2.0` with auto-generated notes (plus the
+4. packages `TopDrawer-1.2.0.dmg` and `TopDrawer-1.2.0.zip`;
+5. publishes a GitHub Release named `Top Drawer 1.2.0` with auto-generated notes (plus the
    Gatekeeper instructions below) and both files attached.
 
 To redo a botched release, delete the tag and the Release on GitHub, then re-tag.
@@ -51,7 +51,7 @@ first launch ("…can't be opened because Apple cannot check it for malicious so
 release notes tell users how to open it anyway:
 
 - **Right-click** (or Control-click) the app → **Open** → **Open** (only needed once), or
-- `xattr -dr com.apple.quarantine /Applications/MacDring.app`
+- `xattr -dr com.apple.quarantine "/Applications/Top Drawer.app"`
 
 The app *is* ad-hoc signed (`codesign -dv` shows `Signature=adhoc`). That's the minimum macOS
 requires to run a native arm64 binary — it is **not** a trust signature and does not avoid the
@@ -109,7 +109,7 @@ Until then, none are needed.
 
 ## Troubleshooting
 
-- **`built MacDring.app not found`** — the Release product path changed; check
+- **`built Top Drawer.app not found`** — the Release product path changed; check
   `DerivedData/Build/Products/Release`. Usually means the build failed earlier in the log.
 - **`create-dmg` exited non-zero but the DMG looks fine** — known quirk on headless runners
   (it can't set a volume icon). `release.yml` tolerates it by checking the file exists.

@@ -52,11 +52,11 @@ The version is derived from the tag with the leading `v` stripped (e.g. `v1.2.3`
 
 It produces:
 
-- An **unsigned** Release build of `MacDring.app` (`CODE_SIGNING_ALLOWED=NO`), with `MARKETING_VERSION` set from the tag.
+- An **unsigned** Release build of `Top Drawer.app` (`CODE_SIGNING_ALLOWED=NO`), with `MARKETING_VERSION` set from the tag.
 - The app is then **ad-hoc codesigned** (`codesign --force --sign -`). This is not a Developer ID signature and the app is not notarized — it is only required so the app can launch on Apple Silicon. The workflow intentionally avoids deprecated `--deep`; if nested code is ever added, sign each nested component explicitly.
-- A `MacDring-<version>.zip` (via `ditto`) and a `MacDring-<version>.dmg` (via `create-dmg`).
+- A `TopDrawer-<version>.zip` (via `ditto`) and a `TopDrawer-<version>.dmg` (via `create-dmg`).
 
-Both files are attached to a GitHub Release (named `MacDring <version>`, with auto-generated notes) via `softprops/action-gh-release`. The release body explains that, because the app is **unsigned and un-notarized, macOS Gatekeeper warns on first launch**, and tells users to right-click → Open or run `xattr -dr com.apple.quarantine /Applications/MacDring.app`.
+Both files are attached to a GitHub Release (named `Top Drawer <version>`, with auto-generated notes) via `softprops/action-gh-release`. The release body explains that, because the app is **unsigned and un-notarized, macOS Gatekeeper warns on first launch**, and tells users to right-click → Open or run `xattr -dr com.apple.quarantine "/Applications/Top Drawer.app"`.
 
 ## Secrets
 

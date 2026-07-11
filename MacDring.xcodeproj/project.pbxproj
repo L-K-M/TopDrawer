@@ -321,7 +321,7 @@
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Top Drawer asks Finder to empty the Trash when you choose Empty Trash.";
 				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Top Drawer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -364,7 +364,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacDring.app/Contents/MacOS/MacDring";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Top Drawer.app/Contents/MacOS/Top Drawer";
 			};
 			name = Debug;
 		};
@@ -380,7 +380,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacDring.app/Contents/MacOS/MacDring";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Top Drawer.app/Contents/MacOS/Top Drawer";
 			};
 			name = Release;
 		};

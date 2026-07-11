@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA0000000000000000000008"
-               BuildableName = "MacDring.app"
+               BuildableName = "Top Drawer.app"
                BlueprintName = "MacDring"
                ReferencedContainer = "container:MacDring.xcodeproj">
             </BuildableReference>
@@ -55,7 +55,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000008"
-            BuildableName = "MacDring.app"
+            BuildableName = "Top Drawer.app"
             BlueprintName = "MacDring"
             ReferencedContainer = "container:MacDring.xcodeproj">
          </BuildableReference>
@@ -72,7 +72,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000008"
-            BuildableName = "MacDring.app"
+            BuildableName = "Top Drawer.app"
             BlueprintName = "MacDring"
             ReferencedContainer = "container:MacDring.xcodeproj">
          </BuildableReference>

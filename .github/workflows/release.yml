@@ -14,7 +14,8 @@ permissions:
 env:
   PROJECT: MacDring.xcodeproj
   SCHEME: MacDring
-  APP_NAME: MacDring
+  APP_NAME: "Top Drawer"
+  ASSET_BASE: TopDrawer
 
 jobs:
   test:
@@ -89,8 +90,8 @@ jobs:
 
       - name: Package zip + DMG
         run: |
-          ZIP="$RUNNER_TEMP/$APP_NAME-$VERSION.zip"
-          DMG="$RUNNER_TEMP/$APP_NAME-$VERSION.dmg"
+          ZIP="$RUNNER_TEMP/$ASSET_BASE-$VERSION.zip"
+          DMG="$RUNNER_TEMP/$ASSET_BASE-$VERSION.dmg"
           ditto -c -k --keepParent "$APP_PATH" "$ZIP"
           # create-dmg can exit non-zero on a headless runner even on success — verify the file.
           create-dmg \
@@ -119,4 +120,4 @@ jobs:
             Gatekeeper will warn on first launch. To open it:
 
             - **Right-click** (or Control-click) the app → **Open** → **Open**, or
-            - run `xattr -dr com.apple.quarantine /Applications/${{ env.APP_NAME }}.app`
+            - run `xattr -dr com.apple.quarantine "/Applications/${{ env.APP_NAME }}.app"`

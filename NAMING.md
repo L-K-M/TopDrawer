@@ -167,19 +167,30 @@ Swissreg) and grab a domain — `topdrawer.app` or a `get…`/`use…` variant.
   the others aren't worth an unverifiable refactor. Rename only with Xcode.
 - **Frame autosave name `MacDringSettingsWindow`** — a defaults key.
 
-### Phase 2 — remaining machinery (needs a Mac + release dry-run)
+### Phase 2 — done (this branch)
+
+- `PRODUCT_NAME = "Top Drawer"` — the built app is now **Top Drawer.app** —
+  with both `TEST_HOST` paths and the shared scheme's `BuildableName` updated
+  in lockstep.
+- Release pipeline: `APP_NAME: "Top Drawer"` (display), `ASSET_BASE: TopDrawer`
+  (zip/dmg filenames, space-free because GitHub rewrites spaces in asset names
+  to dots), quarantine command quoted for the space. Old installed clients
+  still self-update fine — the updater picks assets by extension, not name.
+- `scripts/build.sh` / `scripts/release.sh` stubs export the new app name
+  (verify the shared `lkm-build`/`lkm-release` engine quotes `$APP_NAME` —
+  the name now contains a space).
+- App icon — the "open wooden drawer of glowing app tiles" artwork
+  (`Tools/AppIcon-source.png`, slots regenerated per `Tools/README.md`).
+
+### Phase 3 — remaining, needs actions outside this repo
 
 1. Rename the GitHub repo to `top-drawer` (old URLs redirect), then update the
-   updater's `repo:` and README links.
-2. Xcode: rename project/targets/schemes/folders, set `PRODUCT_NAME` to
-   "Top Drawer" and update both `TEST_HOST` paths in lockstep; build + test.
-3. CI/scripts: `APP_NAME`/`BUILD_APP_NAME`/`RELEASE_APP_NAME`, `PROJECT`,
-   `SCHEME` in `.github/workflows/*.yml`, `scripts/build.sh`, `scripts/release.sh`,
-   `CICD.md`. Old clients pick assets by extension, so renamed assets stay
-   installable — but keep release titles mentioning "formerly MacDring" once.
-4. New screenshot for the README. ~~App icon~~ — **done**: the icon is now the
-   "open wooden drawer of glowing app tiles" artwork (`Tools/AppIcon-source.png`,
-   slots regenerated per `Tools/README.md`; the old programmatic generator was
-   removed).
-5. Domain + trademark: `topdrawer.app` (or `get…`/`use…` variant), quick
+   updater's `repo:` in `AppDelegate.swift` and the README release links.
+2. Cosmetic (optional, needs Xcode open): rename the project file, targets,
+   schemes, and `MacDring/` source folders. Purely developer-facing.
+3. New screenshot for the README showing the renamed app.
+4. Domain + trademark: `topdrawer.app` (or `get…`/`use…` variant), quick
    USPTO/Swissreg screen.
+5. First release under the new name: verify the Release workflow end-to-end
+   (it now builds "Top Drawer.app" and uploads `TopDrawer-<v>.zip/.dmg`) and
+   mention "formerly MacDring" in the release notes once.

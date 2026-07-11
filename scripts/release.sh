@@ -16,7 +16,7 @@
 # Shared engine: https://github.com/L-K-M/release-tool (this stub only sets config).
 set -euo pipefail
 
-export RELEASE_APP_NAME="MacDring"
+export RELEASE_APP_NAME="Top Drawer"
 export RELEASE_KIND="xcode"
 export RELEASE_XCODE_PROJECT="MacDring.xcodeproj"
 export RELEASE_XCODE_SCHEME="MacDring"
