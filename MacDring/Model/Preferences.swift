@@ -35,6 +35,7 @@ final class Preferences: ObservableObject {
         static let animationMs = 140.0
         static let tabWindowLevel = TabWindowLevel.floating
         static let disconnectPolicy = DisconnectPolicy.park
+        static let freshDirectScan = false
     }
 
     private enum Key {
@@ -56,6 +57,7 @@ final class Preferences: ObservableObject {
         static let animationMs = "animationMs"
         static let tabWindowLevel = "tabWindowLevel"
         static let disconnectPolicy = "disconnectPolicy"
+        static let freshDirectScan = "freshDirectScan"
         static let launchAtLogin = "launchAtLogin"
     }
 
@@ -149,6 +151,16 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(disconnectPolicy.rawValue, forKey: Key.disconnectPolicy) }
     }
 
+    /// Opt-in: Fresh tabs also read Downloads/Desktop/Documents straight from the
+    /// filesystem — in addition to Spotlight — so they keep working on Macs where
+    /// Spotlight is off, still indexing, or excludes those folders. Off by default
+    /// because the direct read triggers macOS's one-time folder-access consent
+    /// prompts, which the default Spotlight-only pipeline never does (FB1 / PR #61);
+    /// turning it on is the user explicitly accepting them.
+    @Published var freshDirectScan: Bool {
+        didSet { defaults.set(freshDirectScan, forKey: Key.freshDirectScan) }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet {
             guard !isSyncingLaunchAtLogin else { return }
@@ -184,6 +196,7 @@ final class Preferences: ObservableObject {
         animationMs = Self.clamp(defaults.object(forKey: Key.animationMs) as? Double ?? Default.animationMs, 0, 300, Default.animationMs)
         tabWindowLevel = TabWindowLevel(rawValue: defaults.string(forKey: Key.tabWindowLevel) ?? "") ?? Default.tabWindowLevel
         disconnectPolicy = DisconnectPolicy(rawValue: defaults.string(forKey: Key.disconnectPolicy) ?? "") ?? Default.disconnectPolicy
+        freshDirectScan = defaults.object(forKey: Key.freshDirectScan) as? Bool ?? Default.freshDirectScan
 
         launchAtLogin = Self.systemLaunchAtLoginEnabled()
             ?? (defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false)

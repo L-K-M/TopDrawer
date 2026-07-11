@@ -4,12 +4,19 @@ import Foundation
 /// **Date Added** (`addedToDirectoryDateKey` — the very attribute Finder shows as
 /// "Date Added" and that Spotlight mirrors as `kMDItemDateAdded`).
 ///
-/// **Not used by the live Fresh tab.** Listing `~/Downloads`, `~/Desktop`, or
-/// `~/Documents` directly trips macOS's folder-access (TCC) consent dialogs —
-/// breaking the app's no-permission promise (FB1 / PR #61) — so the Fresh
-/// pipeline is Spotlight-only (index reads never prompt). This stays as tested pure
-/// logic for a possible future *opt-in* "works without Spotlight" mode that would
-/// own the prompt explicitly.
+/// **Opt-in only.** Listing `~/Downloads`, `~/Desktop`, or `~/Documents` directly
+/// trips macOS's one-time folder-access (TCC) consent dialogs, so the default Fresh
+/// pipeline is Spotlight-only — index reads never prompt (FB1 / PR #61). But
+/// Spotlight isn't reliable on every Mac (off, still indexing, or excluding the
+/// landing zones), so `Preferences.freshDirectScan` (Settings → General) adds this
+/// scan back **in addition to** the Spotlight query: it seeds the drawer instantly
+/// and backs the pill dot, and `FreshLister.merge` folds the two listings together.
+/// The toggle owns the prompts explicitly — flipping it on fires them right there
+/// (`promptForAccess`), never as a surprise at launch.
+///
+/// Shallow by design: it scans the **top level** of each scope (where downloads,
+/// copies, and screenshots actually land), which keeps it synchronous and bounded.
+/// Files saved deep inside sub-folders are left to Spotlight.
 enum FreshScanner {
     /// How far back a file still counts as "fresh". Matches `SpotlightQuery.Mode`'s
     /// `dateAdded` window so the direct scan and the Spotlight query agree on the cutoff.
@@ -40,6 +47,18 @@ enum FreshScanner {
             }
         }
         return Array(out.sorted { $0.date > $1.date }.prefix(limit))
+    }
+
+    /// Surfaces the landing zones' one-time folder-access (TCC) consent prompts —
+    /// off the main thread, results discarded. Called when the direct-scan setting
+    /// is switched **on**, so the dialogs appear immediately, in response to the
+    /// very click that opted in — not at the next badge beat or drawer open, long
+    /// after the user has moved on. Folders already granted (or denied) don't
+    /// re-prompt; macOS remembers the answer per folder.
+    static func promptForAccess(scopes: [URL] = FreshLister.scopes()) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = results(scopes: scopes, limit: 1)
+        }
     }
 
     /// A file's "date added" to its folder, falling back to its creation then

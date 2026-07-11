@@ -128,7 +128,14 @@ Top Drawer needs **no special permissions** for its core features — launching 
 `NSWorkspace`, and optional hotkeys use Carbon (no Accessibility grant). It ships
 as a menu-bar agent (`LSUIElement`).
 
-The one exception is **Empty Trash**: it asks Finder to empty the Trash via Apple
-Events, so the first time you use it macOS prompts once to allow Top Drawer to control
-Finder (the app carries the `com.apple.security.automation.apple-events`
-entitlement). Declining just leaves the Trash as-is — nothing else needs it.
+Two optional features are the exception, and each asks only when you choose to use it:
+
+- **Empty Trash** asks Finder to empty the Trash via Apple Events, so the first time
+  you use it macOS prompts once to allow Top Drawer to control Finder (the app carries
+  the `com.apple.security.automation.apple-events` entitlement). Declining just leaves
+  the Trash as-is — nothing else needs it.
+- **Fresh tabs' direct folder check** (Settings → General, off by default) makes Fresh
+  tabs read Downloads, Desktop, and Documents themselves, in addition to the
+  permission-free Spotlight index — for Macs where Spotlight is off or unreliable.
+  Turning it on makes macOS ask once per folder for access; left off, Fresh tabs stay
+  Spotlight-only and never prompt.

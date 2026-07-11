@@ -37,6 +37,17 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(Preferences(defaults: defaults).revealAllConcealedTogether)
     }
 
+    func testFreshDirectScanDefaultsOffAndRoundTrips() {
+        // Off by default: the Fresh pipeline must stay Spotlight-only — and so
+        // prompt-free — until the user explicitly opts into the direct folder
+        // check (FB1 / PR #61).
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertFalse(prefs.freshDirectScan)
+
+        prefs.freshDirectScan = true
+        XCTAssertTrue(Preferences(defaults: defaults).freshDirectScan)
+    }
+
     func testDrawerTranslucencyBackingOpacityRunsTranslucentToSolid() {
         XCTAssertEqual(DrawerTranslucency.translucent.backingOpacity, 0)
         XCTAssertLessThan(DrawerTranslucency.translucent.backingOpacity, DrawerTranslucency.frosted.backingOpacity)

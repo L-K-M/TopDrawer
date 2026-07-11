@@ -52,15 +52,33 @@ spirit of the classic **Fresh**-style utilities.
 > The same columns appear on **Recents** (last-used date) and **folder** (modified date)
 > lists. Layout is a per-tab choice (Grid or List).
 
-### Spotlight-only, on purpose
+### Spotlight-only by default — direct check opt-in
 
-The Fresh tab is filled **entirely from the Spotlight index**. An earlier build also
-did a direct filesystem scan of the landing zones so the tab worked with Spotlight
-off — but listing `~/Downloads`, `~/Desktop`, or `~/Documents` directly trips macOS's
-folder-access consent dialogs, breaking the app's no-permission promise, so that path
-was retired (the scan survives as tested pure logic in `FreshScanner`, unused by the
-live app). The trade-off: with Spotlight disabled or the landing zones excluded from
-indexing, a Fresh tab shows nothing — and never asks for anything.
+By default the Fresh tab is filled **entirely from the Spotlight index**: index reads
+need no permission at all, so a default Fresh tab can never trigger macOS's
+folder-access consent dialogs — it shows nothing rather than ask for anything. The
+trade-off: on a Mac where Spotlight is off, still indexing, or told to skip the
+landing zones, that means it really shows nothing.
+
+Because Spotlight isn't reliable on every Mac, **Settings → General → Fresh tabs →
+"Also check Downloads, Desktop & Documents directly"** adds Top Drawer's own
+filesystem check of the landing zones **in addition to** Spotlight: `FreshScanner`
+reads the **top level** of each folder and ranks by the same Date-Added attribute,
+`FreshLister.merge` folds the two listings together (newest first, de-duplicated by
+location), and the direct read also seeds the drawer the instant it opens. So you get
+
+- **Spotlight off / unreliable** — the direct check alone fills the tab (anything
+  that lands at the top level of those folders; only files buried in their
+  sub-folders are missed),
+- **Spotlight on** — both, the index still contributing the deeper sub-folder hits,
+- **partly indexed** — their union.
+
+The direct read is what trips macOS's **one-time folder-access consent prompts**
+(one per folder), which is why it is **off by default** and why flipping the toggle
+on fires the prompts right there — an explicit opt-in that owns its consent moment,
+never a surprise at launch (FB1 / PR #61). The pill's "just landed" dot follows the
+same rule: Spotlight-only by default, with the direct scan joining in when opted
+in — either source lights it.
 
 ## How it works
 
@@ -69,8 +87,11 @@ The **system** part of both tabs is backed by Spotlight through a single small w
 `kMDItemLastUsedDate` (Recents · System) or `kMDItemDateAdded` (Fresh). Unlike the
 other listers it is **asynchronous** (Spotlight gathers over time), so it delivers
 its results through a completion once gathering finishes, and the controller resizes
-the open drawer to fit. The pure mapping into ordered, slotted `DrawerItem`s lives in
-`FreshLister` / `RecentsLister` and is unit-tested.
+the open drawer to fit. The Fresh tab additionally has `FreshScanner`, a synchronous
+direct-filesystem scan that backs it **without** Spotlight when the opt-in direct
+check is on (see above). The pure mapping into ordered, slotted `DrawerItem`s — and
+the merge of the scan with the Spotlight results — lives in `FreshLister` /
+`RecentsLister` and is unit-tested.
 
 Like the Network and Cloud tabs, the items are **transient**: nothing is written to
 `launcher.json`, and each item carries a plain `url` (no bookmark), so a closed tab
@@ -81,11 +102,14 @@ costs nothing and an open one reflects the current index.
 Spotlight is queried for the **index** only — file locations and dates — never file
 *contents*, and opening an item is the same user-initiated `NSWorkspace` open every
 other tab uses. So these tabs keep Top Drawer's no-scary-permissions promise: no Full
-Disk Access, no Accessibility, no global monitors, and no folder-access consent
-dialogs. The trade-off is that both see only what Spotlight indexes for you; anything
-it has been told to skip simply doesn't appear, and with Spotlight off the
-**Recents · System** source and the **Fresh** tab degrade to empty — quietly, without
-ever hitting a permission wall.
+Disk Access, no Accessibility, no global monitors, and — by default — no
+folder-access consent dialogs. The trade-off is that both see only what Spotlight
+indexes for you; anything it has been told to skip simply doesn't appear, and with
+Spotlight off the **Recents · System** source degrades to empty — quietly, without
+ever hitting a permission wall. A **Fresh** tab degrades the same way by default;
+the one exception is the opt-in direct check above, where the user has explicitly
+chosen to answer macOS's per-folder access prompts to keep Fresh working without
+Spotlight.
 
 ## Customizing an item's icon
 

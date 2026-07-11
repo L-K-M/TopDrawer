@@ -74,6 +74,19 @@ struct GeneralView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Fresh tabs") {
+                Toggle("Also check Downloads, Desktop & Documents directly", isOn: $preferences.freshDirectScan)
+                    .onChange(of: preferences.freshDirectScan) { enabled in
+                        // Fire the folder-access prompts now, in response to the very
+                        // click that opted in — not at the next badge beat or drawer
+                        // open, long after the user has moved on.
+                        if enabled { FreshScanner.promptForAccess() }
+                    }
+                Text("Fresh tabs normally list new arrivals from the Spotlight index only, which needs no permission at all — but finds nothing on Macs where Spotlight is off, still indexing, or set to skip those folders. This adds Top Drawer's own check of the three folders on top, so Fresh tabs work regardless. Turning it on makes macOS ask once per folder for access.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Multiple displays") {
                 Picker("When a tab's display is disconnected", selection: $preferences.disconnectPolicy) {
                     ForEach(DisconnectPolicy.allCases) { Text($0.displayName).tag($0) }

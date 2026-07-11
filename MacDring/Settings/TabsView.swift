@@ -347,7 +347,7 @@ private struct TabEditor: View {
 
             if currentTab.kind == .fresh {
                 Section("Fresh") {
-                    Text("The drawer lists files that recently arrived on this Mac — downloaded, copied, or saved into your Downloads, Desktop, or Documents — newest first, via Spotlight. Read-only; click one to open it. No special permission needed.")
+                    Text("The drawer lists files that recently arrived on this Mac — downloaded, copied, or saved into your Downloads, Desktop, or Documents — newest first, via Spotlight. Read-only; click one to open it. No special permission needed. If Spotlight is unreliable on this Mac, Settings → General can add a direct check of those folders too (macOS then asks once per folder).")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

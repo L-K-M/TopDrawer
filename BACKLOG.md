@@ -904,5 +904,5 @@ reconstructed from the citing sites:
 | ANALYSIS.md I5 | Trash count uses a home-`~/.Trash`-only, subdirectory-only metadata check | `TrashInspector.swift` |
 | ANALYSIS.md C2 | The activation-policy guard (`.accessory`/`.regular` switching) | `ActivationPolicy.swift` |
 | awesome.md B28 | Trash metadata count includes `.DS_Store` — **still open as R14** | `TrashInspector.swift` |
-| fable-is-awesome.md FB1 | Fresh tab TCC prompts; `FreshScanner` retired from the live path to Spotlight-only (PR #61), kept as tested pure logic for a future opt-in | `FreshScanner.swift`, `FreshLister.swift`, `TabController.swift`, `DrawerWindowController.swift` |
+| fable-is-awesome.md FB1 | Fresh tab TCC prompts; `FreshScanner` retired from the live path to Spotlight-only (PR #61), then restored behind the explicit opt-in `Preferences.freshDirectScan` (Settings → General) for Macs where Spotlight is unreliable | `FreshScanner.swift`, `FreshLister.swift`, `TabController.swift`, `DrawerWindowController.swift` |
 | fable-is-awesome.md FP1 | ItemView `.task` filesystem/icon I/O moved off the main thread (PR #65) | `ItemView.swift` |

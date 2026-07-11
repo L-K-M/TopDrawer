@@ -71,18 +71,20 @@ final class TabController {
     private let spotlight = SpotlightQuery()
     private struct SpotlightWatchKey: Equatable {
         enum Configuration: Equatable {
-            case fresh
+            case fresh(directScan: Bool)
             case recents(RecentsSource)
         }
 
         let tabID: UUID
         let configuration: Configuration
 
-        init?(tab: Tab) {
+        /// `preferences` folds the app-global direct-scan opt-in into a Fresh tab's
+        /// key, so toggling it counts as different work and restarts the lookup.
+        init?(tab: Tab, preferences: Preferences) {
             tabID = tab.id
             switch tab.kind {
             case .fresh:
-                configuration = .fresh
+                configuration = .fresh(directScan: preferences.freshDirectScan)
             case .recents where tab.recentsSource.includesSystem:
                 configuration = .recents(tab.recentsSource)
             default:
@@ -103,6 +105,12 @@ final class TabController {
     /// A dedicated Spotlight lookup for the Fresh pill dot, so the badge never
     /// competes with (or restarts) the open drawer's query.
     private let freshBadgeSpotlight = SpotlightQuery()
+    /// The per-source "did something just land" answers behind the Fresh pill dot:
+    /// Spotlight's, and — with the direct-scan opt-in — the filesystem's. The dot
+    /// shows their union (`applyFreshBadges`), so a broken Spotlight can't hold it
+    /// dark, and a file each source saw must age out before the dot fades.
+    private var freshBadgeSpotlightRecent = false
+    private var freshBadgeScannedRecent = false
 
     /// Observers for app launch/terminate, so application items show a live "running"
     /// dot. Torn down in `saveAndTeardown`.
@@ -341,7 +349,7 @@ final class TabController {
               let tab = store.tab(id: id),
               let screen = wc.currentScreen else { return }
         drawer.refresh(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen)
-        if let key = SpotlightWatchKey(tab: tab),
+        if let key = SpotlightWatchKey(tab: tab, preferences: preferences),
            spotlightWatchKey == key,
            let completed = completedSpotlightResult,
            completed.key == key,
@@ -1306,6 +1314,8 @@ final class TabController {
             freshBadgeTimer?.invalidate()
             freshBadgeTimer = nil
             freshBadgeSpotlight.cancel()
+            freshBadgeSpotlightRecent = false
+            freshBadgeScannedRecent = false
             return
         }
         guard freshBadgeTimer == nil else { return }   // armed — the timer drives the re-checks
@@ -1318,18 +1328,42 @@ final class TabController {
     }
 
     /// Lights every Fresh tab pill's dot when the newest item in the (shared) Fresh
-    /// scopes landed within `freshRecentWindow`. Asks **Spotlight** (index-only, so it
-    /// can never trigger a folder-access prompt — unlike a direct directory scan, see
-    /// FB1 / PR #61); one lookup covers all Fresh tabs.
+    /// scopes landed within `freshRecentWindow`. Asks **Spotlight** (index-only, so
+    /// the default can never trigger a folder-access prompt — unlike a direct
+    /// directory scan, see FB1 / PR #61) — and, with the direct-scan opt-in, the
+    /// filesystem too (off the main thread), so the dot keeps working where
+    /// Spotlight is off or unreliable. One pass covers all Fresh tabs; either
+    /// source lights the dot.
     private func refreshFreshBadges() {
-        let freshTabIDs = store.tabs.filter { $0.kind == .fresh }.map(\.id)
-        guard !freshTabIDs.isEmpty else { return }
+        guard store.tabs.contains(where: { $0.kind == .fresh }) else { return }
         let now = Date()
+        if preferences.freshDirectScan {
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let results = FreshScanner.results(scopes: FreshLister.scopes(),
+                                                   limit: FreshLister.limit, now: now)
+                let recent = results.contains { now.timeIntervalSince($0.date) <= Self.freshRecentWindow }
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.freshBadgeScannedRecent = recent
+                    self.applyFreshBadges()
+                }
+            }
+        } else {
+            freshBadgeScannedRecent = false   // opt-out mid-flight: a stale scan must not hold the dot
+        }
         freshBadgeSpotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(),
                                   limit: FreshLister.limit) { [weak self] results in
             guard let self else { return }
-            let recent = results.contains { now.timeIntervalSince($0.date) <= Self.freshRecentWindow }
-            for id in freshTabIDs { self.tabWindows[id]?.model.hasRecentArrival = recent }
+            self.freshBadgeSpotlightRecent = results.contains { now.timeIntervalSince($0.date) <= Self.freshRecentWindow }
+            self.applyFreshBadges()
+        }
+    }
+
+    /// Applies the union of the badge sources to every Fresh tab's pill dot.
+    private func applyFreshBadges() {
+        let recent = freshBadgeSpotlightRecent || freshBadgeScannedRecent
+        for tab in store.tabs where tab.kind == .fresh {
+            tabWindows[tab.id]?.model.hasRecentArrival = recent
         }
     }
 
@@ -1386,18 +1420,24 @@ final class TabController {
     private func updateSpotlightWatch() {
         guard let id = openTabID,
               let tab = store.tab(id: id),
-              let key = SpotlightWatchKey(tab: tab) else { stopSpotlightWatch(); return }
+              let key = SpotlightWatchKey(tab: tab, preferences: preferences) else { stopSpotlightWatch(); return }
         guard spotlightWatchKey != key else { return }
         completedSpotlightResult = nil
         spotlightWatchKey = key
 
         switch key.configuration {
-        case .fresh:
-            // Spotlight-only: reading the index can never trigger a folder-access
-            // (TCC) prompt, unlike a direct scan of ~/Downloads & co. — the reason
-            // the FreshScanner path was retired from the live app (FB1 / PR #61).
+        case .fresh(let directScan):
+            // Spotlight-only by default: reading the index can never trigger a
+            // folder-access (TCC) prompt, unlike a direct scan of ~/Downloads & co.
+            // (FB1 / PR #61). With the direct-scan opt-in — whose toggle owns those
+            // prompts — the landing zones are also read straight from the
+            // filesystem, so the tab works where Spotlight is off or unreliable,
+            // and the two listings merge (the index still adds sub-folder hits).
+            let scanned = directScan
+                ? FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
+                : []
             spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightResult(.fresh(FreshLister.items(from: results)), for: key)
+                self?.applySpotlightResult(.fresh(FreshLister.items(from: FreshLister.merge(scanned, results))), for: key)
             }
         case .recents:
             let home = FileManager.default.homeDirectoryForCurrentUser
@@ -1440,7 +1480,7 @@ final class TabController {
               openTabID == id,
               let wc = tabWindows[id],
               let tab = store.tab(id: id),
-              SpotlightWatchKey(tab: tab) == key,
+              SpotlightWatchKey(tab: tab, preferences: preferences) == key,
               let items = spotlightItems(from: result, for: key) else { return }
         completedSpotlightResult = (key, result)
         drawer.updateLiveItems(items.applyingIconStyles(from: tab.iconStyles))

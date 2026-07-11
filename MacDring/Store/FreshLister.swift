@@ -3,8 +3,10 @@ import Foundation
 /// Lists **newly arrived** files — recently downloaded, copied, or saved — for a
 /// `.fresh` tab, as transient `DrawerItem`s (never stored in the document; gathered
 /// live each time the drawer opens, like the other listers). The data comes from
-/// Spotlight via `SpotlightQuery` (ranked by `kMDItemDateAdded`); this is the pure
-/// part — turning those results into ordered, slotted drawer items.
+/// Spotlight via `SpotlightQuery` (ranked by `kMDItemDateAdded`) — joined, when the
+/// opt-in direct scan is on (`Preferences.freshDirectScan`), by `FreshScanner`'s
+/// filesystem read of the same zones; this is the pure part — turning those results
+/// into ordered, slotted drawer items.
 ///
 /// Named after the classic "Fresh"-style utilities that surface the file you just
 /// grabbed so you don't have to go hunting for where it landed.
@@ -28,10 +30,12 @@ enum FreshLister {
 
     /// Combines a direct filesystem scan (`FreshScanner`) with a Spotlight lookup —
     /// either of which may be empty — into one most-recently-added-first list,
-    /// de-duplicated by file URL. When the same file appears in both, the newer date
-    /// wins (they agree on Date Added, so this is just a tie-break). **Unused by the
-    /// live app** since the direct scan was retired (it triggered folder-access
-    /// prompts — FB1 / PR #61); kept, tested, for a future opt-in mode.
+    /// de-duplicated by file URL. This is what lets an opted-in Fresh tab
+    /// (`Preferences.freshDirectScan`) work with Spotlight **off** (the scan alone),
+    /// **on** (both, the index reaching deeper sub-folders), or only partly indexed
+    /// (their union); with the setting off — the prompt-free default (FB1 / PR #61) —
+    /// the scan side is simply empty. When the same file appears in both, the newer
+    /// date wins (they agree on Date Added, so this is just a tie-break).
     static func merge(_ scanned: [SpotlightQuery.Result], _ spotlight: [SpotlightQuery.Result]) -> [SpotlightQuery.Result] {
         var seen = Set<URL>()
         return (scanned + spotlight)

@@ -348,14 +348,24 @@ final class DrawerWindowController {
             model.folderURL = nil
         case .fresh:
             // Filled asynchronously by the controller's Spotlight watch (via
-            // `updateLiveItems`). Spotlight reads the index only, so it can never
-            // trigger a folder-access (TCC) prompt — the direct FreshScanner seed
-            // prompted for Downloads/Desktop/Documents and was retired (FB1 / PR #61). On a
-            // refresh of the already-open drawer (`preserveLiveNotes`), the current
-            // items stay put so the list doesn't blank out while a gather is running.
+            // `updateLiveItems`) — Spotlight reads the index only, so the default
+            // can never trigger a folder-access (TCC) prompt (FB1 / PR #61). With
+            // the opt-in direct scan on, a synchronous by-Date-Added read of the
+            // landing zones seeds the drawer the instant it opens — and keeps the
+            // tab working where Spotlight is off or unreliable; the watch then
+            // merges any deeper (sub-folder) Spotlight hits in. On a refresh of the
+            // already-open drawer (`preserveLiveNotes`), the current items stay put
+            // so the list doesn't blank out while a gather is running.
             if !preserveLiveNotes {
-                model.items = []
-                model.sparklingItemIDs = []
+                if preferences.freshDirectScan {
+                    model.items = FreshLister.items(from: FreshScanner.results(scopes: FreshLister.scopes(),
+                                                                               limit: FreshLister.limit))
+                        .applyingIconStyles(from: tab.iconStyles)
+                    model.sparklingItemIDs = sparkleIDs(for: model.items)
+                } else {
+                    model.items = []
+                    model.sparklingItemIDs = []
+                }
             }
             model.notes = ""
             model.folderURL = nil

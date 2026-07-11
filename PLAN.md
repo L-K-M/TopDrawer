@@ -411,7 +411,9 @@ Colors persist as hex via a reused **`ColorHex`** helper (`NSColor(hex:)` / `.he
 + SwiftUI `Color` bridging — lifted from Zap).
 
 **Settings window** (SwiftUI, opened from the menu bar) tabs:
-1. **General** — launch at login, open mode, animation, launch click, disconnect policy.
+1. **General** — launch at login, open mode, animation, launch click, disconnect
+   policy, and the Fresh tabs' opt-in direct folder check (off by default; the
+   Spotlight-only default never triggers folder-access prompts).
 2. **Appearance** — **tab style (modern / classic)**, material, default color, icon size,
    layout, radius, thickness. Side (left/right) tabs print their name vertically.
 3. **Tabs** — manage all tabs: list with color swatches, edge/screen pickers, per-tab
