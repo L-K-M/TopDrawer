@@ -317,7 +317,7 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 2.0.0;
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Top Drawer asks Finder to empty the Trash when you choose Empty Trash.";
 				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring;
@@ -342,7 +342,7 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 2.0.0;
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Top Drawer asks Finder to empty the Trash when you choose Empty Trash.";
 				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring;
@@ -359,7 +359,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDringTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -375,7 +375,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDringTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
