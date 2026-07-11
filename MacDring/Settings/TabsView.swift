@@ -89,7 +89,7 @@ struct TabsView: View {
     private func exportLayout() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "MacDring Layout.json"
+        panel.nameFieldStringValue = "Top Drawer Layout.json"
         panel.message = "Export your tabs and items as a JSON layout file"
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -109,7 +109,7 @@ struct TabsView: View {
         open.allowedContentTypes = [.json]
         open.canChooseFiles = true
         open.allowsMultipleSelection = false
-        open.message = "Choose a MacDring layout to import"
+        open.message = "Choose a Top Drawer layout to import"
         guard open.runModal() == .OK, let url = open.url, let data = try? Data(contentsOf: url) else { return }
 
         let confirm = NSAlert()
@@ -124,7 +124,7 @@ struct TabsView: View {
         } else {
             let error = NSAlert()
             error.messageText = "Couldn't import that file"
-            error.informativeText = "It doesn't look like a valid MacDring layout."
+            error.informativeText = "It doesn't look like a valid Top Drawer layout."
             error.runModal()
         }
     }
@@ -471,11 +471,11 @@ private struct TabEditor: View {
     private var recentsSourceHelp: String {
         switch currentTab.recentsSource {
         case .macDring:
-            return "Lists what you've opened from MacDring, most recent first. Clear them from the drawer's header."
+            return "Lists what you've opened from Top Drawer, most recent first. Clear them from the drawer's header."
         case .system:
             return "Lists documents you've recently opened anywhere — Finder or any app — read live from Spotlight. No special permission needed."
         case .both:
-            return "Merges what you've opened from MacDring with documents opened anywhere (Spotlight), most recent first."
+            return "Merges what you've opened from Top Drawer with documents opened anywhere (Spotlight), most recent first."
         }
     }
 

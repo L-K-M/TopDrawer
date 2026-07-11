@@ -1,5 +1,5 @@
 import XCTest
-@testable import MacDring
+@testable import Top Drawer
 
 final class RecentsStoreTests: XCTestCase {
 
@@ -26,7 +26,7 @@ final class RecentsStoreTests: XCTestCase {
         XCTAssertEqual(merged.first?.name, "new")
     }
 
-    // MARK: Merging sources (system Spotlight recents + MacDring history)
+    // MARK: Merging sources (system Spotlight recents + Top Drawer history)
 
     private func dated(_ name: String, _ path: String, _ offset: TimeInterval) -> RecentItem {
         RecentItem(url: URL(fileURLWithPath: path), kind: .file, name: name, date: Date(timeIntervalSinceNow: offset))

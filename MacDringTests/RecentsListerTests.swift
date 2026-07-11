@@ -1,5 +1,5 @@
 import XCTest
-@testable import MacDring
+@testable import Top Drawer
 
 final class RecentsListerTests: XCTestCase {
 
@@ -50,7 +50,7 @@ final class RecentsListerTests: XCTestCase {
         let s = store()
         s.record(RecentItem(url: URL(fileURLWithPath: "/a"), kind: .file, name: "a", date: Date()))
         // The system source is gathered asynchronously (Spotlight), so the synchronous
-        // listing is empty — MacDring's own history is *not* included.
+        // listing is empty — Top Drawer's own history is *not* included.
         XCTAssertTrue(RecentsLister.contents(of: recentsTab(source: .system), store: s).isEmpty)
     }
 

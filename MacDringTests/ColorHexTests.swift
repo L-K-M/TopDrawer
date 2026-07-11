@@ -1,6 +1,6 @@
 import XCTest
 import AppKit
-@testable import MacDring
+@testable import Top Drawer
 
 final class ColorHexTests: XCTestCase {
 

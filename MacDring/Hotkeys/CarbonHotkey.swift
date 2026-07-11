@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 
 /// A global hotkey registered via Carbon's `RegisterEventHotKey`. Carbon hotkeys
-/// need **no** Accessibility permission, which is why MacDring uses them for
+/// need **no** Accessibility permission, which is why Top Drawer uses them for
 /// optional per-tab triggers (see PLAN.md §10).
 final class CarbonHotkey {
 
@@ -81,7 +81,7 @@ final class CarbonHotkey {
         )
         guard registerStatus == noErr else {
             unregister()
-            NSLog("MacDring: failed to register Carbon hotkey \(identifier): status \(registerStatus)")
+            NSLog("Top Drawer: failed to register Carbon hotkey \(identifier): status \(registerStatus)")
             return false
         }
         return true

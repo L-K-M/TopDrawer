@@ -23,7 +23,7 @@ final class TabController {
     /// Specs Carbon already refused to register this session (a system-reserved combo
     /// or one another app owns). Cached so a reconcile doesn't re-attempt — and re-log
     /// — the same external failure on every store mutation. Conflicts with another
-    /// MacDring tab are detected before calling Carbon and are never cached here.
+    /// Top Drawer tab are detected before calling Carbon and are never cached here.
     private var failedHotkeySpecs: [UUID: HotkeySpec] = [:]
     private var openTabID: UUID?
     /// A new identity for every successful `openDrawer` call. It distinguishes a
@@ -214,7 +214,7 @@ final class TabController {
 
         // A blocked tab may precede its owner in `tabs`. By the end of the first pass
         // every changed/removed owner has released its old registration, so retry only
-        // known MacDring conflicts once. Keeping this as a bounded pass avoids a nested
+        // known Top Drawer conflicts once. Keeping this as a bounded pass avoids a nested
         // or re-entrant reconcile while still handling swaps and longer change cycles.
         for tab in internallyBlockedHotkeyTabs {
             registerHotkeyIfNeeded(for: tab)
@@ -903,7 +903,7 @@ final class TabController {
 
     // MARK: Hotkeys
 
-    /// Returns `true` only when another live MacDring registration owns the spec and
+    /// Returns `true` only when another live Top Drawer registration owns the spec and
     /// the caller should include the tab in the bounded second registration pass.
     @discardableResult
     private func registerHotkeyIfNeeded(for tab: Tab) -> Bool {
@@ -925,7 +925,7 @@ final class TabController {
         if failedHotkeySpecs[tab.id] == spec { return false }
         failedHotkeySpecs[tab.id] = nil
 
-        // Do not ask Carbon to confirm a conflict MacDring already owns. Besides avoiding
+        // Do not ask Carbon to confirm a conflict Top Drawer already owns. Besides avoiding
         // a misleading failure log, keeping this out of `failedHotkeySpecs` allows the
         // bounded pass above to retry as soon as the owner releases or changes the spec.
         if hotkeys.contains(where: { $0.key != tab.id && $0.value.spec == spec }) {
@@ -1414,7 +1414,7 @@ final class TabController {
         completedSpotlightResult = nil
     }
 
-    /// Materializes source-stable query results using the current MacDring history.
+    /// Materializes source-stable query results using the current Top Drawer history.
     /// Keeping history out of the cache means launches appear immediately and Clear
     /// cannot resurrect records captured by an earlier `.both` completion.
     private func spotlightItems(from result: SpotlightWatchResult,

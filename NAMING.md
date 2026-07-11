@@ -1,5 +1,12 @@
 # Naming: finding a better name than "MacDring"
 
+> **Decision (July 2026): the app is now Top Drawer.** The finalists were Top
+> Drawer and Corner Store; Corner Store was eliminated on clearance (existing
+> CornerStore apps on the App Store, plus the convenience-retail POS category
+> owning the phrase in search) and on accuracy (the app lives on edges, not
+> corners). Phase 1 of the rename — everything user-visible — is done; the
+> remaining machinery is listed at the bottom of this file.
+
 The current name has problems worth fixing:
 
 - **It doesn't say anything.** "Dring" reads as a typo or a doorbell sound; nothing
@@ -137,15 +144,40 @@ spirit of DragThing without borrowing its letters.
 Before committing to it: spend 10 minutes on a trademark screen (USPTO TESS /
 Swissreg) and grab a domain — `topdrawer.app` or a `get…`/`use…` variant.
 
-## What a rename touches (whenever one happens)
+## Rename status
 
-- `MacDring.xcodeproj` — project, targets, schemes, product name.
-- `PRODUCT_BUNDLE_IDENTIFIER` (`com.macdring.MacDring`) — **changing the bundle ID
-  resets user defaults, saved layouts, and Accessibility/permission grants**; the
-  migration needs to copy the old defaults domain and re-prompt gracefully, or the
-  bundle ID stays as-is under the new display name.
-- ~27 Swift files mention the name (mostly UI strings and comments), plus the
-  entitlements file, README, docs/, screenshots, and CI (`CICD.md`, scripts/).
-- The in-app updater: release asset names and the GitHub repo URL it polls.
-- GitHub repo rename (old URL redirects automatically) and the hotkey-owner
-  strings surfaced in conflict messages.
+### Phase 1 — done (this branch)
+
+- `CFBundleDisplayName` → "Top Drawer" (About panel, menu bar, Finder display).
+- `NSAppleEventsUsageDescription` and every user-facing string in the app —
+  menus ("Quit Top Drawer", "Top Drawer Settings…"), Settings, alerts, the
+  welcome note, export panel default filename, updater dialogs (`appName` is
+  display-only; assets are matched by extension, verified).
+- All source comments and log prefixes; README, AGENTS.md, docs/.
+
+### Deliberately unchanged, with reasons
+
+- **Bundle ID `com.macdring.MacDring`** — changing it resets user defaults,
+  saved layouts, and Automation/permission grants. Keep, or ship a migration.
+- **Application Support directory `MacDring/`** (`TabStore.defaultStoreURL`) —
+  renaming orphans every user's saved layout. Keep, or migrate on launch.
+- **Updater `repo: "MacDring"`** — must match the GitHub repo until it's renamed.
+- **Code identifiers** (`RecentsSource.macDring`, `includesMacDring`,
+  `MacDringMain`) — `.macDring` is a persisted raw value in saved documents;
+  the others aren't worth an unverifiable refactor. Rename only with Xcode.
+- **Frame autosave name `MacDringSettingsWindow`** — a defaults key.
+
+### Phase 2 — remaining machinery (needs a Mac + release dry-run)
+
+1. Rename the GitHub repo to `top-drawer` (old URLs redirect), then update the
+   updater's `repo:` and README links.
+2. Xcode: rename project/targets/schemes/folders, set `PRODUCT_NAME` to
+   "Top Drawer" and update both `TEST_HOST` paths in lockstep; build + test.
+3. CI/scripts: `APP_NAME`/`BUILD_APP_NAME`/`RELEASE_APP_NAME`, `PROJECT`,
+   `SCHEME` in `.github/workflows/*.yml`, `scripts/build.sh`, `scripts/release.sh`,
+   `CICD.md`. Old clients pick assets by extension, so renamed assets stay
+   installable — but keep release titles mentioning "formerly MacDring" once.
+4. New screenshot for the README; app icon (see the Edgeways icon sketches —
+   concept "open drawer with items" adapts directly to Top Drawer).
+5. Domain + trademark: `topdrawer.app` (or `get…`/`use…` variant), quick
+   USPTO/Swissreg screen.

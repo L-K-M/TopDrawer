@@ -341,7 +341,7 @@ final class DrawerWindowController {
             model.notes = ""
             model.folderURL = nil
         case .recents:
-            // MacDring's own history shows immediately; a `system`/`both` source folds
+            // Top Drawer's own history shows immediately; a `system`/`both` source folds
             // in the Spotlight recents asynchronously via `updateLiveItems`.
             model.items = RecentsLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
             model.notes = ""

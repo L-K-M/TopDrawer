@@ -20,7 +20,7 @@ enum DiskEjector {
             try NSWorkspace.shared.unmountAndEjectDevice(at: url)
             return true
         } catch {
-            NSLog("MacDring: couldn't eject \(url.lastPathComponent): \(error.localizedDescription)")
+            NSLog("Top Drawer: couldn't eject \(url.lastPathComponent): \(error.localizedDescription)")
             return false
         }
     }

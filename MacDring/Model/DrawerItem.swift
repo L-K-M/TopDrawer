@@ -77,7 +77,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
     }
 
     /// Decodes forward-compatibly: an unknown `kind` raw value (written by a
-    /// newer MacDring) degrades to `.file` — keeping the bookmark, URL, name,
+    /// newer Top Drawer) degrades to `.file` — keeping the bookmark, URL, name,
     /// and slot — rather than throwing, which would drop the item's whole tab
     /// (`Tab.items` used to decode all-or-nothing). A missing name falls back
     /// to the URL's. See `LenientDecoding`.

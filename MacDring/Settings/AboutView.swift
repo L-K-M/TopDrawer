@@ -14,7 +14,7 @@ struct AboutView: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
-            Text("MacDring").font(.largeTitle.bold())
+            Text("Top Drawer").font(.largeTitle.bold())
             Text(version).foregroundStyle(.secondary)
             Text("Screen-edge tabs that open drawers of your apps, files, and folders. A modern reimagining of the classic DragThing.")
                 .multilineTextAlignment(.center)

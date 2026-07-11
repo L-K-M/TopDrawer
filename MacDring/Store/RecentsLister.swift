@@ -2,15 +2,15 @@ import Foundation
 
 /// Lists the recently-opened targets for a `.recents` tab as transient `DrawerItem`s
 /// (never stored in the document — re-read live each time the drawer opens, like the
-/// other listers). A tab's `recentsSource` decides what's included: MacDring's own
+/// other listers). A tab's `recentsSource` decides what's included: Top Drawer's own
 /// launch history (`RecentsStore`), the system-wide recents read from Spotlight, or
 /// both merged. Click an item to re-open it.
 ///
-/// This file holds the **synchronous** part — MacDring's history. The system source
+/// This file holds the **synchronous** part — Top Drawer's history. The system source
 /// is gathered asynchronously by `SpotlightQuery` (see `TabController`), then folded
 /// in through `items(from:)` / `RecentsStore.deduplicatedByURL`.
 enum RecentsLister {
-    /// The synchronously-available items for the tab: MacDring's history when the
+    /// The synchronously-available items for the tab: Top Drawer's history when the
     /// source includes it, otherwise empty (the system part arrives async). Empty for
     /// a non-recents tab or when nothing has been opened yet.
     static func contents(of tab: Tab, store: RecentsStore = .shared) -> [DrawerItem] {

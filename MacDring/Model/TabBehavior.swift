@@ -49,7 +49,7 @@ struct TabBehavior: Codable, Equatable {
         openOnHover = try c.decodeIfPresent(Bool.self, forKey: .openOnHover) ?? false
         autoHide = try c.decodeIfPresent(Bool.self, forKey: .autoHide) ?? true
         keepOpenAfterLaunch = try c.decodeIfPresent(Bool.self, forKey: .keepOpenAfterLaunch) ?? false
-        // Lenient: a concealment mode added by a newer MacDring degrades to
+        // Lenient: a concealment mode added by a newer Top Drawer degrades to
         // `.never` instead of throwing the whole behavior (and with it the tab).
         concealment = c.decodeLenient(TabConcealment.self, forKey: .concealment, fallback: .never)
         // Older documents (no override keys) follow the global default — which, under

@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// The list of targets recently opened from MacDring — backs the `.recents` tab.
+/// The list of targets recently opened from Top Drawer — backs the `.recents` tab.
 /// App-global launch history (like `Preferences`), persisted to `UserDefaults` as
 /// JSON: most-recent-first, de-duplicated by URL, capped. `TabController` records a
 /// launch here; `RecentsLister` reads it.
@@ -42,7 +42,7 @@ final class RecentsStore: ObservableObject {
 
     /// Pure: orders a combined set of recents most-recent-first, drops older
     /// duplicates of the same URL, and caps to `limit`. Folds the system (Spotlight)
-    /// recents into MacDring's own history for the `.both` source.
+    /// recents into Top Drawer's own history for the `.both` source.
     static func deduplicatedByURL(_ items: [RecentItem], limit: Int) -> [RecentItem] {
         var seen = Set<URL>()
         let ordered = items.sorted { $0.date > $1.date }.filter { seen.insert($0.url).inserted }
@@ -55,7 +55,7 @@ final class RecentsStore: ObservableObject {
         do {
             defaults.set(try JSONEncoder().encode(items), forKey: RecentsStore.key)
         } catch {
-            NSLog("MacDring: couldn't save recent items: \(error.localizedDescription)")
+            NSLog("Top Drawer: couldn't save recent items: \(error.localizedDescription)")
         }
     }
 

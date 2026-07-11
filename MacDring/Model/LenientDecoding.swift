@@ -3,7 +3,7 @@ import Foundation
 extension KeyedDecodingContainer {
     /// Decodes a value leniently: a missing key, a `null`, or a value that fails
     /// to decode — most importantly an enum raw value written by a **newer**
-    /// MacDring — yields `fallback` instead of throwing.
+    /// Top Drawer — yields `fallback` instead of throwing.
     ///
     /// The tab model's enum-like fields grow regularly (`TabKind` alone has
     /// gained five cases since 1.0). A plain

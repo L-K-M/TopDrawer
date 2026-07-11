@@ -238,7 +238,7 @@ final class Preferences: ObservableObject {
             launchAtLoginError = nil
             defaults.set(enabled, forKey: Key.launchAtLogin)
         } catch {
-            NSLog("MacDring: failed to update launch-at-login: \(error.localizedDescription)")
+            NSLog("Top Drawer: failed to update launch-at-login: \(error.localizedDescription)")
             launchAtLoginError = error.localizedDescription
             isSyncingLaunchAtLogin = true
             launchAtLogin = Self.systemLaunchAtLoginEnabled() ?? !enabled

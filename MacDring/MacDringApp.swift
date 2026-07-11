@@ -2,7 +2,7 @@ import AppKit
 
 /// Program entry point.
 ///
-/// MacDring is a menu-bar agent (`LSUIElement`), so it runs as an `.accessory`
+/// Top Drawer is a menu-bar agent (`LSUIElement`), so it runs as an `.accessory`
 /// app with no Dock icon. A plain `NSApplication` lifecycle (rather than the
 /// SwiftUI `App` scene) keeps full control over the borderless tab/drawer panels
 /// on macOS 13+.

@@ -57,7 +57,7 @@ final class DrawerModel: ObservableObject {
     @Published var notesPreview = true
     /// The linked directory (for `.folder` tabs), used by "Open in Finder".
     @Published var folderURL: URL?
-    /// Whether the open `.recents` drawer has MacDring-owned history that the header
+    /// Whether the open `.recents` drawer has Top Drawer-owned history that the header
     /// clear button can actually remove. System Spotlight recents are read-only.
     @Published var canClearRecents = false
     /// Whether the live listing was capped (a folder with more than `FolderLister.limit`

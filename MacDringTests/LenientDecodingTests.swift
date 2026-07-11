@@ -1,7 +1,7 @@
 import XCTest
-@testable import MacDring
+@testable import Top Drawer
 
-/// Forward-compatibility: documents written by a **newer** MacDring (unknown
+/// Forward-compatibility: documents written by a **newer** Top Drawer (unknown
 /// enum raw values, unreadable items) must degrade gracefully instead of
 /// dropping tabs — a dropped tab is rewritten out of `launcher.json` by the
 /// next autosave, which is permanent data loss.

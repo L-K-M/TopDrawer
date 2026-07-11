@@ -84,7 +84,7 @@ enum ItemLauncher {
         case .application:
             openApplication(url) { error in
                 if let error {
-                    NSLog("MacDring: failed to launch \(url.lastPathComponent): \(error.localizedDescription)")
+                    NSLog("Top Drawer: failed to launch \(url.lastPathComponent): \(error.localizedDescription)")
                     relay.complete(.failure(.applicationOpenFailed(url, error)))
                 } else {
                     relay.complete(.success(url))
@@ -95,7 +95,7 @@ enum ItemLauncher {
             if openURL(url) {
                 relay.complete(.success(url))
             } else {
-                NSLog("MacDring: failed to open \(url.lastPathComponent)")
+                NSLog("Top Drawer: failed to open \(url.lastPathComponent)")
                 relay.complete(.failure(.workspaceOpenFailed(url)))
             }
         case .group:
@@ -116,7 +116,7 @@ enum ItemLauncher {
         configuration.activates = true
         NSWorkspace.shared.open(urls, withApplicationAt: appURL, configuration: configuration) { _, error in
             if let error {
-                NSLog("MacDring: open-with failed: \(error.localizedDescription)")
+                NSLog("Top Drawer: open-with failed: \(error.localizedDescription)")
             }
         }
     }

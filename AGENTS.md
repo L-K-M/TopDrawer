@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in the **MacDring** repository.
+Guidance for AI coding agents working in the **Top Drawer** repository.
 
-## What MacDring Is
+## What Top Drawer Is
 
-MacDring is a fast, modern reimagining of the classic **DragThing**: colored
+Top Drawer is a fast, modern reimagining of the classic **DragThing**: colored
 **tabs anchored to screen edges** that expand into **drawers** of apps, files,
 folders, and URLs. It is multi-monitor aware and restores tab positions stably
 across restarts. See `PLAN.md` for the full design, and `README.md` for the user
@@ -121,7 +121,7 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 - **When `xcodebuild` hangs** at the `clang -v -E -dM` probe (a known Xcode 26.5
   `SWBBuildService` deadlock — see `PLAN.md §12`), you can still: **type-check** the
   whole module with `xcrun --sdk macosx swiftc -typecheck -target arm64-apple-macos13.0
-  $(find MacDring -name '*.swift')`, and **regenerate the app icon** with `swift
+  $(find Top Drawer -name '*.swift')`, and **regenerate the app icon** with `swift
   Tools/GenerateAppIcon.swift` — both invoke the compiler directly and don't touch the
   wedged build service. Fix the build service with `sudo xcodebuild -runFirstLaunch`.
 

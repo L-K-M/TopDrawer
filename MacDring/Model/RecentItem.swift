@@ -1,7 +1,7 @@
 import Foundation
 
-/// A target recently opened from MacDring — the backing record for a `.recents` tab.
-/// Tracked by MacDring itself (every drawer launch) rather than the system's recent
+/// A target recently opened from Top Drawer — the backing record for a `.recents` tab.
+/// Tracked by Top Drawer itself (every drawer launch) rather than the system's recent
 /// items, so it needs no special permission and no deprecated `LSSharedFileList`.
 struct RecentItem: Codable, Equatable {
     /// The openable target (app/file/folder/cloud URL, or a web link).
@@ -19,7 +19,7 @@ struct RecentItem: Codable, Equatable {
 
     /// Decodes forward-compatibly, like `DrawerItem`: only the `url` — the part a
     /// record is useless without — may fail the element. A `kind` raw value written
-    /// by a newer MacDring degrades to `.file` instead of throwing, which would
+    /// by a newer Top Drawer degrades to `.file` instead of throwing, which would
     /// otherwise take the whole history down with it (see `RecentsStore.load`).
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

@@ -40,7 +40,7 @@ final class DisplayRegistry {
     }
 
     /// The deterministic primary display (the menu-bar display). `NSScreen.main`
-    /// follows keyboard/window focus, which can be a MacDring drawer panel.
+    /// follows keyboard/window focus, which can be a Top Drawer drawer panel.
     static var primaryScreen: NSScreen? {
         NSScreen.screens.first ?? NSScreen.main
     }

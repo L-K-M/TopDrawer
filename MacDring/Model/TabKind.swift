@@ -14,7 +14,7 @@ enum TabKind: String, Codable, CaseIterable, Identifiable {
     case network
     /// A live listing of the user's cloud-storage drives (iCloud, Dropbox, …).
     case cloud
-    /// A live listing of the targets recently opened from MacDring.
+    /// A live listing of the targets recently opened from Top Drawer.
     case recents
     /// A live listing of files that recently arrived on the Mac (downloaded, copied,
     /// or saved) — the "Fresh" pile, ranked by date added.

@@ -9,7 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let registry = DisplayRegistry()
     private lazy var controller = TabController(store: store, preferences: preferences, registry: registry)
     private let updateChecker = UpdateChecker(
-        configuration: .init(owner: "L-K-M", repo: "MacDring", appName: "MacDring")
+        // `repo` is the GitHub repository name, not the product name — it stays
+        // "MacDring" until the repository itself is renamed.
+        configuration: .init(owner: "L-K-M", repo: "MacDring", appName: "Top Drawer")
     )
     private lazy var settingsWindow = SettingsWindowController(preferences: preferences, store: store, registry: registry, updateChecker: updateChecker)
     private lazy var newTabWindow = NewTabWindowController(preferences: preferences, store: store, registry: registry)
@@ -63,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Quit MacDring", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Top Drawer", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
 
@@ -151,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let settingsItem = NSMenuItem(title: "MacDring Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: "Top Drawer Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
@@ -168,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit MacDring", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Top Drawer", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -280,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Just a normal tab: rename it, restyle it, or delete it like any other.
     private func welcomeTab(displayUUID: String) -> Tab {
         let notes = """
-        # Welcome to MacDring 👋
+        # Welcome to Top Drawer 👋
 
         Five things to try:
 

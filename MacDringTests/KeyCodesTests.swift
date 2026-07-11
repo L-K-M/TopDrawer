@@ -1,6 +1,6 @@
 import XCTest
 import Carbon.HIToolbox
-@testable import MacDring
+@testable import Top Drawer
 
 final class KeyCodesTests: XCTestCase {
 

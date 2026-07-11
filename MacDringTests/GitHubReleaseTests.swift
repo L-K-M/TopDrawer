@@ -1,5 +1,5 @@
 import XCTest
-@testable import MacDring
+@testable import Top Drawer
 
 final class GitHubReleaseTests: XCTestCase {
 
@@ -13,7 +13,7 @@ final class GitHubReleaseTests: XCTestCase {
         let release = try decode("""
         {
           "tag_name": "v1.3.0",
-          "name": "MacDring 1.3.0",
+          "name": "Top Drawer 1.3.0",
           "body": "- Fixed a thing\\n- Added another",
           "html_url": "https://github.com/L-K-M/MacDring/releases/tag/v1.3.0",
           "prerelease": false,
@@ -21,7 +21,7 @@ final class GitHubReleaseTests: XCTestCase {
           "published_at": "2026-05-01T12:00:00Z",
           "assets": [
             {
-              "name": "MacDring.dmg",
+              "name": "Top Drawer.dmg",
               "content_type": "application/x-apple-diskimage",
               "size": 1048576,
               "browser_download_url": "https://github.com/L-K-M/MacDring/releases/download/v1.3.0/MacDring.dmg"
@@ -35,8 +35,8 @@ final class GitHubReleaseTests: XCTestCase {
         XCTAssertFalse(release.prerelease)
         XCTAssertEqual(release.htmlURL.absoluteString, "https://github.com/L-K-M/MacDring/releases/tag/v1.3.0")
         XCTAssertEqual(release.assets.count, 1)
-        XCTAssertEqual(release.assets.first?.name, "MacDring.dmg")
-        XCTAssertEqual(release.assets.first?.browserDownloadURL.lastPathComponent, "MacDring.dmg")
+        XCTAssertEqual(release.assets.first?.name, "Top Drawer.dmg")
+        XCTAssertEqual(release.assets.first?.browserDownloadURL.lastPathComponent, "Top Drawer.dmg")
         XCTAssertNotNil(release.publishedAt)
     }
 

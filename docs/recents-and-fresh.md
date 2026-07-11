@@ -17,7 +17,7 @@ first. It has a per-tab **Source** (Settings → Tabs → *Source*):
 
 | Source | What it lists |
 |---|---|
-| **MacDring** (default) | Only what you've opened *from MacDring* — its own launch log, kept in `UserDefaults`. This is the original behavior; existing tabs keep it. |
+| **Top Drawer** (default) | Only what you've opened *from Top Drawer* — its own launch log, kept in `UserDefaults`. This is the original behavior; existing tabs keep it. |
 | **System** | Documents you've recently opened **anywhere** — double-clicked in Finder, opened in any app — read live from Spotlight (`kMDItemLastUsedDate`). |
 | **Both** | The two, merged most-recent-first and de-duplicated by location. |
 
@@ -25,9 +25,9 @@ first. It has a per-tab **Source** (Settings → Tabs → *Source*):
 |---|---|
 | **Item kind** | the target's own kind (app / file / folder / link) |
 | **Click** | re-open the target |
-| **Header** | **Clear** empties MacDring's own history (the System part is the live Spotlight index and isn't MacDring's to clear) |
+| **Header** | **Clear** empties Top Drawer's own history (the System part is the live Spotlight index and isn't Top Drawer's to clear) |
 
-The **MacDring** part shows instantly; the **System** part is gathered asynchronously
+The **Top Drawer** part shows instantly; the **System** part is gathered asynchronously
 from Spotlight when the drawer opens and fills in a moment later.
 
 ## Fresh tab
@@ -80,7 +80,7 @@ costs nothing and an open one reflects the current index.
 
 Spotlight is queried for the **index** only — file locations and dates — never file
 *contents*, and opening an item is the same user-initiated `NSWorkspace` open every
-other tab uses. So these tabs keep MacDring's no-scary-permissions promise: no Full
+other tab uses. So these tabs keep Top Drawer's no-scary-permissions promise: no Full
 Disk Access, no Accessibility, no global monitors, and no folder-access consent
 dialogs. The trade-off is that both see only what Spotlight indexes for you; anything
 it has been told to skip simply doesn't appear, and with Spotlight off the

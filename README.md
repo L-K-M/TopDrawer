@@ -1,4 +1,4 @@
-# MacDring
+# Top Drawer
 
 Screen-edge tabs that open drawers of your apps, files, folders, and links. Inspired by the classic **[DragThing](https://www.dragthing.com/)**.
 
@@ -12,7 +12,7 @@ Works across multiple monitors, and your tabs return to exactly where you left
 them after a restart.
 
 > [!IMPORTANT]
-> LLM Disclosure: MacDring was built with substantial help from large language models — primarily Anthropic's Claude, via Claude Code. Much of the code arrived through AI-authored commits and `claude/*` pull-request branches, with agent guidance kept in [`AGENTS.md`](AGENTS.md)
+> LLM Disclosure: Top Drawer was built with substantial help from large language models — primarily Anthropic's Claude, via Claude Code. Much of the code arrived through AI-authored commits and `claude/*` pull-request branches, with agent guidance kept in [`AGENTS.md`](AGENTS.md)
 
 ## Features
 
@@ -23,7 +23,7 @@ them after a restart.
   (a live, read-only view of a directory's contents), a **disks** tab (your mounted
   ejectable volumes), a **network** tab (your mounted network shares), a **cloud** tab
   (your cloud drives — iCloud, Dropbox, …), a **recents** tab (what you've recently
-  opened — from MacDring, the whole Mac via Spotlight, or both), and a **fresh** tab
+  opened — from Top Drawer, the whole Mac via Spotlight, or both), and a **fresh** tab
   (files that just arrived — downloads, copies, saves). See the docs for the
   [network & cloud](docs/network-and-cloud-drives.md) and
   [recents & fresh](docs/recents-and-fresh.md) tabs.
@@ -84,7 +84,7 @@ For day-to-day development, open `MacDring.xcodeproj` in Xcode and run.
 
 ## Usage
 
-1. Launch MacDring — it appears as a sidebar icon in the menu bar, and a starter
+1. Launch Top Drawer — it appears as a sidebar icon in the menu bar, and a starter
    **Apps** tab appears on the right edge of your main display.
 2. **Click the tab** to open its drawer; click an item to launch it.
 3. **Drag files or apps** from Finder onto a tab to add them.
@@ -94,11 +94,11 @@ For day-to-day development, open `MacDring.xcodeproj` in Xcode and run.
    SF Symbol icon.
 5. Use the menu bar → **New Items / Notes / Folder / Disks / Network / Cloud /
    Recents / Fresh Tab…** to add more (a small dialog sets the name, color, type, and
-   folder), or **MacDring Settings…** to manage everything. A **Disks** tab lists your
+   folder), or **Top Drawer Settings…** to manage everything. A **Disks** tab lists your
    mounted ejectable volumes; a **Network** tab lists your mounted network shares (click
    to open, eject from the menu); a **Cloud** tab lists your cloud drives such as iCloud
    Drive and Dropbox (click to open); a **Recents** tab lists what you've recently
-   opened — from MacDring, from the whole Mac via Spotlight, or both (Settings → Tabs →
+   opened — from Top Drawer, from the whole Mac via Spotlight, or both (Settings → Tabs →
    *Source*); a **Fresh** tab lists files that just arrived (downloads, copies, saves).
    See [network & cloud](docs/network-and-cloud-drives.md) and
    [recents & fresh](docs/recents-and-fresh.md).
@@ -124,11 +124,11 @@ For day-to-day development, open `MacDring.xcodeproj` in Xcode and run.
 
 ## Permissions & Distribution
 
-MacDring needs **no special permissions** for its core features — launching uses
+Top Drawer needs **no special permissions** for its core features — launching uses
 `NSWorkspace`, and optional hotkeys use Carbon (no Accessibility grant). It ships
 as a menu-bar agent (`LSUIElement`).
 
 The one exception is **Empty Trash**: it asks Finder to empty the Trash via Apple
-Events, so the first time you use it macOS prompts once to allow MacDring to control
+Events, so the first time you use it macOS prompts once to allow Top Drawer to control
 Finder (the app carries the `com.apple.security.automation.apple-events`
 entitlement). Declining just leaves the Trash as-is — nothing else needs it.

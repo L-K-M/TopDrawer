@@ -32,7 +32,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             hosting.sizingOptions = [.minSize]
 
             let window = NSWindow(contentViewController: hosting)
-            window.title = "MacDring Settings"
+            window.title = "Top Drawer Settings"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.setContentSize(NSSize(width: 580, height: 540))
             window.isReleasedWhenClosed = false

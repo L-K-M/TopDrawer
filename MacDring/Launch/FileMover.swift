@@ -33,7 +33,7 @@ enum FileMover {
                 moves.append(Move(from: url, to: destination))
             } catch {
                 allSucceeded = false
-                NSLog("MacDring: couldn't move \(url.lastPathComponent): \(error.localizedDescription)")
+                NSLog("Top Drawer: couldn't move \(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
         return (moves, allSucceeded)
@@ -51,7 +51,7 @@ enum FileMover {
                 try fileManager.moveItem(at: move.to, to: move.from)
             } catch {
                 allSucceeded = false
-                NSLog("MacDring: couldn't undo move of \(move.to.lastPathComponent): \(error.localizedDescription)")
+                NSLog("Top Drawer: couldn't undo move of \(move.to.lastPathComponent): \(error.localizedDescription)")
             }
         }
         return allSucceeded
@@ -73,7 +73,7 @@ enum FileMover {
                 try trashItem(url)
             } catch {
                 allSucceeded = false
-                NSLog("MacDring: couldn't trash \(url.lastPathComponent): \(error.localizedDescription)")
+                NSLog("Top Drawer: couldn't trash \(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
         return allSucceeded
@@ -90,7 +90,7 @@ enum FileMover {
         var error: NSDictionary?
         script.executeAndReturnError(&error)
         if let error {
-            NSLog("MacDring: couldn't empty the Trash: \(error)")
+            NSLog("Top Drawer: couldn't empty the Trash: \(error)")
             return false
         }
         return true

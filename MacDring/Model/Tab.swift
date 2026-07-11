@@ -51,7 +51,7 @@ struct Tab: Codable, Identifiable, Equatable {
     var folderSort: FolderSort
     var folderShowsHidden: Bool
 
-    /// What a `.recents` tab includes: MacDring's own launch history, the system-wide
+    /// What a `.recents` tab includes: Top Drawer's own launch history, the system-wide
     /// Spotlight recents, or both. Default `.macDring` keeps the original behavior.
     var recentsSource: RecentsSource
 
@@ -105,7 +105,7 @@ struct Tab: Codable, Identifiable, Equatable {
 
     /// Decodes forward-compatibly: only `anchor` is allowed to fail the tab
     /// (a tab without a place on screen can't exist). Every enum-like field —
-    /// where a **newer** MacDring may have written a raw value this build
+    /// where a **newer** Top Drawer may have written a raw value this build
     /// doesn't know — degrades to its default via `decodeLenient` instead of
     /// throwing, and one unreadable item is dropped (`FailableDrawerItem`)
     /// rather than taking the whole tab — and, via `FailableTab` + the next

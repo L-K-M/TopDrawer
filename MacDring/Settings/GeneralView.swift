@@ -10,7 +10,7 @@ struct GeneralView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Launch MacDring at login", isOn: $preferences.launchAtLogin)
+                Toggle("Launch Top Drawer at login", isOn: $preferences.launchAtLogin)
                 if let error = preferences.launchAtLoginError {
                     Text("Couldn't update login item: \(error)")
                         .font(.caption)

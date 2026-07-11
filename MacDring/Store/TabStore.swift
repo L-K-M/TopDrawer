@@ -93,9 +93,9 @@ final class TabStore: ObservableObject {
             .appendingPathComponent("launcher.corrupt-\(formatter.string(from: Date())).json")
         do {
             try fileManager.moveItem(at: url, to: dest)
-            NSLog("MacDring: corrupt launcher document preserved at \(dest.lastPathComponent)")
+            NSLog("Top Drawer: corrupt launcher document preserved at \(dest.lastPathComponent)")
         } catch {
-            NSLog("MacDring: couldn't quarantine corrupt launcher document: \(error.localizedDescription)")
+            NSLog("Top Drawer: couldn't quarantine corrupt launcher document: \(error.localizedDescription)")
         }
     }
 
@@ -115,6 +115,8 @@ final class TabStore: ObservableObject {
                                          appropriateFor: nil,
                                          create: true))
             ?? fileManager.temporaryDirectory
+        // Legacy directory name from before the app was renamed to Top Drawer —
+        // changing it would orphan every existing user's saved layout.
         let dir = base.appendingPathComponent("MacDring", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("launcher.json")
@@ -125,16 +127,16 @@ final class TabStore: ObservableObject {
             let document = try JSONDecoder().decode(LauncherDocument.self, from: data)
             guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let rawTabs = root["tabs"] as? [Any] else {
-                NSLog("MacDring: launcher document is missing a tabs array")
+                NSLog("Top Drawer: launcher document is missing a tabs array")
                 return nil
             }
             if !rawTabs.isEmpty, document.tabs.isEmpty {
-                NSLog("MacDring: launcher document contained tabs but none could be decoded")
+                NSLog("Top Drawer: launcher document contained tabs but none could be decoded")
                 return nil
             }
             return document
         } catch {
-            NSLog("MacDring: couldn't decode launcher document: \(error)")
+            NSLog("Top Drawer: couldn't decode launcher document: \(error)")
             return nil
         }
     }
@@ -287,7 +289,7 @@ final class TabStore: ObservableObject {
     func importData(_ data: Data) -> Bool {
         guard let doc = TabStore.decode(data) else { return false }
         guard doc.version <= LauncherDocument.currentVersion else {
-            NSLog("MacDring: imported layout is version \(doc.version), newer than this build's \(LauncherDocument.currentVersion) — refusing import so newer data isn't downgraded")
+            NSLog("Top Drawer: imported layout is version \(doc.version), newer than this build's \(LauncherDocument.currentVersion) — refusing import so newer data isn't downgraded")
             return false
         }
         let normalized = TabStore.normalizingSlots(doc)
@@ -611,12 +613,12 @@ final class TabStore: ObservableObject {
     func saveNow() {
         saveWorkItem?.cancel()
         saveWorkItem = nil
-        // A document written by a newer MacDring (schema version above ours)
+        // A document written by a newer Top Drawer (schema version above ours)
         // must never be rewritten by this build: our encoder would silently
         // drop everything it doesn't know about. The in-memory session still
         // works; only persistence is disabled.
         guard document.version <= LauncherDocument.currentVersion else {
-            NSLog("MacDring: launcher document is version \(document.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
+            NSLog("Top Drawer: launcher document is version \(document.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
             return
         }
         do {
@@ -631,7 +633,7 @@ final class TabStore: ObservableObject {
                 try? previous.write(to: bakURL, options: .atomic)
             }
         } catch {
-            NSLog("MacDring: failed to save launcher document: \(error.localizedDescription)")
+            NSLog("Top Drawer: failed to save launcher document: \(error.localizedDescription)")
         }
     }
 }

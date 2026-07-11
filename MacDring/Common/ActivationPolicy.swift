@@ -1,10 +1,10 @@
 import AppKit
 
 extension NSApplication {
-    /// Reverts MacDring to its menu-bar agent policy (`.accessory`, no Dock icon),
+    /// Reverts Top Drawer to its menu-bar agent policy (`.accessory`, no Dock icon),
     /// **unless another ordinary window is still visible**.
     ///
-    /// MacDring is an `.accessory` app; it switches to `.regular` while a titled
+    /// Top Drawer is an `.accessory` app; it switches to `.regular` while a titled
     /// window (Settings / New Tab) is open so that window can take focus, and each
     /// such window calls this when it closes. The guard — ignore the window that's
     /// closing (`excluding`) and stay `.regular` if any other titled, main-capable

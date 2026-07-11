@@ -1,5 +1,5 @@
 import XCTest
-@testable import MacDring
+@testable import Top Drawer
 
 final class UpdateDownloaderTests: XCTestCase {
 
@@ -25,7 +25,7 @@ final class UpdateDownloaderTests: XCTestCase {
     }
 
     private func asset(url: String, size: Int) -> GitHubRelease.Asset {
-        GitHubRelease.Asset(name: "MacDring.dmg",
+        GitHubRelease.Asset(name: "Top Drawer.dmg",
                             contentType: "application/x-apple-diskimage",
                             size: size,
                             browserDownloadURL: URL(string: url)!)
@@ -80,16 +80,16 @@ final class UpdateDownloaderTests: XCTestCase {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
 
-        let first = UpdateDownloader.uniqueDestination(in: dir, fileName: "MacDring.dmg", fileManager: fm)
-        XCTAssertEqual(first.lastPathComponent, "MacDring.dmg")
+        let first = UpdateDownloader.uniqueDestination(in: dir, fileName: "Top Drawer.dmg", fileManager: fm)
+        XCTAssertEqual(first.lastPathComponent, "Top Drawer.dmg")
         XCTAssertTrue(fm.createFile(atPath: first.path, contents: Data()))
 
-        let second = UpdateDownloader.uniqueDestination(in: dir, fileName: "MacDring.dmg", fileManager: fm)
-        XCTAssertEqual(second.lastPathComponent, "MacDring-1.dmg")
+        let second = UpdateDownloader.uniqueDestination(in: dir, fileName: "Top Drawer.dmg", fileManager: fm)
+        XCTAssertEqual(second.lastPathComponent, "Top Drawer-1.dmg")
         XCTAssertTrue(fm.createFile(atPath: second.path, contents: Data()))
 
-        let third = UpdateDownloader.uniqueDestination(in: dir, fileName: "MacDring.dmg", fileManager: fm)
-        XCTAssertEqual(third.lastPathComponent, "MacDring-2.dmg")
+        let third = UpdateDownloader.uniqueDestination(in: dir, fileName: "Top Drawer.dmg", fileManager: fm)
+        XCTAssertEqual(third.lastPathComponent, "Top Drawer-2.dmg")
     }
 
     func testUniqueDestinationHandlesNameWithoutExtension() throws {
@@ -98,12 +98,12 @@ final class UpdateDownloaderTests: XCTestCase {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
 
-        let first = UpdateDownloader.uniqueDestination(in: dir, fileName: "MacDring", fileManager: fm)
-        XCTAssertEqual(first.lastPathComponent, "MacDring")
+        let first = UpdateDownloader.uniqueDestination(in: dir, fileName: "Top Drawer", fileManager: fm)
+        XCTAssertEqual(first.lastPathComponent, "Top Drawer")
         XCTAssertTrue(fm.createFile(atPath: first.path, contents: Data()))
 
-        let second = UpdateDownloader.uniqueDestination(in: dir, fileName: "MacDring", fileManager: fm)
-        XCTAssertEqual(second.lastPathComponent, "MacDring-1")
+        let second = UpdateDownloader.uniqueDestination(in: dir, fileName: "Top Drawer", fileManager: fm)
+        XCTAssertEqual(second.lastPathComponent, "Top Drawer-1")
     }
 
     func testUniqueDestinationSanitizesPathlikeNames() throws {
@@ -117,7 +117,7 @@ final class UpdateDownloaderTests: XCTestCase {
         // trailing slash that `dir` (built via `appendingPathComponent`) lacks, so a
         // direct URL equality would fail on the trailing-slash difference alone.
         XCTAssertEqual(nested.deletingLastPathComponent().path, dir.path)
-        XCTAssertEqual(nested.lastPathComponent, "MacDring.dmg")
+        XCTAssertEqual(nested.lastPathComponent, "Top Drawer.dmg")
 
         let empty = UpdateDownloader.uniqueDestination(in: dir, fileName: "   ", fileManager: fm)
         XCTAssertEqual(empty.lastPathComponent, "download")

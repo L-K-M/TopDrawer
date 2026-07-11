@@ -656,7 +656,7 @@ struct DrawerView: View {
             return "No cloud drives found."
         case .recents:
             // Source-agnostic: a System/Both tab shows this too (including the
-            // moment Spotlight is still gathering), so "from MacDring" would lie.
+            // moment Spotlight is still gathering), so "from Top Drawer" would lie.
             return "Nothing recently opened yet."
         case .fresh:
             return "No files have arrived recently."
