@@ -94,14 +94,17 @@ formal, harder to type.
 
 ## Other models' shortlists, vetted
 
-**GPT 5.6** (see `sol.md` §9) proposed coined portmanteaus: Drawledge, Brimfold,
-ScreenSill, Ledgelet, Railnook, Tabstead, Drawrail, Screenstead, Selvedge, Corner
-Store. Verified clean: Drawledge and Brimfold (nothing but a dormant blog and a
-knitting pattern). But the coinages mostly repeat MacDring's core flaw — invented
-mashups that mean nothing until explained — and the only existing use of
+**GPT 5.6** (the July 2026 review's naming pass) proposed coined portmanteaus:
+Drawledge, Brimfold, ScreenSill, Ledgelet, Railnook, Tabstead, Drawrail, Screenstead,
+Selvedge, Corner Store. Verified clean: Drawledge and Brimfold (nothing but a dormant
+blog and a knitting pattern). But the coinages mostly repeat MacDring's core flaw —
+invented mashups that mean nothing until explained — and the only existing use of
 "Drawledge" online is a *drawing* blog, confirming it misreads as a sketching app.
 Best of the list: **Drawledge** (with that caveat), **Brimfold** (clean but
-abstract), Corner Store (most human, but the app lives on edges, not corners).
+abstract), Corner Store (most human, but the app lives on edges, not corners). Its
+wider sweep had already rejected as crowded/colliding: Railnest, Tabloom, Brimlet,
+Tabinet, Edgeward, Sidefold, SideKeep, Railkeep, Tuckrail, Drawlet, Rimfold, Taboret,
+and Sidelatch.
 
 **GLM 5.2** proposed real words with physical imagery: Edgeways, Fringe,
 Verge/Brink, Tether, Latch, Sleeve, Tray, Holster, Cubby/Nook, Pier, Quay/Wharf,
