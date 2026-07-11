@@ -1,4 +1,4 @@
-# Top Drawer
+# <img src="docs/icon.png" width="48" alt="Top Drawer icon" align="top"> Top Drawer
 
 Screen-edge tabs that open drawers of your apps, files, folders, and links. Inspired by the classic **[DragThing](https://www.dragthing.com/)**. *(Formerly known as MacDring.)*
 

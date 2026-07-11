@@ -1,6 +1,6 @@
 # CI/CD
 
-MacDring is a Swift/Xcode macOS app. CI builds and tests the app on every change, and the release workflow produces an unsigned, ad-hoc-codesigned `.app` packaged as a `.zip` and `.dmg`, then publishes a GitHub Release.
+Top Drawer (repository: MacDring) is a Swift/Xcode macOS app. CI builds and tests the app on every change, and the release workflow produces an unsigned, ad-hoc-codesigned `.app` packaged as a `.zip` and `.dmg`, then publishes a GitHub Release.
 
 ## Workflows
 

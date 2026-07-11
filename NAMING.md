@@ -177,7 +177,9 @@ Swissreg) and grab a domain — `topdrawer.app` or a `get…`/`use…` variant.
    `SCHEME` in `.github/workflows/*.yml`, `scripts/build.sh`, `scripts/release.sh`,
    `CICD.md`. Old clients pick assets by extension, so renamed assets stay
    installable — but keep release titles mentioning "formerly MacDring" once.
-4. New screenshot for the README; app icon (see the Edgeways icon sketches —
-   concept "open drawer with items" adapts directly to Top Drawer).
+4. New screenshot for the README. ~~App icon~~ — **done**: the icon is now the
+   "open wooden drawer of glowing app tiles" artwork (`Tools/AppIcon-source.png`,
+   slots regenerated per `Tools/README.md`; the old programmatic generator was
+   removed).
 5. Domain + trademark: `topdrawer.app` (or `get…`/`use…` variant), quick
    USPTO/Swissreg screen.

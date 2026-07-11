@@ -43,12 +43,9 @@ xcodebuild -project MacDring.xcodeproj -scheme MacDring -destination 'platform=m
 Prefer building/running from Xcode during development so window behavior and the
 menu-bar item appear in a real GUI session.
 
-The app icon is generated (not hand-drawn). To regenerate it after changing the
-design, run:
-
-```bash
-swift Tools/GenerateAppIcon.swift MacDring/Resources/Assets.xcassets/AppIcon.appiconset
-```
+The app icon is derived from the master artwork `Tools/AppIcon-source.png`
+(an open wooden drawer of glowing app tiles). `Tools/README.md` documents how
+the `AppIcon.appiconset` slots are regenerated from it.
 
 ## Module Layout
 

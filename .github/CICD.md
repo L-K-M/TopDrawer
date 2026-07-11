@@ -1,6 +1,6 @@
-# CI/CD — building, testing & releasing MacDring
+# CI/CD — building, testing & releasing Top Drawer
 
-MacDring (and its sibling app **Zap**) ship via **GitHub Actions** on macOS runners.
+Top Drawer (and its sibling app **Zap**) ship via **GitHub Actions** on macOS runners.
 Two workflows do the work, and **neither needs any secrets or API keys**:
 
 | Workflow | Trigger | What it does |
@@ -115,5 +115,5 @@ Until then, none are needed.
   (it can't set a volume icon). `release.yml` tolerates it by checking the file exists.
 - **App won't launch on Apple Silicon** — it must be at least ad-hoc signed; the *Locate &
   ad-hoc sign* step handles this. A truly unsigned arm64 binary is killed by the kernel.
-- **Wrong Xcode** — bump `xcode-version` in both workflows together; keep MacDring and Zap on
+- **Wrong Xcode** — bump `xcode-version` in both workflows together; keep Top Drawer and Zap on
   the same version.

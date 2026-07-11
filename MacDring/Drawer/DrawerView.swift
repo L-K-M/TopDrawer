@@ -38,7 +38,7 @@ struct DrawerView: View {
     @FocusState private var focus: Field?
     private enum Field { case search, notes, groupName }
 
-    private let contentSpace = "macdring.drawer.content"
+    private let contentSpace = "topdrawer.drawer.content"
     private var columns: Int { PersistedLayoutBounds.clampedGridColumns(model.columns) }
     /// The items the grid/list currently shows: an open group's children, else the top
     /// level. Everything below (`maxSlot`, `rows`, slot lookup) works over this.

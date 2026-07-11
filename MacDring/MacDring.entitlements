@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Lets MacDring ask Finder (via Apple Events) to empty the Trash, the only
+	<!-- Lets Top Drawer ask Finder (via Apple Events) to empty the Trash, the only
 	     way to do so without Full Disk Access. Required under the hardened runtime;
 	     the user is still prompted once to allow controlling Finder. -->
 	<key>com.apple.security.automation.apple-events</key>
