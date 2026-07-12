@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Z.ai Code Review
         if: ${{ env.ZAI_API_KEY != '' }}
-        uses: tarmojussila/zai-code-review@v0.4.0
+        uses: L-K-M/zai-code-review@main
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
           ZAI_MODEL: glm-5.2
