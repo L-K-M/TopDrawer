@@ -216,7 +216,10 @@ final class DrawerWindowController {
     /// the visible full-screen Space, so it never appeared at all; ordering front
     /// alone shows it just like the always-working tab pill. Over full-screen the
     /// drawer is still mouse-interactive (the hosting view accepts the first mouse),
-    /// with keyboard focus arriving on the first click into it. See `ForeignFullScreen`.
+    /// with keyboard focus arriving on the first click into it. The choice is made
+    /// once, at open — the only moment the stranding bites — and is not re-evaluated
+    /// if the foreground Space or full-screen state changes while the drawer stays
+    /// open. See `ForeignFullScreen`.
     private func present(over screen: NSScreen) {
         panel.orderFrontRegardless()
         if !ForeignFullScreen.covers(screen) { panel.makeKey() }
