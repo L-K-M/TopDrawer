@@ -193,8 +193,7 @@ final class DrawerWindowController {
         if duration > 0 {
             panel.setFrame(EdgeLayout.nudgedDrawerFrame(edge: edge, openFrame: openFrame, by: Self.nudge), display: false)
             panel.alphaValue = 0
-            panel.orderFrontRegardless()
-            panel.makeKey()
+            present(over: screen)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = duration
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -204,10 +203,26 @@ final class DrawerWindowController {
         } else {
             panel.alphaValue = 1
             panel.setFrame(openFrame, display: true)
-            panel.orderFrontRegardless()
-            panel.makeKey()
+            present(over: screen)
         }
         isVisible = true
+    }
+
+    /// Orders the drawer to the front of its level without activating the app, then
+    /// takes key focus so its filter field, drag-to-reorder, and Esc work with no
+    /// prior click — **except** when opening over another app's native full-screen
+    /// Space, where the drawer stays non-key. Becoming key there would bind this
+    /// non-activating panel to our own (hidden) desktop Space and drop the drawer off
+    /// the visible full-screen Space, so it never appeared at all; ordering front
+    /// alone shows it just like the always-working tab pill. Over full-screen the
+    /// drawer is still mouse-interactive (the hosting view accepts the first mouse),
+    /// with keyboard focus arriving on the first click into it. The choice is made
+    /// once, at open — the only moment the stranding bites — and is not re-evaluated
+    /// if the foreground Space or full-screen state changes while the drawer stays
+    /// open. See `ForeignFullScreen`.
+    private func present(over screen: NSScreen) {
+        panel.orderFrontRegardless()
+        if !ForeignFullScreen.covers(screen) { panel.makeKey() }
     }
 
     /// Refreshes content for the currently shown tab (e.g. after a drop / reorder)

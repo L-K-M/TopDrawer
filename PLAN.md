@@ -764,8 +764,13 @@ MacDring/
 - **Display disconnect/reconnect & resolution change** — the core of §6; park tabs by
   UUID and restore exactly. Test: unplug/replug, change scaled resolution, swap main
   display, laptop clamshell.
-- **Fullscreen apps** cover edges — `.fullScreenAuxiliary` lets tabs show; offer
-  auto-hide so they don't obstruct fullscreen video.
+- **Fullscreen apps** cover edges — `.fullScreenAuxiliary` + `.canJoinAllSpaces` let a
+  tab *and its drawer* show over another app's fullscreen Space; offer auto-hide so they
+  don't obstruct fullscreen video. The drawer opens **non-key** over a foreign fullscreen
+  Space (`ForeignFullScreen`): taking key focus there would bind the non-activating panel
+  to our own hidden desktop Space and drop it off the visible Space (it looked absent), so
+  over fullscreen the drawer is mouse-interactive with keyboard focus arriving on the first
+  click in.
 - **macOS Dock collision** — if a tab shares the Dock's edge, `visibleFrame` already
   excludes the Dock; nudge and warn if a chosen position would sit under it.
 - **Spaces** — `.canJoinAllSpaces` + `.stationary` so tabs appear on every Space.
