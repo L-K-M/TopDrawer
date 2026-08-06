@@ -42,6 +42,11 @@ them after a restart.
 - **Running-app dot.** Application items show a small green dot when the app is
   running, updating live as apps launch and quit.
 - **Per-tab color, name, and glyph** (SF Symbol or letters).
+- **Shared app icons.** With **[Pict](https://github.com/L-K-M/Pict)** installed,
+  right-click an app → *Change …'s Icon Everywhere…* sets that app's icon once and
+  [Zap](https://github.com/L-K-M/Zap) and [Jetty](https://github.com/L-K-M/Jetty)
+  draw it too. Top Drawer also shows an app's real, un-masked artwork instead of
+  macOS 26's grey squircle plate.
 - **Custom item icons.** Right-click any item → *Customize Icon…* to give it a
   colored **folder** or **rounded tile** with an SF Symbol burned in (or pick an
   image file). Works on every tab — see [the docs](docs/custom-icons.md).

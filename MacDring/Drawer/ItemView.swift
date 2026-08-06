@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import PictKit
 
 /// One launchable entry inside a drawer — icon + label, with a context menu and
 /// single/double-click launch. Broken items (missing target) render dimmed.
@@ -107,6 +108,23 @@ struct ItemView: View {
                     if let onChangeIcon { Button("Change Icon…", action: onChangeIcon) }
                     if (item.customIconBookmark != nil || item.iconStyle != nil), let onResetIcon {
                         Button("Reset Icon", action: onResetIcon)
+                    }
+                    // Two verbs, named for their scope. The ones above change *this
+                    // item*; this changes *the app*, everywhere — Zap's switcher and
+                    // Jetty's dock included. A change with reach the user didn't ask
+                    // for is the failure mode worth designing against, so the reach
+                    // is written on the button.
+                    if let target = TopDrawerIcons.target(for: item) {
+                        Divider()
+                        if PictURL.installedAppURL() != nil {
+                            Button("Change \(item.displayName)'s Icon Everywhere…") {
+                                PictURL.open(selecting: target)
+                            }
+                        } else {
+                            Button("Get Pict to Change Icons Everywhere…") {
+                                if let url = PictURL.homepage { NSWorkspace.shared.open(url) }
+                            }
+                        }
                     }
                 }
                 if let onUngroup, !item.isGroup {
@@ -448,6 +466,13 @@ struct ItemView: View {
         }
         if BookmarkResolver.isBroken(item) {
             return symbol("exclamationmark.triangle")
+        }
+        // The shared store, then the target's own un-masked artwork — both from
+        // PictKit, both beneath the item's own overrides above. A dictionary lookup;
+        // a miss returns nil and warms in the background, so a drawer never waits.
+        if let target = TopDrawerIcons.target(for: item),
+           let shared = TopDrawerIcons.shared.icon(for: target) {
+            return shared
         }
         switch item.kind {
         case .url:

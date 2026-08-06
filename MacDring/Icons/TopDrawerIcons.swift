@@ -1,0 +1,105 @@
+import AppKit
+import PictKit
+
+/// Top Drawer's side of the shared icon store.
+///
+/// Drawers are full of app icons, and on macOS 26 `NSWorkspace.icon(forFile:)`
+/// hands back the squircle-masked composite for every one of them. Top Drawer draws
+/// its own slots, so it is no more obliged to show that than Zap's switcher is —
+/// and now that the store and the resolution ladder live in `PictKit`, it doesn't
+/// have to implement any of it either.
+///
+/// Deliberately small, and a mirror of Jetty's `JettyIcons`: Top Drawer has no
+/// icon-size slider, no ingestion and no search UI, so there is nothing here but
+/// the options a drawer wants, a watcher, and a way to ask whether Pict is around.
+final class TopDrawerIcons {
+
+    static let shared = TopDrawerIcons()
+
+    let store: IconStore
+    /// Thread-safe by construction — `IconResolver` guards its cache with a lock and
+    /// does its work on its own queue — so this type carries no actor isolation and
+    /// `icon(for:)` is callable from wherever an icon is needed, including the
+    /// static resolution helpers that draw a slot.
+    let resolver: IconResolver
+
+    /// Called when another app changes the store. `DrawerModel` re-lists so an icon
+    /// set in Pict shows up without closing and reopening the drawer.
+    var onStoreChanged: (() -> Void)?
+
+    private var watcher: IconStoreWatcher?
+    private var screenObserver: NSObjectProtocol?
+
+    private init(store: IconStore = IconStore()) {
+        self.store = store
+        // A drawer slot sits in a grid, so `bleed: 0`: free-form artwork spilling
+        // past its cell is the look Zap's switcher is after and the wrong one here,
+        // where slots are laid out on a fixed pitch and the neighbour is close. No
+        // baked shadow either — the drawer already has its own material behind it.
+        self.resolver = IconResolver(options: .plain(pointSize: Self.slotPointSize,
+                                                     scale: Self.backingScale()),
+                                     store: store)
+        watch()
+        watchScreens()
+    }
+
+    deinit {
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+    }
+
+    /// The largest a slot icon is drawn. One cache size rather than tracking a
+    /// setting, because Top Drawer has none — slot size comes from `DrawerMetrics`.
+    private static let slotPointSize: Double = 64
+
+    private static func backingScale() -> CGFloat {
+        NSScreen.screens.map(\.backingScaleFactor).max() ?? 2
+    }
+
+    /// The icon to draw for `target`, or `nil` to fall back to what the system says.
+    /// A dictionary lookup; a miss warms in the background and returns `nil`, so
+    /// nothing here can block a drawer opening.
+    func icon(for target: IconTarget) -> NSImage? {
+        resolver.icon(for: target)
+    }
+
+    /// How the shared store knows a drawer item.
+    ///
+    /// `nil` for the kinds that are not a thing on disk — the Trash, a group, a
+    /// broken bookmark — which have nothing for another app to agree with. Disks,
+    /// network shares and cloud folders *are* paths, and keying them here is what
+    /// lets a custom icon for a specific share survive a re-list in every app rather
+    /// than only in the tab that set it.
+    static func target(for item: DrawerItem) -> IconTarget? {
+        guard let url = BookmarkResolver.url(for: item) else { return nil }
+        switch item.kind {
+        case .application:
+            return .application(bundleURL: url, bundleIdentifier: Bundle(url: url)?.bundleIdentifier)
+        case .url:
+            return .link(url)
+        case .trash, .group:
+            return nil
+        default:
+            return .file(url)
+        }
+    }
+
+    private func watch() {
+        watcher = IconStoreWatcher(store: store) { [weak self] in
+            self?.resolver.invalidate()
+            self?.onStoreChanged?()
+        }
+        watcher?.start()
+    }
+
+    /// Plugging in a sharper display makes every cached icon too soft for it, and
+    /// nothing else here would notice. `update(_:)` compares before acting, so an
+    /// irrelevant display change costs a comparison.
+    private func watchScreens() {
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.resolver.update(.plain(pointSize: Self.slotPointSize,
+                                         scale: Self.backingScale()))
+        }
+    }
+}
