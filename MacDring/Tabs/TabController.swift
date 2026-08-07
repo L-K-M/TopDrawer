@@ -169,6 +169,13 @@ final class TabController {
         startTrashWatch()
         store.onChange = { [weak self] in self?.reconcile() }
         registry.onChange = { [weak self] in self?.reconcile() }
+        // An icon set in Pict (or Zap, or Jetty) has to reach an *open* drawer,
+        // not just the next one opened. Re-listing is enough: the items are
+        // unchanged, so this re-reads their artwork rather than rebuilding a tab.
+        // Already on the main queue — both sides that fire it hop there first.
+        TopDrawerIcons.shared.onIconsInvalidated = { [weak self] in
+            self?.refreshOpenDrawer()
+        }
         // A preference change reconciles every tab window (re-measure + reposition,
         // and re-list every folder tab). Dragging an appearance slider fires
         // `objectWillChange` continuously, so debounce to coalesce a burst into a

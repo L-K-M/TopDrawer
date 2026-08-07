@@ -23,9 +23,15 @@ final class TopDrawerIcons {
     /// static resolution helpers that draw a slot.
     let resolver: IconResolver
 
-    /// Called when another app changes the store. `DrawerModel` re-lists so an icon
-    /// set in Pict shows up without closing and reopening the drawer.
-    var onStoreChanged: (() -> Void)?
+    /// Called when what an open drawer is drawing has stopped being current, so it
+    /// can re-list. Set by `TabController`, which owns the open drawer.
+    ///
+    /// Fires for two reasons, which is why it is named for the effect rather than
+    /// the cause: another app wrote to the store, or a re-render finished and there
+    /// is now artwork to read that there wasn't a moment ago. Without the second, an
+    /// icon set in Pict would reach a *closed* drawer only — the re-list would run
+    /// while the resolver was still empty and draw the system icon.
+    var onIconsInvalidated: (() -> Void)?
 
     private var watcher: IconStoreWatcher?
     private var screenObserver: NSObjectProtocol?
@@ -41,6 +47,11 @@ final class TopDrawerIcons {
                                      store: store)
         watch()
         watchScreens()
+
+        // The other half of the store watcher — see `onIconsInvalidated`. Also what
+        // carries a display change through: `watchScreens` re-renders at the new
+        // scale, and this is what tells an open drawer the sharper artwork is there.
+        resolver.onIconsResolved = { [weak self] in self?.onIconsInvalidated?() }
     }
 
     deinit {
@@ -87,8 +98,12 @@ final class TopDrawerIcons {
 
     private func watch() {
         watcher = IconStoreWatcher(store: store) { [weak self] in
+            // Both, and in this order. `invalidate()` schedules the re-render; the
+            // hook re-lists now, which matters for an icon the user *removed* — that
+            // resolves to the system icon, lands no artwork, and so would never reach
+            // `onIconsResolved` to be corrected later.
             self?.resolver.invalidate()
-            self?.onStoreChanged?()
+            self?.onIconsInvalidated?()
         }
         watcher?.start()
     }
