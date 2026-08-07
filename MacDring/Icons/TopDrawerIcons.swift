@@ -71,15 +71,17 @@ final class TopDrawerIcons {
     /// than only in the tab that set it.
     static func target(for item: DrawerItem) -> IconTarget? {
         guard let url = BookmarkResolver.url(for: item) else { return nil }
+        // Exhaustive on purpose — no `default`. A new `ItemKind` should be a compile
+        // error here, not silently enrolled in a store three other apps read.
         switch item.kind {
         case .application:
             return .application(bundleURL: url, bundleIdentifier: Bundle(url: url)?.bundleIdentifier)
         case .url:
             return .link(url)
+        case .file, .folder, .disk, .cloud:
+            return .file(url)
         case .trash, .group:
             return nil
-        default:
-            return .file(url)
         }
     }
 
@@ -92,8 +94,12 @@ final class TopDrawerIcons {
     }
 
     /// Plugging in a sharper display makes every cached icon too soft for it, and
-    /// nothing else here would notice. `update(_:)` compares before acting, so an
-    /// irrelevant display change costs a comparison.
+    /// nothing else here would notice.
+    ///
+    /// No `invalidate()` after the update: `IconResolver.update(_:)` compares the
+    /// options and invalidates itself when they differ, so an irrelevant display
+    /// change costs a comparison and a real one re-renders exactly once. Calling
+    /// `invalidate()` here as well would drop the cache and re-warm it twice.
     private func watchScreens() {
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
