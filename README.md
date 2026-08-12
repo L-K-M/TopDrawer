@@ -14,6 +14,11 @@ them after a restart.
 > [!IMPORTANT]
 > LLM Disclosure: Top Drawer was built with substantial help from large language models — primarily Anthropic's Claude, via Claude Code. Much of the code arrived through AI-authored commits and `claude/*` pull-request branches, with agent guidance kept in [`AGENTS.md`](AGENTS.md)
 
+If you like this, also look at **[Zap](https://github.com/L-K-M/Zap)** (a ⌘-Tab
+switcher) and **[Jetty](https://github.com/L-K-M/Jetty)** (a Dock replacement). Set an
+app's icon once in **[Pict](https://github.com/L-K-M/Pict)** and Top Drawer, Zap, and
+Jetty all draw it.
+
 ## Features
 
 - **Edge tabs → drawers.** Colored tabs anchored to any screen edge; click (or
