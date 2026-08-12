@@ -87,6 +87,24 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 - Keep `EdgeLayout` **pure** (no global state, no AppKit beyond `CGGeometry`) so
   it stays unit-testable — it's the geometry backbone.
 
+## Dependencies
+
+Exactly one: [`PictKit`](https://github.com/L-K-M/Pict), a first-party SwiftPM
+package holding the shared icon store and resolution ladder that Zap, Jetty and
+the Pict editor also use. Top Drawer **reads** it and writes nothing — editing
+lives in Pict, which needs no permissions and can be sandboxed.
+
+Icon precedence in `ItemView.resolveIcon`, top rung first:
+
+1. the item's `customIconBookmark` (an image file) — unchanged
+2. the item's `iconStyle` (a generated folder/tile) — unchanged
+3. the shared store — an icon set in Pict, Zap or Jetty
+4. the target's own un-masked bundle artwork
+5. the kind-specific default (drive, cloud, favicon, Trash, `NSWorkspace`)
+
+Rungs 1 and 2 staying on top is what makes this invisible on upgrade, and it is
+also a feature: two items pointing at one app are allowed to differ.
+
 ## Critical Constraints
 
 - **No scary permissions for core features.** Launching uses `NSWorkspace`.
