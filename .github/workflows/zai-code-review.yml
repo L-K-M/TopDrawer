@@ -24,7 +24,7 @@ jobs:
   review:
     name: Review PR with GLM 5.2
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     # pull_request_target exposes repository secrets and a write-capable token.
     # Never run this privileged job for branches from untrusted forks.
     if: >-

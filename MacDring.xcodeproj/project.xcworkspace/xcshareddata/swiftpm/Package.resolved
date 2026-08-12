@@ -1,0 +1,15 @@
+{
+  "originHash" : "8237b3f39d48dec371e543cc7dc0ceac0bc0f2393ee43d80aec805901e5ff241",
+  "pins" : [
+    {
+      "identity" : "pict",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/L-K-M/Pict",
+      "state" : {
+        "branch" : "main",
+        "revision" : "bef686131407ad122109046254d727b567ef45ca"
+      }
+    }
+  ],
+  "version" : 3
+}
