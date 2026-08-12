@@ -16,7 +16,8 @@ them after a restart.
 
 If you like this, also look at **[Zap](https://github.com/L-K-M/Zap)** (a ⌘-Tab
 switcher) and **[Jetty](https://github.com/L-K-M/Jetty)** (a Dock replacement). Set an
-app's icon once in **[Pict](https://github.com/L-K-M/Pict)** and all three draw it.
+app's icon once in **[Pict](https://github.com/L-K-M/Pict)** and Top Drawer, Zap, and
+Jetty all draw it.
 
 ## Features
 
