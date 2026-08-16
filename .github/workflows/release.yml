@@ -126,3 +126,18 @@ jobs:
 
             - **Right-click** (or Control-click) the app → **Open** → **Open**, or
             - run `xattr -dr com.apple.quarantine "/Applications/${{ env.APP_NAME }}.app"`
+
+      # Never trust an upload: download what GitHub actually serves for the tag and
+      # byte-compare it against what was just built. A truncated or corrupt upload
+      # would otherwise ship silently — and the in-app updater offers these exact
+      # assets to every user.
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir "$RUNNER_TEMP/published"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published"
+          for f in "$ZIP" "$DMG"; do
+            cmp -- "$f" "$RUNNER_TEMP/published/$(basename "$f")" \
+              || { echo "::error::published $(basename "$f") differs from the built artifact"; exit 1; }
+          done
