@@ -10,6 +10,11 @@ on:
   # re-running CI no longer needs an empty commit.
   workflow_dispatch:
 
+# Least privilege: the build/test job only needs to read the repo. Uploading test
+# results uses the artifact API, which doesn't need extra token scopes.
+permissions:
+  contents: read
+
 # Cancel an in-progress run when a branch is pushed again.
 concurrency:
   group: ci-${{ github.ref }}
