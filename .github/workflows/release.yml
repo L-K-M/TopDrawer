@@ -23,10 +23,19 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to immutable commit SHAs: a mutable tag like @v4 can be
+      # repointed at tampered code after the fact, a commit SHA cannot. That matters
+      # doubly here — this workflow holds contents:write and produces the exact bytes
+      # the in-app updater ships to every user. Same pin-and-verify discipline
+      # zai-code-review.yml already uses.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Neither job runs git after checkout; don't leave the workflow's
+          # contents:write token sitting in .git/config for the whole build.
+          persist-credentials: false
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: '16.2'
 
@@ -52,10 +61,12 @@ jobs:
     timeout-minutes: 60
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # same rationale as the test job's checkout
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: '16.2'
 
@@ -106,7 +117,7 @@ jobs:
           echo "DMG=$DMG" >> "$GITHUB_ENV"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           name: ${{ env.APP_NAME }} ${{ env.VERSION }}
           files: |
@@ -121,3 +132,29 @@ jobs:
 
             - **Right-click** (or Control-click) the app → **Open** → **Open**, or
             - run `xattr -dr com.apple.quarantine "/Applications/${{ env.APP_NAME }}.app"`
+
+      # Never trust an upload: download what GitHub actually serves for the tag and
+      # byte-compare it against what was just built. A truncated or corrupt upload
+      # would otherwise ship silently — and the in-app updater offers these exact
+      # assets to every user.
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir "$RUNNER_TEMP/published"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published" \
+            --pattern "$(basename "$ZIP")" --pattern "$(basename "$DMG")"
+          failed=0
+          for f in "$ZIP" "$DMG"; do
+            if ! cmp -- "$f" "$RUNNER_TEMP/published/$(basename "$f")"; then
+              # The published copy provably differs from what was built: take it
+              # down before failing, so the in-app updater can't keep serving
+              # corrupt bytes while someone investigates. Keep checking, so a
+              # second bad asset is also caught and removed in the same run.
+              gh release delete-asset "$GITHUB_REF_NAME" "$(basename "$f")" -y \
+                || echo "::warning::failed to remove mismatched asset $(basename "$f") — take it down manually"
+              echo "::error::published $(basename "$f") differed from the built artifact and was removed"
+              failed=1
+            fi
+          done
+          [ "$failed" -eq 0 ] || exit 1
