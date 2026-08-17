@@ -35,6 +35,8 @@ jobs:
       # repointed at tampered code after the fact, a commit SHA cannot. Same
       # pin-and-verify discipline zai-code-review.yml already uses.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here runs git after checkout
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0

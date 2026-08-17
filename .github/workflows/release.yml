@@ -142,14 +142,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir "$RUNNER_TEMP/published"
-          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published" \
+            --pattern "$(basename "$ZIP")" --pattern "$(basename "$DMG")"
+          failed=0
           for f in "$ZIP" "$DMG"; do
             if ! cmp -- "$f" "$RUNNER_TEMP/published/$(basename "$f")"; then
               # The published copy provably differs from what was built: take it
               # down before failing, so the in-app updater can't keep serving
-              # corrupt bytes while someone investigates.
+              # corrupt bytes while someone investigates. Keep checking, so a
+              # second bad asset is also caught and removed in the same run.
               gh release delete-asset "$GITHUB_REF_NAME" "$(basename "$f")" -y || true
               echo "::error::published $(basename "$f") differed from the built artifact and was removed"
-              exit 1
+              failed=1
             fi
           done
+          [ "$failed" -eq 0 ] || exit 1
