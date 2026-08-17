@@ -29,6 +29,10 @@ jobs:
       # the in-app updater ships to every user. Same pin-and-verify discipline
       # zai-code-review.yml already uses.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Neither job runs git after checkout; don't leave the workflow's
+          # contents:write token sitting in .git/config for the whole build.
+          persist-credentials: false
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
@@ -58,6 +62,8 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # same rationale as the test job's checkout
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
@@ -138,6 +144,12 @@ jobs:
           mkdir "$RUNNER_TEMP/published"
           gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published"
           for f in "$ZIP" "$DMG"; do
-            cmp -- "$f" "$RUNNER_TEMP/published/$(basename "$f")" \
-              || { echo "::error::published $(basename "$f") differs from the built artifact"; exit 1; }
+            if ! cmp -- "$f" "$RUNNER_TEMP/published/$(basename "$f")"; then
+              # The published copy provably differs from what was built: take it
+              # down before failing, so the in-app updater can't keep serving
+              # corrupt bytes while someone investigates.
+              gh release delete-asset "$GITHUB_REF_NAME" "$(basename "$f")" -y || true
+              echo "::error::published $(basename "$f") differed from the built artifact and was removed"
+              exit 1
+            fi
           done
