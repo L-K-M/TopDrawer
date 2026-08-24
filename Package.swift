@@ -9,6 +9,12 @@ import PackageDescription
 // (LP-07 onward) more files join these lists until the whole module builds here;
 // SwiftPM warns that the not-yet-listed files are "unhandled", which is expected
 // and shrinks over time. See docs/linux-port/implementation-plan.md §LP-02.
+//
+// swift-tools-version 5.9 keeps these files in Swift 5 language mode, which matches
+// the Xcode project's SWIFT_VERSION = 5.0 — so both platforms compile the pure core
+// under the same language rules and the Linux CI is a faithful signal, neither
+// stricter nor looser than the Xcode build. Move both together if the project ever
+// adopts Swift 6 mode.
 
 // The pure-core files that compile on Linux today (all `Model/` except ColorHex
 // and Preferences — both AppKit/SwiftUI — plus the layout/search/update math).
