@@ -36,9 +36,9 @@ jobs:
       - name: Z.ai Code Review
         if: ${{ env.ZAI_API_KEY != '' }}
         # Pin privileged third-party actions to an immutable commit.
-        # 7ab5aaf = v0.0.11. Verify before bumping:
-        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.11^{}'
-        uses: L-K-M/zai-code-review@7ab5aafff29720d11502a1ccfdc442ad09634e24
+        # de35f1e = v0.0.12. Verify before bumping:
+        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.12^{}'
+        uses: L-K-M/zai-code-review@de35f1ea45de6cb7e59ea83c69503340f8c4906e
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
           ZAI_MODEL: glm-5.3
