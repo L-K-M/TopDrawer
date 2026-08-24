@@ -1,4 +1,4 @@
-name: GLM 5.2 PR Review
+name: GLM 5.3 PR Review
 
 on:
   pull_request_target:
@@ -22,9 +22,9 @@ concurrency:
 
 jobs:
   review:
-    name: Review PR with GLM 5.2
+    name: Review PR with GLM 5.3
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     # pull_request_target exposes repository secrets and a write-capable token.
     # Never run this privileged job for branches from untrusted forks.
     if: >-
@@ -36,13 +36,13 @@ jobs:
       - name: Z.ai Code Review
         if: ${{ env.ZAI_API_KEY != '' }}
         # Pin privileged third-party actions to an immutable commit.
-        # 7d0ce7b = v0.0.9, the current main tip. Verify before bumping:
+        # 7d0ce7b = v0.0.9. Verify before bumping:
         #   git ls-remote https://github.com/L-K-M/zai-code-review refs/tags/v0.0.9
         uses: L-K-M/zai-code-review@7d0ce7b0c226c70eed194615130fa5b632ba4798
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
-          ZAI_MODEL: glm-5.2
-          ZAI_REVIEWER_NAME: GLM 5.2 Code Review
+          ZAI_MODEL: glm-5.3
+          ZAI_REVIEWER_NAME: GLM 5.3 Code Review
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Skip when Z.ai API key is unavailable
