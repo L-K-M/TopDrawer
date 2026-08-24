@@ -30,7 +30,7 @@ jobs:
     # them). This digest is `swift:6.3-noble` as of 2026-08-24 (Swift 6.3.3, Ubuntu
     # 24.04 — the toolchain the Linux port is developed against); bump it
     # deliberately to move the toolchain.
-    container: swift@sha256:56ef1be2c1ca36f4c52440357dc1fcdfdb5e113587134fcadeef57c225c71b54
+    container: swift:6.3-noble@sha256:56ef1be2c1ca36f4c52440357dc1fcdfdb5e113587134fcadeef57c225c71b54
     steps:
       # Pinned to an immutable commit SHA (same v7.0.1 ci.yml uses): a mutable tag
       # like @v4 can be repointed at tampered code, a commit SHA cannot.
@@ -44,8 +44,12 @@ jobs:
       - name: Mark the workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # --disable-automatic-resolution makes SwiftPM use exactly the versions in
+      # the committed Package.resolved and fail instead of silently re-resolving,
+      # so CI can't drift off the pinned swift-crypto/swift-asn1. (SwiftPM has no
+      # `--locked`; this is its equivalent.)
       - name: Build
-        run: swift build -v
+        run: swift build -v --disable-automatic-resolution
 
       - name: Test
-        run: swift test -v
+        run: swift test -v --disable-automatic-resolution
