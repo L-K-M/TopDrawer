@@ -8,7 +8,9 @@ import PackageDescription
 // `@testable import MacDring` then compiles unmodified on Linux. As the port lands
 // (LP-07 onward) more files join these lists until the whole module builds here;
 // SwiftPM warns that the not-yet-listed files are "unhandled", which is expected
-// and shrinks over time. See docs/linux-port/implementation-plan.md §LP-02.
+// and shrinks over time. Those warnings do NOT fail the build, so a new pure-core
+// file or test added on the macOS side must also be added to the list below, or
+// Linux CI silently skips it. See docs/linux-port/implementation-plan.md §LP-02.
 //
 // swift-tools-version 5.9 keeps these files in Swift 5 language mode, which matches
 // the Xcode project's SWIFT_VERSION = 5.0 — so both platforms compile the pure core
