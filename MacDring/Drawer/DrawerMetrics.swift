@@ -1,4 +1,8 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#else
+import Foundation   // CGFloat/CGSize/CGRect live in Foundation on Linux
+#endif
 
 /// Deterministic drawer sizing. Computing the drawer's size from the item count
 /// and appearance settings (rather than relying on SwiftUI's `fittingSize`, which

@@ -16,19 +16,31 @@ enum BookmarkResolver {
     }
 
     /// Creates a bookmark for `url`, or `nil` if one can't be made.
+    ///
+    /// URL bookmarks are a Darwin-only API. On Linux this returns `nil`; every
+    /// caller already falls back to the plain `url`, which is what keeps the
+    /// items usable there (a moved/renamed target simply isn't followed).
     static func makeBookmark(for url: URL) -> Data? {
-        try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        #if os(macOS)
+        return try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        #else
+        return nil
+        #endif
     }
 
     /// Resolves a bookmark back to a URL, reporting whether it went stale (the
     /// caller should re-create the bookmark from the resolved URL when so).
     static func resolve(_ data: Data) -> Resolved? {
+        #if os(macOS)
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data,
                                  options: [],
                                  relativeTo: nil,
                                  bookmarkDataIsStale: &stale) else { return nil }
         return Resolved(url: url, isStale: stale)
+        #else
+        return nil
+        #endif
     }
 
     /// The launchable URL for an item: the link for `.url` items, otherwise the

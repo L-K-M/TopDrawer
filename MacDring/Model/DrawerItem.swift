@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto            // swift-crypto — identical SHA256 API (Linux)
+#endif
 import Foundation
 
 /// What a drawer item points at. `.group` is a container of other items (an
@@ -200,7 +204,9 @@ extension DrawerItem {
     /// file/app/folder URL — the shared part of `fromFileURL` and `transientFileItem`.
     static func kindAndName(for url: URL) -> (kind: ItemKind, name: String) {
         var isDirectory: ObjCBool = false
-        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        // Only the out-param is wanted; discard the Bool explicitly so Linux's
+        // Foundation (not @discardableResult there) doesn't warn. No-op on macOS.
+        _ = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
         let kind: ItemKind
         if url.pathExtension.lowercased() == "app" {
             kind = .application
@@ -256,8 +262,24 @@ extension DrawerItem {
     /// A Trash item: opens the Trash in Finder when clicked, and deletes (moves to
     /// Trash) any files dropped onto it — the classic DragThing Trash dock.
     static func trash() -> DrawerItem {
+        #if os(macOS)
         let url = (try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: nil, create: false))
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".Trash", isDirectory: true)
+        #else
+        // `.trashDirectory` is a Darwin-only search path. On Linux the freedesktop
+        // trash spec puts trashed files under $XDG_DATA_HOME/Trash/files, where
+        // $XDG_DATA_HOME defaults to ~/.local/share when unset, empty, or not an
+        // absolute path. (The daemon's TrashServicing does the real trashing later —
+        // see LP-17; this is just the item's target URL.)
+        let dataHome: URL
+        if let xdg = ProcessInfo.processInfo.environment["XDG_DATA_HOME"], xdg.hasPrefix("/") {
+            dataHome = URL(fileURLWithPath: xdg, isDirectory: true)
+        } else {
+            dataHome = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".local/share", isDirectory: true)
+        }
+        let url = dataHome.appendingPathComponent("Trash/files", isDirectory: true)
+        #endif
         return DrawerItem(kind: .trash, displayName: "Trash", url: url)
     }
 

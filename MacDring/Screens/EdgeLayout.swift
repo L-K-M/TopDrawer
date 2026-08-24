@@ -1,4 +1,8 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#else
+import Foundation   // CGRect/CGPoint/CGSize/CGFloat live in Foundation on Linux
+#endif
 
 /// Pure geometry: turns a tab's `ScreenAnchor` into on-screen frames, positions
 /// a drawer adjacent to its tab, and inverts a drag point or settled tab frame back

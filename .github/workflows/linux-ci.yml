@@ -1,0 +1,55 @@
+name: Linux CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Manual runs, matching ci.yml: dispatch goes through the API, so it still
+  # starts a run when webhook delivery is throttled, and re-running needs no
+  # empty commit.
+  workflow_dispatch:
+
+# Least privilege: this job only reads the repo to build and test the pure core.
+permissions:
+  contents: read
+
+# Cancel an in-progress run when a branch is pushed again.
+concurrency:
+  group: linux-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & Test (Linux)
+    runs-on: ubuntu-latest
+    # A clean build + test is a couple of minutes; anything approaching this is a
+    # hang. Fail fast instead of burning the 360-minute default.
+    timeout-minutes: 30
+    # Pinned by digest, matching this repo's pin-everything CI discipline (ci.yml
+    # pins the Xcode toolchain and every action so a runner-image bump can't change
+    # them). This digest is `swift:6.3-noble` as of 2026-08-24 (Swift 6.3.3, Ubuntu
+    # 24.04 — the toolchain the Linux port is developed against); bump it
+    # deliberately to move the toolchain.
+    container: swift:6.3-noble@sha256:56ef1be2c1ca36f4c52440357dc1fcdfdb5e113587134fcadeef57c225c71b54
+    steps:
+      # Pinned to an immutable commit SHA (same v7.0.1 ci.yml uses): a mutable tag
+      # like @v4 can be repointed at tampered code, a commit SHA cannot.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here runs authenticated git
+
+      # SwiftPM shells out to git to resolve packages; inside the container the
+      # checkout is owned by a different uid than the one running the build, which
+      # git refuses to touch until the workspace is marked safe.
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # --disable-automatic-resolution makes SwiftPM use exactly the versions in
+      # the committed Package.resolved and fail instead of silently re-resolving,
+      # so CI can't drift off the pinned swift-crypto/swift-asn1. (SwiftPM has no
+      # `--locked`; this is its equivalent.)
+      - name: Build
+        run: swift build -v --disable-automatic-resolution
+
+      - name: Test
+        run: swift test -v --disable-automatic-resolution
