@@ -267,11 +267,18 @@ extension DrawerItem {
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".Trash", isDirectory: true)
         #else
         // `.trashDirectory` is a Darwin-only search path. On Linux the freedesktop
-        // trash spec puts trashed files under $XDG_DATA_HOME/Trash/files, defaulting
-        // to ~/.local/share/Trash/files. (The daemon's TrashServicing does the real
-        // trashing later — see LP-17; this is just the item's target URL.)
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/share/Trash/files", isDirectory: true)
+        // trash spec puts trashed files under $XDG_DATA_HOME/Trash/files, where
+        // $XDG_DATA_HOME defaults to ~/.local/share when unset, empty, or not an
+        // absolute path. (The daemon's TrashServicing does the real trashing later —
+        // see LP-17; this is just the item's target URL.)
+        let dataHome: URL
+        if let xdg = ProcessInfo.processInfo.environment["XDG_DATA_HOME"], xdg.hasPrefix("/") {
+            dataHome = URL(fileURLWithPath: xdg, isDirectory: true)
+        } else {
+            dataHome = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".local/share", isDirectory: true)
+        }
+        let url = dataHome.appendingPathComponent("Trash/files", isDirectory: true)
         #endif
         return DrawerItem(kind: .trash, displayName: "Trash", url: url)
     }

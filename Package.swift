@@ -69,7 +69,7 @@ let package = Package(
         // Stands in for CryptoKit on Linux only (identical SHA256 API). Adding it
         // Linux-only keeps the Xcode build — which never resolves this manifest —
         // free of the dependency.
-        .package(url: "https://github.com/apple/swift-crypto.git", "1.0.0" ..< "5.0.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", "4.0.0" ..< "5.0.0"),
     ],
     targets: [
         .target(
