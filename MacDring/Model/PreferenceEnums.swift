@@ -1,4 +1,8 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import Foundation   // CGFloat lives in Foundation on Linux
+#endif
 
 /// How translucent a drawer's background is — from the system blur showing the
 /// desktop through, to a frosted look, to an opaque panel. Replaces the old "material"
@@ -63,6 +67,7 @@ enum TabWindowLevel: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String { self == .floating ? "Always on top" : "With other windows" }
 
+    #if canImport(AppKit)
     var nsWindowLevel: NSWindow.Level {
         self == .floating ? .floating : .normal
     }
@@ -75,4 +80,5 @@ enum TabWindowLevel: String, Codable, CaseIterable, Identifiable {
             return NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue + 1)
         }
     }
+    #endif
 }
