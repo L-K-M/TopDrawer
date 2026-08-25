@@ -57,6 +57,13 @@ let macDringSources: [String] = [
     "Model/Preferences.swift",
     "Drawer/DrawerModel.swift",
     "Tabs/TabStripModel.swift",
+    // LP-08: the recents/fresh listers + their platform-neutral query vocabulary
+    // (RecentFileHit/RecentQueryMode/RecentFilesQuerying). SpotlightQuery itself stays
+    // macOS-only (NSMetadataQuery) behind its own #if os(macOS) and is not listed here.
+    "Store/RecentFilesQuery.swift",
+    "Store/RecentsLister.swift",
+    "Store/FreshLister.swift",
+    "Store/FreshScanner.swift",
 ]
 
 let macDringTestsSources: [String] = [
@@ -74,8 +81,6 @@ let macDringTestsSources: [String] = [
     "TimeBucketTests.swift",
     "SemanticVersionTests.swift",
     "GitHubReleaseTests.swift",
-    // LP-07. RecentsListerTests waits for LP-08 — it drives RecentsLister, which is
-    // still Spotlight-coupled (SpotlightQuery) and not yet on Linux.
     "TabStoreTests.swift",
     "RecentsStoreTests.swift",
     "FolderListerTests.swift",
@@ -83,6 +88,11 @@ let macDringTestsSources: [String] = [
     "DrawerModelTests.swift",
     // Linux-only: pins the ObservationCompat shim (compiles to nothing on macOS).
     "ObservationCompatTests.swift",
+    // LP-08: recents/fresh listers now reach Linux (RecentsLister decoupled from
+    // SpotlightQuery via RecentFilesQuery's neutral types).
+    "RecentsListerTests.swift",
+    "FreshListerTests.swift",
+    "FreshScannerTests.swift",
 ]
 
 let package = Package(

@@ -18,7 +18,7 @@ import Foundation
 /// copies, and screenshots actually land), which keeps it synchronous and bounded.
 /// Files saved deep inside sub-folders are left to Spotlight.
 enum FreshScanner {
-    /// How far back a file still counts as "fresh". Matches `SpotlightQuery.Mode`'s
+    /// How far back a file still counts as "fresh". Matches `RecentQueryMode`'s
     /// `dateAdded` window so the direct scan and the Spotlight query agree on the cutoff.
     static let window: TimeInterval = 30 * 24 * 60 * 60
 
@@ -30,10 +30,10 @@ enum FreshScanner {
                         limit: Int,
                         now: Date = Date(),
                         fileManager: FileManager = .default,
-                        dateAdded: (URL) -> Date? = FreshScanner.dateAdded(of:)) -> [SpotlightQuery.Result] {
+                        dateAdded: (URL) -> Date? = FreshScanner.dateAdded(of:)) -> [RecentFileHit] {
         let cutoff = now.addingTimeInterval(-window)
         var seen = Set<URL>()
-        var out: [SpotlightQuery.Result] = []
+        var out: [RecentFileHit] = []
         for scope in scopes {
             guard let urls = try? fileManager.contentsOfDirectory(
                 at: scope,
@@ -43,7 +43,7 @@ enum FreshScanner {
                 let standardized = url.standardizedFileURL
                 guard seen.insert(standardized).inserted else { continue }
                 guard let date = dateAdded(url), date >= cutoff else { continue }
-                out.append(SpotlightQuery.Result(url: standardized, name: standardized.lastPathComponent, date: date))
+                out.append(RecentFileHit(url: standardized, name: standardized.lastPathComponent, date: date))
             }
         }
         return Array(out.sorted { $0.date > $1.date }.prefix(limit))

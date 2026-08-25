@@ -33,9 +33,9 @@ enum RecentsLister {
 }
 
 extension RecentItem {
-    /// A recent record built from a Spotlight hit (the system recents source),
+    /// A recent record built from a system-index hit (the system recents source),
     /// detecting the kind/name from the file at that location.
-    init(spotlight result: SpotlightQuery.Result) {
+    init(spotlight result: RecentFileHit) {
         let (kind, name) = DrawerItem.kindAndName(for: result.url)
         self.init(url: result.url, kind: kind, name: name, date: result.date)
     }

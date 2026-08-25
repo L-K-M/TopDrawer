@@ -1,44 +1,21 @@
 import Foundation
 
+#if os(macOS)
 /// A one-shot Spotlight (`NSMetadataQuery`) lookup that backs the live **Fresh** tab
 /// and the *system* source of the **Recents** tab. Unlike the synchronous listers,
 /// Spotlight gathers asynchronously, so this delivers its results through a
 /// completion once gathering finishes, then stops. It reads only the **index** (file
 /// locations + dates), never file contents, so — like the other listers — it needs
 /// no special permission (and adds no global monitor or event tap).
-final class SpotlightQuery {
+///
+/// The `RecentFilesQuerying` vocabulary (`RecentFileHit`, `RecentQueryMode`) lives in
+/// `RecentFilesQuery.swift` so the pure listers compile on Linux; this Spotlight
+/// implementation is macOS-only (`NSMetadataQuery` has no Linux equivalent). The old
+/// nested names stay as typealiases so existing call sites are unchanged.
+final class SpotlightQuery: RecentFilesQuerying {
 
-    /// What to rank by: most-recently **used** (Recents) or most-recently **added**
-    /// (Fresh — i.e. downloaded / copied / saved into its folder).
-    enum Mode {
-        case lastUsed
-        case dateAdded
-
-        /// The Spotlight metadata attribute this mode sorts and filters on.
-        var attribute: String {
-            switch self {
-            case .lastUsed: return "kMDItemLastUsedDate"
-            case .dateAdded: return "kMDItemDateAdded"
-            }
-        }
-
-        /// How far back to look. "Recent" is the whole point, so a window keeps the
-        /// query light and the result meaningful (Spotlight needn't gather the entire
-        /// index).
-        var window: TimeInterval {
-            switch self {
-            case .lastUsed: return 90 * 24 * 60 * 60
-            case .dateAdded: return 30 * 24 * 60 * 60
-            }
-        }
-    }
-
-    /// A single indexed file: where it lives, its display name, and the ranking date.
-    struct Result: Equatable {
-        let url: URL
-        let name: String
-        let date: Date
-    }
+    typealias Result = RecentFileHit
+    typealias Mode = RecentQueryMode
 
     private var query: NSMetadataQuery?
     private var observer: NSObjectProtocol?
@@ -114,3 +91,4 @@ final class SpotlightQuery {
         return out
     }
 }
+#endif
