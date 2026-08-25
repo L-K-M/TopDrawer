@@ -1,0 +1,64 @@
+/// The global-hotkey seam (LP-13): register and unregister a system-wide hotkey by
+/// `HotkeySpec`. macOS backs this with Carbon's `RegisterEventHotKey`
+/// (`CarbonHotkeyRegistrar`, wrapping `CarbonHotkey`); a platform without a global-hotkey
+/// backend yet (Linux — a compositor/portal binding is a later LP) has no conformer here,
+/// so nothing on Linux registers a hotkey until that backend lands. The registrar owns the
+/// underlying platform object and hands the caller an opaque `HotkeyToken` to release it
+/// with. See PLAN.md §LP-13 / §10.
+///
+/// Threading: `register` and `unregister` must be called on the main thread. Carbon is
+/// main-event-loop oriented and `CarbonHotkeyRegistrar` keeps unsynchronized state; the
+/// sole caller (`TabController.reconcile`) is already main-thread.
+protocol GlobalHotkeyRegistering {
+    /// Attempts to register `spec` as a global hotkey that invokes `onPressed` on the
+    /// main thread. Returns an opaque token on success (pass it to `unregister`), or `nil`
+    /// if the platform refused the registration — a system-reserved combination, one
+    /// another app already owns, or (on a platform with no hotkey backend) always.
+    func register(_ spec: HotkeySpec, onPressed: @escaping () -> Void) -> HotkeyToken?
+
+    /// Releases a token previously returned by `register`. An unknown token is a no-op.
+    func unregister(_ token: HotkeyToken)
+}
+
+/// An opaque handle to one live global-hotkey registration. The caller stores it and
+/// passes it back to `unregister`; only the registrar that issued it interprets the
+/// underlying value. `id` is module-internal (not `fileprivate`) so a registrar defined
+/// in another file — the planned Linux compositor/portal backend — can mint and read its
+/// own tokens; it stays non-`public`, so the handle remains opaque outside the module.
+struct HotkeyToken {
+    let id: UInt32
+}
+
+#if canImport(Carbon)
+import Dispatch
+
+/// macOS global-hotkey registrar backed by Carbon (`CarbonHotkey`). It owns the live
+/// `CarbonHotkey` instances — keyed by the monotonic id it stamps into each
+/// `HotkeyToken` — and installs no Accessibility permission, matching Top Drawer's
+/// existing per-tab trigger mechanism.
+final class CarbonHotkeyRegistrar: GlobalHotkeyRegistering {
+
+    private var registrations: [UInt32: CarbonHotkey] = [:]
+    private var counter: UInt32 = 1
+
+    func register(_ spec: HotkeySpec, onPressed: @escaping () -> Void) -> HotkeyToken? {
+        // Enforces the protocol's main-thread contract: `registrations`/`counter` are
+        // unsynchronized and Carbon registration is main-event-loop oriented.
+        dispatchPrecondition(condition: .onQueue(.main))
+        let id = counter
+        counter += 1
+        let hotkey = CarbonHotkey(identifier: id)
+        hotkey.onPressed = onPressed
+        guard hotkey.register(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) else {
+            return nil
+        }
+        registrations[id] = hotkey
+        return HotkeyToken(id: id)
+    }
+
+    func unregister(_ token: HotkeyToken) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        registrations.removeValue(forKey: token.id)?.unregister()
+    }
+}
+#endif

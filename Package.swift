@@ -89,6 +89,10 @@ let macDringSources: [String] = [
     // macOS-only; the protocols and the Linux no-op login item compile here.
     "Model/LoginItemManaging.swift",
     "Screens/DisplayIdentity.swift",
+    // LP-13 part 3: the global-hotkey seam. The protocol + opaque HotkeyToken compile
+    // here; the macOS CarbonHotkeyRegistrar (and CarbonHotkey it wraps) stay macOS-only
+    // behind #if canImport(Carbon), so Linux registers no hotkey until its backend lands.
+    "Hotkeys/GlobalHotkeyRegistering.swift",
     "Store/VolumeListing.swift",
     "Store/DisksLister.swift",
     "Store/NetworkLister.swift",
