@@ -1,5 +1,10 @@
-import AppKit
+// AppKit dropped: this model uses only Foundation and project types (verified — no
+// AppKit or Core Graphics symbols). Combine is the real thing on macOS; on Linux the
+// module's ObservationCompat shim supplies ObservableObject/@Published.
+import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// Observable visual state for a single tab pill, plus the interaction callbacks
 /// the `TabWindowController` wires up. Updating these `@Published` properties

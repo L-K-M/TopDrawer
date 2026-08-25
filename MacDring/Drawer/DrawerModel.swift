@@ -1,5 +1,10 @@
-import AppKit
+// AppKit dropped: the only symbol used from it was CGRect, which Foundation vends on
+// both platforms. Combine is the real thing on macOS; on Linux the module's
+// ObservationCompat shim supplies ObservableObject/@Published.
+import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// Observable content + callbacks for the shared drawer panel. The
 /// `TabController` swaps these values as different tabs' drawers are shown.

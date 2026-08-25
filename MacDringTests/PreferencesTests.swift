@@ -1,5 +1,7 @@
 import XCTest
+#if canImport(AppKit)
 import AppKit
+#endif
 @testable import MacDring
 
 final class PreferencesTests: XCTestCase {
@@ -76,11 +78,38 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(reloaded.tabWindowLevel, .normal)
     }
 
+    #if !canImport(ServiceManagement)
+    // Linux has no SMAppService, so launchAtLogin is a plain persisted preference with
+    // no system side effect; it must still round-trip like every other setting.
+    func testLaunchAtLoginRoundTripsOnLinux() {
+        let prefs = Preferences(defaults: defaults)
+        prefs.launchAtLogin = true
+        XCTAssertTrue(Preferences(defaults: defaults).launchAtLogin)
+        prefs.launchAtLogin = false
+        XCTAssertFalse(Preferences(defaults: defaults).launchAtLogin)
+    }
+
+    // A refresh has no authoritative system state to read on Linux
+    // (systemLaunchAtLoginEnabled() is nil), so it must leave the stored value alone
+    // rather than clobber the preference the round-trip above relies on.
+    func testRefreshLaunchAtLoginDoesNotClobberOnLinux() {
+        let prefs = Preferences(defaults: defaults)
+        prefs.launchAtLogin = true
+        prefs.refreshLaunchAtLoginStatus()
+        XCTAssertTrue(prefs.launchAtLogin)
+        XCTAssertTrue(Preferences(defaults: defaults).launchAtLogin)
+    }
+    #endif
+
+    #if canImport(AppKit)
+    // `drawerWindowLevel` returns an `NSWindow.Level` (AppKit), so this pins macOS
+    // window-layering behaviour only; there is no Linux equivalent to assert.
     func testDrawerWindowLevelTracksTabWindowLevel() {
         XCTAssertEqual(TabWindowLevel.floating.drawerWindowLevel, .popUpMenu)
         XCTAssertGreaterThan(TabWindowLevel.normal.drawerWindowLevel.rawValue, NSWindow.Level.normal.rawValue)
         XCTAssertLessThan(TabWindowLevel.normal.drawerWindowLevel.rawValue, NSWindow.Level.floating.rawValue)
     }
+    #endif
 
     func testNumericRoundTrip() {
         let prefs = Preferences(defaults: defaults)
@@ -132,8 +161,13 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(Preferences(defaults: defaults).defaultTabColorHex, Preferences.Default.defaultTabColorHex)
     }
 
+    #if canImport(AppKit)
+    // Exercises the AppKit `NSColor(hex:)` parser directly (ColorHex.swift); the Linux
+    // build validates hex strings through `Preferences`'s own pure checker instead
+    // (see `testInvalidStoredColorFallsBackToDefault`).
     func testColorHexRoundTrip() {
         XCTAssertEqual(NSColor(hex: "#0A84FF")?.hexString, "#0A84FF")
         XCTAssertNil(NSColor(hex: "nothex"))
     }
+    #endif
 }
