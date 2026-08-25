@@ -55,6 +55,14 @@ final class SpringLoadPolicyTests: XCTestCase {
         XCTAssertEqual(reveals, [true, true, true], "hovering any grouped tab reveals them all")
     }
 
+    func testIndependentModeRevealsNothingWhenNoZoneIsHovered() {
+        // The fourth cell of the revealAllTogether × cursor-over-a-zone truth table: with
+        // the cursor over no zone, independent mode conceals everything (not all-revealed).
+        let reveals = SpringLoadPolicy.reveals(zones: zones(), mouse: CGPoint(x: 10, y: 10),
+                                               revealAllTogether: false)
+        XCTAssertEqual(reveals, [false, false, false])
+    }
+
     func testRevealAllTogetherRevealsNothingWhenNoZoneIsHovered() {
         let reveals = SpringLoadPolicy.reveals(zones: zones(), mouse: CGPoint(x: 10, y: 10),
                                                revealAllTogether: true)

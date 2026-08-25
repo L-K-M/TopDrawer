@@ -22,8 +22,11 @@ final class HotkeyRegistrationPolicyTests: XCTestCase {
     }
 
     func testAnUnusableSpecUnregisters() {
-        // A spec that KeyCodes rejects is treated the same as none — drop any registration.
+        // A spec that KeyCodes rejects is treated the same as none — drop any registration,
+        // even a live one under that now-unusable spec: the usability gate outranks the
+        // existing-registration check, so a reorder that kept dead registrations would fail.
         XCTAssertEqual(decide(spec: a, usable: false), .unregister)
+        XCTAssertEqual(decide(spec: a, usable: false, existing: a), .unregister)
     }
 
     // MARK: Live registration wins first

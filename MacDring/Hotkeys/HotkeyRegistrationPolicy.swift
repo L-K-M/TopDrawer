@@ -52,6 +52,10 @@ enum HotkeyRegistrationPolicy {
     /// wins first; a changed spec releases the stale one before it is re-evaluated (so a
     /// cached failure can only apply when there is no live registration); a conflict Top
     /// Drawer already owns is deferred rather than handed to Carbon.
+    ///
+    /// Caller contract: executing a `releaseStale…` decision must also clear this tab's
+    /// cached failure (`TabController.unregisterHotkey` does), since those cases skip the
+    /// `cachedFailure` check on exactly that assumption.
     static func decide(spec: HotkeySpec?, usable: Bool, existing: HotkeySpec?,
                        cachedFailure: HotkeySpec?, ownedByOtherTab: Bool) -> Decision {
         guard let spec, usable else { return .unregister }

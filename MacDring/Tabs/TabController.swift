@@ -548,22 +548,16 @@ final class TabController {
     /// the live mouse-moved monitor.
     private func evaluateConcealment(_ tabs: [(id: UUID, wc: TabWindowController)], animated: Bool) {
         let mouse = NSEvent.mouseLocation
-        // While a file is being dragged near a concealed tab, pre-reveal it from a
-        // more generous "peek" zone so spring-loading has a full pill to aim at. The
-        // reveal decision (incl. reveal-all-together) lives in SpringLoadPolicy.
-        let peeking = fileBeingDragged()
-        func zone(_ wc: TabWindowController) -> CGRect { peeking ? peekZone(for: wc) : revealZone(for: wc) }
-        let reveals = SpringLoadPolicy.reveals(zones: tabs.map { zone($0.wc) }, mouse: mouse,
-                                               revealAllTogether: preferences.revealAllConcealedTogether)
+        // While a file is being dragged near a concealed tab, pre-reveal it from a more
+        // generous "peek" margin so spring-loading has a full pill to aim at. The margin
+        // choice and the reveal decision (incl. reveal-all-together) live in SpringLoadPolicy.
+        let slop = SpringLoadPolicy.slop(peeking: fileBeingDragged())
+        let reveals = SpringLoadPolicy.reveals(
+            zones: tabs.map { $0.wc.restingFrame.insetBy(dx: -slop, dy: -slop) },
+            mouse: mouse, revealAllTogether: preferences.revealAllConcealedTogether)
         for (index, (id, wc)) in tabs.enumerated() {
             applyRevealState(id: id, wc: wc, reveal: reveals[index], animated: animated)
         }
-    }
-
-    /// The wider region whose hover reveals a concealed tab while a file drag is in
-    /// flight (the drag-over "peek").
-    private func peekZone(for wc: TabWindowController) -> CGRect {
-        wc.restingFrame.insetBy(dx: -SpringLoadPolicy.peekSlop, dy: -SpringLoadPolicy.peekSlop)
     }
 
     /// Whether a file drag is currently in progress — gates the drag-over peek.
