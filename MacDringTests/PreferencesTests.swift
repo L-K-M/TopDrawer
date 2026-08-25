@@ -1,5 +1,7 @@
 import XCTest
+#if canImport(AppKit)
 import AppKit
+#endif
 @testable import MacDring
 
 final class PreferencesTests: XCTestCase {
@@ -76,11 +78,15 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(reloaded.tabWindowLevel, .normal)
     }
 
+    #if canImport(AppKit)
+    // `drawerWindowLevel` returns an `NSWindow.Level` (AppKit), so this pins macOS
+    // window-layering behaviour only; there is no Linux equivalent to assert.
     func testDrawerWindowLevelTracksTabWindowLevel() {
         XCTAssertEqual(TabWindowLevel.floating.drawerWindowLevel, .popUpMenu)
         XCTAssertGreaterThan(TabWindowLevel.normal.drawerWindowLevel.rawValue, NSWindow.Level.normal.rawValue)
         XCTAssertLessThan(TabWindowLevel.normal.drawerWindowLevel.rawValue, NSWindow.Level.floating.rawValue)
     }
+    #endif
 
     func testNumericRoundTrip() {
         let prefs = Preferences(defaults: defaults)
@@ -132,8 +138,13 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(Preferences(defaults: defaults).defaultTabColorHex, Preferences.Default.defaultTabColorHex)
     }
 
+    #if canImport(AppKit)
+    // Exercises the AppKit `NSColor(hex:)` parser directly (ColorHex.swift); the Linux
+    // build validates hex strings through `Preferences`'s own pure checker instead
+    // (see `testInvalidStoredColorFallsBackToDefault`).
     func testColorHexRoundTrip() {
         XCTAssertEqual(NSColor(hex: "#0A84FF")?.hexString, "#0A84FF")
         XCTAssertNil(NSColor(hex: "nothex"))
     }
+    #endif
 }

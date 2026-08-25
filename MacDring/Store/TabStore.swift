@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// Owns the persisted `LauncherDocument` and is the single source of truth for
 /// tabs and their items. Loads from / saves to JSON in Application Support,

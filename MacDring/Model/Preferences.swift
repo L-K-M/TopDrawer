@@ -1,6 +1,14 @@
 import Foundation
+// SwiftUI supplies ObservableObject/@Published on macOS; on Linux the module's
+// ObservationCompat shim supplies them, so this import is macOS-only. ServiceManagement
+// (login-item control) and the NSColor colour check below are likewise macOS-only and
+// guarded at their use sites.
+#if canImport(SwiftUI)
 import SwiftUI
+#endif
+#if canImport(ServiceManagement)
 import ServiceManagement
+#endif
 
 /// App-wide appearance and behavior settings, backed by `UserDefaults`. Per-tab
 /// values (color, items, anchor, behavior) live in the tab model instead; the
@@ -213,18 +221,39 @@ final class Preferences: ObservableObject {
 
     /// Returns `hex` if it parses to a valid color, otherwise `default`.
     private static func validColor(_ hex: String?, default fallback: String) -> String {
+        #if canImport(AppKit)
         guard let hex, NSColor(hex: hex) != nil else { return fallback }
         return hex
+        #else
+        guard let hex, isValidHexColor(hex) else { return fallback }
+        return hex
+        #endif
     }
+
+    #if !canImport(AppKit)
+    /// A pure `#RRGGBB` / `#RRGGBBAA` check (leading `#` optional), matching what
+    /// `NSColor(hex:)` accepts, for the Linux build where AppKit is absent. Keep in
+    /// lockstep with `ColorHex.swift`'s parser.
+    private static func isValidHexColor(_ hex: String) -> Bool {
+        var string = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if string.hasPrefix("#") { string.removeFirst() }
+        guard string.allSatisfy(\.isHexDigit), UInt64(string, radix: 16) != nil else { return false }
+        return string.count == 6 || string.count == 8
+    }
+    #endif
 
     /// The current login-item state from `SMAppService`, or `nil` if unavailable.
     private static func systemLaunchAtLoginEnabled() -> Bool? {
+        #if canImport(ServiceManagement)
         guard #available(macOS 13.0, *) else { return nil }
         switch SMAppService.mainApp.status {
         case .enabled: return true
         case .notRegistered, .notFound: return false
         default: return nil
         }
+        #else
+        return nil
+        #endif
     }
 
     // MARK: Launch at login
@@ -237,6 +266,9 @@ final class Preferences: ObservableObject {
     @Published private(set) var launchAtLoginError: String?
 
     private func applyLaunchAtLogin(_ enabled: Bool) {
+        // Login-item registration is macOS-only (SMAppService); a no-op on Linux, where
+        // `launchAtLogin` is just a stored preference with no system side effect.
+        #if canImport(ServiceManagement)
         guard #available(macOS 13.0, *) else { return }
         do {
             if enabled {
@@ -258,6 +290,7 @@ final class Preferences: ObservableObject {
             isSyncingLaunchAtLogin = false
             defaults.set(launchAtLogin, forKey: Key.launchAtLogin)
         }
+        #endif
     }
 
     /// Re-reads the authoritative login-item state (e.g. when Settings appears)

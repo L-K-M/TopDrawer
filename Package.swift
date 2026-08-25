@@ -48,6 +48,15 @@ let macDringSources: [String] = [
     "Updates/SemanticVersion.swift",
     "Updates/GitHubRelease.swift",
     "Store/BookmarkResolver.swift",
+    // LP-07: the observable stores/models + prefs. `ObservationCompat` is the Combine
+    // stand-in they need on Linux (macOS uses real Combine and skips that file).
+    "Common/ObservationCompat.swift",
+    "Store/TabStore.swift",
+    "Store/RecentsStore.swift",
+    "Store/FolderLister.swift",
+    "Model/Preferences.swift",
+    "Drawer/DrawerModel.swift",
+    "Tabs/TabStripModel.swift",
 ]
 
 let macDringTestsSources: [String] = [
@@ -65,6 +74,13 @@ let macDringTestsSources: [String] = [
     "TimeBucketTests.swift",
     "SemanticVersionTests.swift",
     "GitHubReleaseTests.swift",
+    // LP-07. RecentsListerTests waits for LP-08 — it drives RecentsLister, which is
+    // still Spotlight-coupled (SpotlightQuery) and not yet on Linux.
+    "TabStoreTests.swift",
+    "RecentsStoreTests.swift",
+    "FolderListerTests.swift",
+    "PreferencesTests.swift",
+    "DrawerModelTests.swift",
 ]
 
 let package = Package(

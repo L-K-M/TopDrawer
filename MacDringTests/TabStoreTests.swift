@@ -1,4 +1,6 @@
+#if canImport(Combine)
 import Combine
+#endif
 import XCTest
 @testable import MacDring
 

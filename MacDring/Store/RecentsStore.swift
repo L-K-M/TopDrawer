@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// The list of targets recently opened from Top Drawer — backs the `.recents` tab.
 /// App-global launch history (like `Preferences`), persisted to `UserDefaults` as
