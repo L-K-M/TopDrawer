@@ -21,15 +21,9 @@ enum RecentQueryMode {
     case lastUsed
     case dateAdded
 
-    /// The Spotlight metadata attribute this mode sorts and filters on. Only the macOS
-    /// `SpotlightQuery` reads it; it's inert on Linux, which scans the filesystem
-    /// directly (`FreshScanner`).
-    var attribute: String {
-        switch self {
-        case .lastUsed: return "kMDItemLastUsedDate"
-        case .dateAdded: return "kMDItemDateAdded"
-        }
-    }
+    // The Spotlight metadata attribute each mode sorts/filters on is macOS-specific, so
+    // it lives in an `extension RecentQueryMode` inside SpotlightQuery.swift's
+    // `#if os(macOS)` — keeping Spotlight vocabulary out of this platform-neutral type.
 
     /// How far back to look. "Recent" is the whole point, so a window keeps the query
     /// light and the result meaningful (no need to gather the entire index).
@@ -46,7 +40,7 @@ enum RecentQueryMode {
 /// there relies on `FreshScanner`'s direct filesystem read instead. Behind a protocol
 /// so a caller can hold the querying seam abstractly (and a Linux implementation can
 /// land later without touching the consumers).
-protocol RecentFilesQuerying {
+protocol RecentFilesQuerying: AnyObject {
     /// Whether a lookup is currently gathering (started, not yet finished or cancelled).
     var isGathering: Bool { get }
     /// Starts a fresh lookup, cancelling any in-flight one. `scopes` are the directory

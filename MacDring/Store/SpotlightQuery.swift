@@ -91,4 +91,16 @@ final class SpotlightQuery: RecentFilesQuerying {
         return out
     }
 }
+
+extension RecentQueryMode {
+    /// The Spotlight metadata attribute this mode sorts and filters on. macOS-only —
+    /// it's a Spotlight specific, so it lives here rather than in the platform-neutral
+    /// `RecentQueryMode` declaration (`RecentFilesQuery.swift`).
+    var attribute: String {
+        switch self {
+        case .lastUsed: return "kMDItemLastUsedDate"
+        case .dateAdded: return "kMDItemDateAdded"
+        }
+    }
+}
 #endif
