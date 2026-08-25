@@ -67,6 +67,9 @@ let macDringSources: [String] = [
     // LP-09: pure tab-placement decisions (reconcile park/move-to-main + de-overlap fold)
     // lifted out of the macOS-only TabController.
     "Screens/TabPlacementPolicy.swift",
+    // LP-10: pure drag-snap/magnetization + z-restack decisions, also lifted out of
+    // TabController.
+    "Screens/TabDragPolicy.swift",
 ]
 
 let macDringTestsSources: [String] = [
@@ -98,6 +101,8 @@ let macDringTestsSources: [String] = [
     "FreshScannerTests.swift",
     // LP-09
     "TabPlacementPolicyTests.swift",
+    // LP-10
+    "TabDragPolicyTests.swift",
 ]
 
 let package = Package(

@@ -326,15 +326,19 @@ final class TabController {
         }
 
         for (key, entries) in groups where entries.count > 1 {
+            // ids are unique here — they are `tabWindows` keys — so this never collapses
+            // an entry; the duplicate-safe init (matching deOverlapStackedTabs) states that
+            // invariant without trapping on a hypothetical dupe.
+            let wcByID = Dictionary(entries.map { ($0.id, $0.wc) }, uniquingKeysWith: { first, _ in first })
             // Leading first (front): top on a vertical edge, left on a horizontal one;
-            // the id breaks ties (level tabs) so the order is stable.
-            let ordered = entries.sorted { a, b in
-                EdgeLayout.isFrontmost(a.wc.restingFrame, b.wc.restingFrame, edge: key.edge)
-                    ?? (a.id.uuidString < b.id.uuidString)
-            }
+            // the id breaks ties (level tabs) so the order is stable. The ordering
+            // decision lives in TabDragPolicy; the controller just re-seats the windows.
+            let ordered = TabDragPolicy.restackOrder(
+                entries.map { .init(id: $0.id, restingFrame: $0.wc.restingFrame) }, edge: key.edge)
+                .compactMap { wcByID[$0] }   // total: every ordered id came from `entries`
             // Tuck each tab just below the previous one, so the leading tab stays on top.
             for i in 1..<ordered.count {
-                ordered[i].wc.order(below: ordered[i - 1].wc.windowNumber)
+                ordered[i].order(below: ordered[i - 1].windowNumber)
             }
         }
     }
@@ -712,12 +716,11 @@ final class TabController {
         guard !dragLocked, let wc = tabWindows[id], let target = dragTarget() else { return }
         // Fire the alignment haptic the moment the pill magnetizes to a new guide.
         let guide = magnetized(target, excluding: id).guide
-        if guide != lastSnapGuide {
-            if guide != nil {
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .drawCompleted)
-            }
-            lastSnapGuide = guide
+        let haptic = TabDragPolicy.alignmentHaptic(current: guide, previous: lastSnapGuide)
+        if haptic.fire {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .drawCompleted)
         }
+        lastSnapGuide = haptic.guide
         let frame = snappedDragFrame(id, wc: wc, target: target)
         wc.previewSnap(toFrame: frame, edge: target.edge, on: target.screen)
     }
@@ -731,8 +734,7 @@ final class TabController {
         let neighbors = restingFrames(onEdge: target.edge, screen: target.screen, excluding: id).map {
             EdgeLayout.position(forPoint: CGPoint(x: $0.midX, y: $0.midY), edge: target.edge, in: vf)
         }
-        let snap = EdgeLayout.snappedPosition(target.position, guides: EdgeLayout.snapGuides + neighbors)
-        return (snap.position, snap.snappedGuide)
+        return TabDragPolicy.magnetize(position: target.position, neighbors: neighbors)
     }
 
     /// Commit the **snapped** position on release — the same legal slot the preview
@@ -794,7 +796,7 @@ final class TabController {
         let orders = store.tabs
             .filter { $0.id != id && $0.anchor.edge == edge && $0.anchor.displayUUID == uuid }
             .map(\.anchor.order)
-        return PersistedLayoutBounds.nextOrder(after: orders.max())
+        return TabDragPolicy.nextStackOrder(existingOrders: orders)
     }
 
     /// The screen / edge / position the dragged pill should snap to, from the
