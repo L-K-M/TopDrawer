@@ -22,9 +22,10 @@ final class TabController {
     /// Live per-tab hotkey registrations. The token is the registrar's opaque handle to
     /// the underlying Carbon hotkey; the spec is retained for conflict detection.
     private var hotkeys: [UUID: (token: HotkeyToken, spec: HotkeySpec)] = [:]
-    /// The global-hotkey seam (LP-13). Carbon on macOS; owns the platform hotkey objects
-    /// and the id counter that used to live here as `hotkeyCounter`.
-    private let hotkeyRegistrar: GlobalHotkeyRegistering = CarbonHotkeyRegistrar()
+    /// The global-hotkey seam (LP-13), injected like `trashService`. Carbon on macOS; owns
+    /// the platform hotkey objects and the id counter that used to live here as
+    /// `hotkeyCounter`.
+    private let hotkeyRegistrar: GlobalHotkeyRegistering
     /// Specs Carbon already refused to register this session (a system-reserved combo
     /// or one another app owns). Cached so a reconcile doesn't re-attempt — and re-log
     /// — the same external failure on every store mutation. Conflicts with another
@@ -159,11 +160,13 @@ final class TabController {
     var onOpenSettings: ((UUID?) -> Void)?
 
     init(store: TabStore, preferences: Preferences, registry: DisplayRegistry,
-         trashService: TrashServicing = SystemTrashService()) {
+         trashService: TrashServicing = SystemTrashService(),
+         hotkeyRegistrar: GlobalHotkeyRegistering = CarbonHotkeyRegistrar()) {
         self.store = store
         self.preferences = preferences
         self.registry = registry
         self.trashService = trashService
+        self.hotkeyRegistrar = hotkeyRegistrar
         self.drawer = DrawerWindowController(preferences: preferences)
 
         wireDrawer()

@@ -5,6 +5,10 @@
 /// so nothing on Linux registers a hotkey until that backend lands. The registrar owns the
 /// underlying platform object and hands the caller an opaque `HotkeyToken` to release it
 /// with. See PLAN.md §LP-13 / §10.
+///
+/// Threading: `register` and `unregister` must be called on the main thread. Carbon is
+/// main-event-loop oriented and `CarbonHotkeyRegistrar` keeps unsynchronized state; the
+/// sole caller (`TabController.reconcile`) is already main-thread.
 protocol GlobalHotkeyRegistering {
     /// Attempts to register `spec` as a global hotkey that invokes `onPressed` on the
     /// main thread. Returns an opaque token on success (pass it to `unregister`), or `nil`
@@ -18,9 +22,11 @@ protocol GlobalHotkeyRegistering {
 
 /// An opaque handle to one live global-hotkey registration. The caller stores it and
 /// passes it back to `unregister`; only the registrar that issued it interprets the
-/// underlying value.
+/// underlying value. `id` is module-internal (not `fileprivate`) so a registrar defined
+/// in another file — the planned Linux compositor/portal backend — can mint and read its
+/// own tokens; it stays non-`public`, so the handle remains opaque outside the module.
 struct HotkeyToken {
-    fileprivate let id: UInt32
+    let id: UInt32
 }
 
 #if canImport(Carbon)
@@ -47,8 +53,7 @@ final class CarbonHotkeyRegistrar: GlobalHotkeyRegistering {
     }
 
     func unregister(_ token: HotkeyToken) {
-        registrations[token.id]?.unregister()
-        registrations[token.id] = nil
+        registrations.removeValue(forKey: token.id)?.unregister()
     }
 }
 #endif
