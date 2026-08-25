@@ -241,5 +241,12 @@ final class PreferencesTests: XCTestCase {
         defaults.set(true, forKey: "launchAtLogin")
         let prefs = Preferences(defaults: defaults, loginItem: FakeLoginItem(enabled: nil))
         XCTAssertTrue(prefs.launchAtLogin, "stored preference wins when the seam reports nil")
+
+        // With nothing stored either, init must default to false rather than guess —
+        // this pins the trailing `?? false` (the fresh-install / Linux no-op default).
+        defaults.removeObject(forKey: "launchAtLogin")
+        XCTAssertFalse(
+            Preferences(defaults: defaults, loginItem: FakeLoginItem(enabled: nil)).launchAtLogin,
+            "no seam state and no stored value defaults to false")
     }
 }
