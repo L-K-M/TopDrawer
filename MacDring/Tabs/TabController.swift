@@ -19,7 +19,12 @@ final class TabController {
     private var iconEditorSessionID: UUID?
 
     private var tabWindows: [UUID: TabWindowController] = [:]
-    private var hotkeys: [UUID: (hotkey: CarbonHotkey, spec: HotkeySpec)] = [:]
+    /// Live per-tab hotkey registrations. The token is the registrar's opaque handle to
+    /// the underlying Carbon hotkey; the spec is retained for conflict detection.
+    private var hotkeys: [UUID: (token: HotkeyToken, spec: HotkeySpec)] = [:]
+    /// The global-hotkey seam (LP-13). Carbon on macOS; owns the platform hotkey objects
+    /// and the id counter that used to live here as `hotkeyCounter`.
+    private let hotkeyRegistrar: GlobalHotkeyRegistering = CarbonHotkeyRegistrar()
     /// Specs Carbon already refused to register this session (a system-reserved combo
     /// or one another app owns). Cached so a reconcile doesn't re-attempt — and re-log
     /// — the same external failure on every store mutation. Conflicts with another
@@ -36,7 +41,6 @@ final class TabController {
     /// requests flow through those paths, so a snapshot detects intervening drawer
     /// activity even when the drawer ends up closed again.
     private var drawerInteractionGeneration: UInt = 0
-    private var hotkeyCounter: UInt32 = 1
 
     private var globalClickMonitor: Any?
     private var localKeyMonitor: Any?
@@ -952,14 +956,11 @@ final class TabController {
         return HotkeyRegistrationPolicy.isBlocked(decision)
     }
 
-    /// Asks Carbon to register `spec` for a tab, recording success in `hotkeys` and an
-    /// external failure in `failedHotkeySpecs` (so unrelated reconciles don't retry it).
+    /// Asks the registrar to register `spec` for a tab, recording success in `hotkeys` and
+    /// an external failure in `failedHotkeySpecs` (so unrelated reconciles don't retry it).
     private func registerHotkey(_ spec: HotkeySpec, for id: UUID) {
-        let hotkey = CarbonHotkey(identifier: hotkeyCounter)
-        hotkeyCounter += 1
-        hotkey.onPressed = { [weak self] in self?.toggleDrawer(id) }
-        if hotkey.register(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) {
-            hotkeys[id] = (hotkey, spec)
+        if let token = hotkeyRegistrar.register(spec, onPressed: { [weak self] in self?.toggleDrawer(id) }) {
+            hotkeys[id] = (token, spec)
             failedHotkeySpecs[id] = nil
         } else {
             failedHotkeySpecs[id] = spec
@@ -967,7 +968,7 @@ final class TabController {
     }
 
     private func unregisterHotkey(_ id: UUID) {
-        hotkeys[id]?.hotkey.unregister()
+        if let token = hotkeys[id]?.token { hotkeyRegistrar.unregister(token) }
         hotkeys[id] = nil
         failedHotkeySpecs[id] = nil
     }
@@ -1619,7 +1620,7 @@ final class TabController {
         activeLaunchRequestID = nil
         for (_, wc) in tabWindows { wc.close() }
         tabWindows.removeAll()
-        for (_, entry) in hotkeys { entry.hotkey.unregister() }
+        for (_, entry) in hotkeys { hotkeyRegistrar.unregister(entry.token) }
         hotkeys.removeAll()
     }
 }
