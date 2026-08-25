@@ -111,8 +111,15 @@ final class TabPlacementPolicyTests: XCTestCase {
         // churn setAnchor writes for sub-pixel corrections. This pins the in-between case the
         // "didn't move" and "moved a lot" tests leave open.
         let held = UUID(), nudged = UUID()
-        // 427.7 snaps to minY 428 (a 0.3pt nudge) under this visible/height/gap geometry.
-        let nudgedY: CGFloat = 427.7
+        // Drop the second tab 0.3pt inside the held tab's blocked span. The first legal
+        // minY stacking against `held` on a right edge is held.maxY + gap (a negative gap
+        // lets the pills overlap), so deriving nudgedY from held's settled frame keeps this
+        // a ~0.3pt nudge regardless of future pill-height or minTabGap changes — no
+        // hand-tuned magic y-value to reverse-engineer later.
+        let heldOnly = TabPlacementPolicy.deOverlap([input(held, order: 0, position: 0.5, y: 400)],
+                                                    edge: .right, gap: EdgeLayout.minTabGap, in: visible)
+        let heldSettled = try XCTUnwrap(heldOnly.first { $0.id == held }).settledFrame
+        let nudgedY = heldSettled.maxY + EdgeLayout.minTabGap - 0.3
         let results = TabPlacementPolicy.deOverlap([
             input(held, order: 0, position: 0.5, y: 400),
             input(nudged, order: 1, position: 0.5, y: nudgedY),
