@@ -74,6 +74,18 @@ let macDringSources: [String] = [
     // lifted out of TabController.
     "Screens/SpringLoadPolicy.swift",
     "Hotkeys/HotkeyRegistrationPolicy.swift",
+    // LP-12: platform seams for volumes / trash / launching. The listers' pure cores
+    // compile as-is; their FileManager volume bridge, NSWorkspace, NSAppleScript, and
+    // FileManager.trashItem are macOS-only and guarded. TrashInspector stays macOS-only
+    // (Darwin getattrlist) — only its shape is formalized as TrashServicing.
+    "Store/VolumeListing.swift",
+    "Store/DisksLister.swift",
+    "Store/NetworkLister.swift",
+    "Store/CloudLister.swift",
+    "Launch/AppLaunching.swift",
+    "Launch/ItemLauncher.swift",
+    "Launch/FileMover.swift",
+    "Launch/TrashServicing.swift",
 ]
 
 let macDringTestsSources: [String] = [
@@ -110,6 +122,13 @@ let macDringTestsSources: [String] = [
     // LP-11
     "SpringLoadPolicyTests.swift",
     "HotkeyRegistrationPolicyTests.swift",
+    // LP-12: the volume listers + launch/move seams now reach Linux.
+    "VolumeListingTestSupport.swift",
+    "DisksListerTests.swift",
+    "NetworkListerTests.swift",
+    "CloudListerTests.swift",
+    "ItemLauncherTests.swift",
+    "FileMoverTests.swift",
 ]
 
 let package = Package(

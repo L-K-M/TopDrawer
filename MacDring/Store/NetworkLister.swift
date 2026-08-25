@@ -24,10 +24,14 @@ enum NetworkLister {
     }
 
     /// The tab's mounted network shares as ejectable `.disk` items (empty if not a
-    /// network tab or nothing remote is mounted).
-    static func contents(of tab: Tab) -> [DrawerItem] {
+    /// network tab or nothing remote is mounted). `listing` is the platform seam that
+    /// vends mounted volumes — the macOS `FileManager` bridge by default, injectable
+    /// for tests and a future Linux backend.
+    static func contents(of tab: Tab, listing: VolumeListing = SystemVolumeListing()) -> [DrawerItem] {
         guard tab.kind == .network else { return [] }
-        return items(from: mountedVolumes())
+        return items(from: listing.mountedVolumes().map {
+            Volume(url: $0.url, name: $0.name, isLocal: $0.isLocal, isBrowsable: $0.isBrowsable)
+        })
     }
 
     /// Pure: keeps the network (remote) volumes, sorts them by name, and maps them to
@@ -49,33 +53,5 @@ enum NetworkLister {
     /// those).
     static func isNetwork(_ volume: Volume) -> Bool {
         volume.isBrowsable && !volume.isLocal
-    }
-
-    // MARK: FileManager bridge
-
-    private static let keys: [URLResourceKey] = [
-        .volumeNameKey, .volumeLocalizedNameKey, .volumeIsLocalKey, .volumeIsBrowsableKey,
-    ]
-
-    private static func mountedVolumes() -> [Volume] {
-        let urls = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        return urls.compactMap(volume(at:))
-    }
-
-    private static func volume(at url: URL) -> Volume? {
-        guard let values = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
-        let name = values.volumeLocalizedName
-            ?? values.volumeName
-            ?? FileManager.default.displayName(atPath: url.path)
-        return Volume(
-            url: url,
-            name: name,
-            // A volume that doesn't report locality is assumed local, so it can't
-            // masquerade as a network share; one that doesn't report browsability is
-            // assumed visible (it came back from a `skipHiddenVolumes` enumeration).
-            isLocal: values.volumeIsLocal ?? true,
-            isBrowsable: values.volumeIsBrowsable ?? true
-        )
     }
 }

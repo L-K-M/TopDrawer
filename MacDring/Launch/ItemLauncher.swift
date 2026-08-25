@@ -1,8 +1,14 @@
-import AppKit
+import Foundation
+#if canImport(AppKit)
+import AppKit   // NSWorkspace: the macOS launch/open/reveal backend
+#endif
 
 /// Opens a drawer item: launches/activates an app, opens a file or folder in its
-/// default handler, or opens a URL. Uses `NSWorkspace`, so it needs no special
-/// permission.
+/// default handler, or opens a URL. The core is a pure, injectable state machine
+/// (`launch(_:resolveURL:openApplication:openURL:completion:)`); the macOS convenience
+/// entry points below fill those seams with `NSWorkspace`, so they need no special
+/// permission. On Linux only the pure core compiles — a Linux launcher backend injects
+/// the same seams (`AppLaunching`). See PLAN.md §LP-12.
 enum ItemLauncher {
 
     enum LaunchError: Error {
@@ -44,23 +50,14 @@ enum ItemLauncher {
         }
     }
 
+#if canImport(AppKit)
     /// Launches the item and reports the confirmed target URL, or the reason opening
-    /// failed. The completion fires exactly once on the main thread.
+    /// failed. The completion fires exactly once on the main thread. macOS entry point:
+    /// fills the injectable seams through `SystemAppLauncher` (`NSWorkspace`).
     static func launch(_ item: DrawerItem, completion: @escaping LaunchCompletion) {
-        launch(
-            item,
-            resolveURL: { BookmarkResolver.url(for: $0) },
-            openApplication: { url, reply in
-                let configuration = NSWorkspace.OpenConfiguration()
-                configuration.activates = true
-                NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
-                    reply(error)
-                }
-            },
-            openURL: { NSWorkspace.shared.open($0) },
-            completion: completion
-        )
+        launch(item, using: SystemAppLauncher(), completion: completion)
     }
+#endif
 
     /// Injectable workspace seams keep result handling deterministic in unit tests.
     static func launch(
@@ -103,6 +100,7 @@ enum ItemLauncher {
         }
     }
 
+#if canImport(AppKit)
     /// Reveals a file or folder item in Finder.
     static func revealInFinder(_ item: DrawerItem) {
         guard item.kind != .url, let url = BookmarkResolver.url(for: item) else { return }
@@ -120,4 +118,5 @@ enum ItemLauncher {
             }
         }
     }
+#endif
 }

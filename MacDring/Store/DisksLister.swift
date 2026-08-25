@@ -25,10 +25,15 @@ enum DisksLister {
     }
 
     /// The tab's mounted ejectable volumes as launchable disk items (empty if not a
-    /// disks tab or nothing ejectable is mounted).
-    static func contents(of tab: Tab) -> [DrawerItem] {
+    /// disks tab or nothing ejectable is mounted). `listing` is the platform seam that
+    /// vends mounted volumes — the macOS `FileManager` bridge by default, injectable
+    /// for tests and a future Linux backend.
+    static func contents(of tab: Tab, listing: VolumeListing = SystemVolumeListing()) -> [DrawerItem] {
         guard tab.kind == .disks else { return [] }
-        return items(from: mountedVolumes())
+        return items(from: listing.mountedVolumes().map {
+            Volume(url: $0.url, name: $0.name, isEjectable: $0.isEjectable,
+                   isRemovable: $0.isRemovable, isInternal: $0.isInternal, isBrowsable: $0.isBrowsable)
+        })
     }
 
     /// Pure: keeps the ejectable volumes, sorts them by name, and maps them to
@@ -52,36 +57,5 @@ enum DisksLister {
     static func isEjectable(_ volume: Volume) -> Bool {
         guard volume.isBrowsable else { return false }
         return volume.isEjectable || volume.isRemovable || !volume.isInternal
-    }
-
-    // MARK: FileManager bridge
-
-    private static let keys: [URLResourceKey] = [
-        .volumeNameKey, .volumeLocalizedNameKey,
-        .volumeIsEjectableKey, .volumeIsRemovableKey,
-        .volumeIsInternalKey, .volumeIsBrowsableKey,
-    ]
-
-    private static func mountedVolumes() -> [Volume] {
-        let urls = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        return urls.compactMap(volume(at:))
-    }
-
-    private static func volume(at url: URL) -> Volume? {
-        guard let values = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
-        let name = values.volumeLocalizedName
-            ?? values.volumeName
-            ?? FileManager.default.displayName(atPath: url.path)
-        return Volume(
-            url: url,
-            name: name,
-            isEjectable: values.volumeIsEjectable ?? false,
-            isRemovable: values.volumeIsRemovable ?? false,
-            isInternal: values.volumeIsInternal ?? false,
-            // A volume that doesn't report browsability is assumed visible (it came
-            // back from a `skipHiddenVolumes` enumeration).
-            isBrowsable: values.volumeIsBrowsable ?? true
-        )
     }
 }
