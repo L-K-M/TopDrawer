@@ -30,6 +30,7 @@ struct HotkeyToken {
 }
 
 #if canImport(Carbon)
+import Dispatch
 
 /// macOS global-hotkey registrar backed by Carbon (`CarbonHotkey`). It owns the live
 /// `CarbonHotkey` instances — keyed by the monotonic id it stamps into each
@@ -41,6 +42,9 @@ final class CarbonHotkeyRegistrar: GlobalHotkeyRegistering {
     private var counter: UInt32 = 1
 
     func register(_ spec: HotkeySpec, onPressed: @escaping () -> Void) -> HotkeyToken? {
+        // Enforces the protocol's main-thread contract: `registrations`/`counter` are
+        // unsynchronized and Carbon registration is main-event-loop oriented.
+        dispatchPrecondition(condition: .onQueue(.main))
         let id = counter
         counter += 1
         let hotkey = CarbonHotkey(identifier: id)
@@ -53,6 +57,7 @@ final class CarbonHotkeyRegistrar: GlobalHotkeyRegistering {
     }
 
     func unregister(_ token: HotkeyToken) {
+        dispatchPrecondition(condition: .onQueue(.main))
         registrations.removeValue(forKey: token.id)?.unregister()
     }
 }
