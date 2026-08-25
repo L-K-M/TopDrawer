@@ -105,8 +105,10 @@ final class TabDragPolicyTests: XCTestCase {
     }
 
     func testRestackOrderOfAnEmptyEdgeIsEmpty() {
-        // The controller only calls this for groups of 2+, but the fold must stay total:
-        // an empty (or single) input returns as-is so the `1..<count` re-seat loop is safe.
+        // The fold stays total: an empty (or single) input returns as-is rather than
+        // trapping. What keeps the controller's own `1..<count` re-seat loop legal is its
+        // `entries.count > 1` group filter (always 2+ elements), NOT this totality —
+        // `1..<0` itself traps in Swift, so a total fold alone wouldn't save an empty group.
         XCTAssertEqual(TabDragPolicy.restackOrder([], edge: .right), [])
     }
 
