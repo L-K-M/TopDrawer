@@ -49,4 +49,20 @@ final class NetworkListerTests: XCTestCase {
                       kind: .items)
         XCTAssertTrue(NetworkLister.contents(of: tab).isEmpty)
     }
+
+    func testContentsMapsAndFiltersThroughTheVolumeListingSeam() {
+        // The injected VolumeListing vends MountedVolumes; contents() maps them to
+        // NetworkLister.Volume and keeps only the remote, browsable ones.
+        let tab = Tab(title: "N", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                      kind: .network)
+        let listing = FakeVolumeListing(volumes: [
+            .fake("Server", isLocal: false),                 // remote share → kept
+            .fake("USB", isLocal: true),                     // local disk → excluded
+            .fake("vm", isLocal: false, browsable: false),   // hidden mount → excluded
+        ])
+        let items = NetworkLister.contents(of: tab, listing: listing)
+        XCTAssertEqual(items.map(\.displayName), ["Server"])
+        XCTAssertEqual(items.first?.kind, .disk)
+    }
 }

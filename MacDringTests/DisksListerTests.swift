@@ -69,4 +69,21 @@ final class DisksListerTests: XCTestCase {
                       kind: .items)
         XCTAssertTrue(DisksLister.contents(of: tab).isEmpty)
     }
+
+    func testContentsMapsAndFiltersThroughTheVolumeListingSeam() {
+        // The injected VolumeListing vends MountedVolumes; contents() maps them to
+        // DisksLister.Volume and applies the ejectable filter — the boot disk and the
+        // hidden volume drop out, the USB stick stays.
+        let tab = Tab(title: "D", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                      kind: .disks)
+        let listing = FakeVolumeListing(volumes: [
+            .fake("USB", ejectable: true),
+            .fake("Macintosh HD", isInternal: true),   // internal boot disk → excluded
+            .fake("VM", browsable: false),             // hidden system volume → excluded
+        ])
+        let items = DisksLister.contents(of: tab, listing: listing)
+        XCTAssertEqual(items.map(\.displayName), ["USB"])
+        XCTAssertTrue(items.allSatisfy { $0.kind == .disk })
+    }
 }

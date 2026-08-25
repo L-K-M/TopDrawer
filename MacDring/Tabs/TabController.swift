@@ -144,6 +144,9 @@ final class TabController {
     private var dragLength: CGFloat = 60
     /// Whether the tab currently being dragged is locked (won't move).
     private var dragLocked = false
+    /// The Trash backend (metadata reads + recoverable move-to-Trash + Empty Trash),
+    /// behind the platform-neutral `TrashServicing` seam. See PLAN.md §LP-12.
+    private let trashService: TrashServicing = SystemTrashService()
 
     /// Invoked to open Settings for a tab (the tab's context menu or the drawer's
     /// gear). `nil` opens Settings without selecting a tab. Wired by `AppDelegate`.
@@ -845,7 +848,7 @@ final class TabController {
             return
         }
         if let target, target.kind == .trash {
-            if FileMover.trash(urls) {   // drop onto Trash → move the files to the Trash
+            if trashService.trash(urls) {   // drop onto Trash → move the files to the Trash
                 // The classic "poof" where the files vanished into the Trash.
                 NSAnimationEffect.poof.show(centeredAt: NSEvent.mouseLocation,
                                             size: NSSize(width: 32, height: 32), completionHandler: {})
@@ -1138,7 +1141,7 @@ final class TabController {
         alert.messageText = "Empty the Trash?"
         // Say how many items are about to go, the way Finder does. (Shares the
         // metadata count's `.DS_Store` caveat — see TrashInspector.)
-        let count = TrashInspector.trashCount()
+        let count = trashService.trashCount()
         let what = count > 0 ? "the \(count) item\(count == 1 ? "" : "s")" : "the items"
         alert.informativeText = "This permanently erases \(what) in the Trash. You can’t undo this."
         alert.addButton(withTitle: "Empty Trash")
@@ -1146,7 +1149,7 @@ final class TabController {
         NSApp.activate(ignoringOtherApps: true)   // a modal alert needs key focus
         floatAboveDrawer(alert.window)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        if FileMover.emptyTrash() {
+        if trashService.emptyTrash() {
             drawer.model.iconNonce += 1   // re-resolve the Trash icon in place (full → empty)
         }
     }

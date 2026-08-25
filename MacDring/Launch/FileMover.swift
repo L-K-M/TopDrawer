@@ -57,13 +57,24 @@ enum FileMover {
         return allSucceeded
     }
 
+    /// The move-to-Trash backend used when a caller doesn't inject one. macOS uses the
+    /// system's recoverable trash (`FileManager.trashItem`, which does not exist on
+    /// Linux); a Linux build has no system Trash, so the default fails each item and a
+    /// `TrashServicing` backend injects a real one. See PLAN.md §LP-12.
+    #if os(macOS)
+    static let systemTrashItem: (URL) throws -> Void = { url in
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
+    #else
+    static let systemTrashItem: (URL) throws -> Void = { _ in
+        throw CocoaError(.featureUnsupported)
+    }
+    #endif
+
     /// Moves dropped files to the Trash (recoverable — `trashItem`, not a hard
     /// delete). Used when files are dropped onto a Trash item.
     @discardableResult
-    static func trash(_ urls: [URL],
-                      trashItem: (URL) throws -> Void = { url in
-                          try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                      }) -> Bool {
+    static func trash(_ urls: [URL], trashItem: (URL) throws -> Void = systemTrashItem) -> Bool {
         let fileURLs = urls.filter(\.isFileURL)
         guard !fileURLs.isEmpty else { return false }
 
@@ -86,6 +97,7 @@ enum FileMover {
     /// blocked (e.g. the user declined) or Finder reported an error. Main thread.
     @discardableResult
     static func emptyTrash() -> Bool {
+        #if os(macOS)
         guard let script = NSAppleScript(source: #"tell application "Finder" to empty the trash"#) else { return false }
         var error: NSDictionary?
         script.executeAndReturnError(&error)
@@ -94,6 +106,11 @@ enum FileMover {
             return false
         }
         return true
+        #else
+        // No system Trash / Apple Events on Linux; a Linux TrashServicing backend
+        // would implement this. See PLAN.md §LP-12.
+        return false
+        #endif
     }
 
     /// A non-colliding destination in `directory` for `url` (appends " 2", " 3", …).
