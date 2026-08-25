@@ -78,6 +78,12 @@ let macDringSources: [String] = [
     // compile as-is; their FileManager volume bridge, NSWorkspace, NSAppleScript, and
     // FileManager.trashItem are macOS-only and guarded. TrashInspector stays macOS-only
     // (Darwin getattrlist) — only its shape is formalized as TrashServicing.
+    // LP-13: the platform-neutral icon-name layer (SF name → Linux Lucide name) + the
+    // curated symbol list and its mapping data. IconRenderer/SymbolPickerView stay
+    // macOS-only; only rendering resolves through IconName.
+    "Model/IconName.swift",
+    "Model/IconMap.swift",
+    "Model/CuratedSymbols.swift",
     "Store/VolumeListing.swift",
     "Store/DisksLister.swift",
     "Store/NetworkLister.swift",
@@ -122,6 +128,8 @@ let macDringTestsSources: [String] = [
     // LP-11
     "SpringLoadPolicyTests.swift",
     "HotkeyRegistrationPolicyTests.swift",
+    // LP-13: the icon-name layer + mapping-completeness test.
+    "IconNameTests.swift",
     // LP-12: the volume listers + launch/move seams now reach Linux.
     "VolumeListingTestSupport.swift",
     "DisksListerTests.swift",

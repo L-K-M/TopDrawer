@@ -55,7 +55,10 @@ enum IconRenderer {
     private static func drawSymbol(_ name: String, in rect: NSRect, color: NSColor, fit: Fit) {
         let config = NSImage.SymbolConfiguration(pointSize: max(rect.width, rect.height), weight: .regular)
             .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+        // Rendering goes through the IconName seam (LP-13): the stored SF name on macOS,
+        // the mapped Linux-set name on a Linux renderer. On macOS this returns `name`.
+        let resolved = IconName(sfSymbol: name).resolved(for: .current)
+        guard let symbol = NSImage(systemSymbolName: resolved, accessibilityDescription: nil)?
             .withSymbolConfiguration(config) else { return }
         let s = symbol.size
         guard s.width > 0, s.height > 0 else { return }
