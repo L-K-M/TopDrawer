@@ -16,7 +16,7 @@ enum FreshLister {
 
     /// Newly-arrived files as launchable items, most-recently-added first, with
     /// sequential grid slots.
-    static func items(from results: [SpotlightQuery.Result]) -> [DrawerItem] {
+    static func items(from results: [RecentFileHit]) -> [DrawerItem] {
         let newestFirst = results.sorted { $0.date > $1.date }
         return newestFirst.prefix(limit).enumerated().map { index, result in
             // Transient items skip the per-file bookmark — never persisted, and every
@@ -36,7 +36,7 @@ enum FreshLister {
     /// (their union); with the setting off — the prompt-free default (FB1 / PR #61) —
     /// the scan side is simply empty. When the same file appears in both, the newer
     /// date wins (they agree on Date Added, so this is just a tie-break).
-    static func merge(_ scanned: [SpotlightQuery.Result], _ spotlight: [SpotlightQuery.Result]) -> [SpotlightQuery.Result] {
+    static func merge(_ scanned: [RecentFileHit], _ spotlight: [RecentFileHit]) -> [RecentFileHit] {
         var seen = Set<URL>()
         return (scanned + spotlight)
             .sorted { $0.date > $1.date }

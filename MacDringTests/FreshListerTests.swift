@@ -3,9 +3,9 @@ import XCTest
 
 final class FreshListerTests: XCTestCase {
 
-    private func result(_ name: String, _ path: String, daysAgo: Double) -> SpotlightQuery.Result {
-        SpotlightQuery.Result(url: URL(fileURLWithPath: path), name: name,
-                              date: Date(timeIntervalSinceNow: -daysAgo * 86400))
+    private func result(_ name: String, _ path: String, daysAgo: Double) -> RecentFileHit {
+        RecentFileHit(url: URL(fileURLWithPath: path), name: name,
+                      date: Date(timeIntervalSinceNow: -daysAgo * 86400))
     }
 
     func testItemsAreNewestFirstWithSequentialSlots() {
