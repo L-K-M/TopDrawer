@@ -170,4 +170,83 @@ final class PreferencesTests: XCTestCase {
         XCTAssertNil(NSColor(hex: "nothex"))
     }
     #endif
+
+    // MARK: Login item seam (LP-13)
+
+    /// A fake `LoginItemManaging` that records `setEnabled` calls and can be told to fail,
+    /// so the launch-at-login flow is testable without a real `SMAppService`.
+    private final class FakeLoginItem: LoginItemManaging {
+        var enabled: Bool?
+        var failWith: String?
+        private(set) var setCalls: [Bool] = []
+
+        init(enabled: Bool? = nil, failWith: String? = nil) {
+            self.enabled = enabled
+            self.failWith = failWith
+        }
+
+        func isEnabled() -> Bool? { enabled }
+
+        func setEnabled(_ enabled: Bool) -> String? {
+            setCalls.append(enabled)
+            if let failWith { return failWith }
+            self.enabled = enabled   // success reflects the new state
+            return nil
+        }
+    }
+
+    func testInitReadsTheAuthoritativeLoginState() {
+        // A system that reports "enabled" overrides the stored default.
+        let prefs = Preferences(defaults: defaults, loginItem: FakeLoginItem(enabled: true))
+        XCTAssertTrue(prefs.launchAtLogin)
+    }
+
+    func testTogglingLaunchAtLoginAppliesThroughTheSeamAndPersists() {
+        let login = FakeLoginItem(enabled: false)
+        let prefs = Preferences(defaults: defaults, loginItem: login)
+        XCTAssertFalse(prefs.launchAtLogin)
+
+        prefs.launchAtLogin = true
+        XCTAssertEqual(login.setCalls, [true], "the seam applies the change")
+        XCTAssertNil(prefs.launchAtLoginError)
+        XCTAssertTrue(prefs.launchAtLogin)
+        XCTAssertTrue(defaults.bool(forKey: "launchAtLogin"), "and it round-trips to defaults")
+    }
+
+    func testAFailedLoginItemChangeSurfacesTheErrorAndRollsBack() {
+        let login = FakeLoginItem(enabled: false, failWith: "denied")
+        let prefs = Preferences(defaults: defaults, loginItem: login)
+
+        prefs.launchAtLogin = true
+        XCTAssertEqual(login.setCalls, [true])
+        XCTAssertEqual(prefs.launchAtLoginError, "denied")
+        // The system state didn't change, so the toggle rolls back to the actual state.
+        XCTAssertFalse(prefs.launchAtLogin)
+        XCTAssertFalse(defaults.bool(forKey: "launchAtLogin"))
+    }
+
+    func testRefreshPicksUpAnExternalLoginStateChange() {
+        let login = FakeLoginItem(enabled: false)
+        let prefs = Preferences(defaults: defaults, loginItem: login)
+        XCTAssertFalse(prefs.launchAtLogin)
+
+        login.enabled = true   // changed outside the app (System Settings)
+        prefs.refreshLaunchAtLoginStatus()
+        XCTAssertTrue(prefs.launchAtLogin)
+    }
+
+    func testInitFallsBackToStoredLoginStateWhenSeamReportsNothing() {
+        // When the seam has no authoritative state to report (Linux's no-op, or a
+        // platform where the status is unknown), the stored preference is what wins.
+        defaults.set(true, forKey: "launchAtLogin")
+        let prefs = Preferences(defaults: defaults, loginItem: FakeLoginItem(enabled: nil))
+        XCTAssertTrue(prefs.launchAtLogin, "stored preference wins when the seam reports nil")
+
+        // With nothing stored either, init must default to false rather than guess —
+        // this pins the trailing `?? false` (the fresh-install / Linux no-op default).
+        defaults.removeObject(forKey: "launchAtLogin")
+        XCTAssertFalse(
+            Preferences(defaults: defaults, loginItem: FakeLoginItem(enabled: nil)).launchAtLogin,
+            "no seam state and no stored value defaults to false")
+    }
 }

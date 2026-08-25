@@ -1,13 +1,10 @@
 import Foundation
 // SwiftUI supplies ObservableObject/@Published on macOS; on Linux the module's
-// ObservationCompat shim supplies them, so this import is macOS-only. ServiceManagement
-// (login-item control) and the NSColor colour check below are likewise macOS-only and
-// guarded at their use sites.
+// ObservationCompat shim supplies them, so this import is macOS-only. Login-item control
+// (macOS ServiceManagement) now lives behind the LoginItemManaging seam; the NSColor
+// colour check below is likewise macOS-only and guarded at its use site.
 #if canImport(SwiftUI)
 import SwiftUI
-#endif
-#if canImport(ServiceManagement)
-import ServiceManagement
 #endif
 
 /// App-wide appearance and behavior settings, backed by `UserDefaults`. Per-tab
@@ -21,6 +18,9 @@ final class Preferences: ObservableObject {
     static let shared = Preferences()
 
     private let defaults: UserDefaults
+    /// The launch-at-login backend (macOS `SMAppService`, or a no-op elsewhere), behind
+    /// the `LoginItemManaging` seam. Injectable for tests. See PLAN.md §LP-13.
+    private let loginItem: LoginItemManaging
 
     // MARK: Defaults
 
@@ -183,8 +183,9 @@ final class Preferences: ObservableObject {
 
     // MARK: Init
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, loginItem: LoginItemManaging = SystemLoginItem()) {
         self.defaults = defaults
+        self.loginItem = loginItem
 
         drawerTranslucency = DrawerTranslucency(rawValue: defaults.string(forKey: Key.drawerTranslucency) ?? "") ?? Default.drawerTranslucency
         defaultTabColorHex = Self.validColor(defaults.string(forKey: Key.defaultTabColorHex), default: Default.defaultTabColorHex)
@@ -206,7 +207,7 @@ final class Preferences: ObservableObject {
         disconnectPolicy = DisconnectPolicy(rawValue: defaults.string(forKey: Key.disconnectPolicy) ?? "") ?? Default.disconnectPolicy
         freshDirectScan = defaults.object(forKey: Key.freshDirectScan) as? Bool ?? Default.freshDirectScan
 
-        launchAtLogin = Self.systemLaunchAtLoginEnabled()
+        launchAtLogin = loginItem.isEnabled()
             ?? (defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false)
     }
 
@@ -242,68 +243,37 @@ final class Preferences: ObservableObject {
     }
     #endif
 
-    /// The current login-item state from `SMAppService`, or `nil` if unavailable.
-    private static func systemLaunchAtLoginEnabled() -> Bool? {
-        #if canImport(ServiceManagement)
-        guard #available(macOS 13.0, *) else { return nil }
-        switch SMAppService.mainApp.status {
-        case .enabled: return true
-        case .notRegistered, .notFound: return false
-        default: return nil
-        }
-        #else
-        return nil
-        #endif
-    }
-
     // MARK: Launch at login
 
     /// Guards `launchAtLogin.didSet` against re-entrancy when we roll the toggle
-    /// back after a failed `SMAppService` call.
+    /// back after a failed login-item call.
     private var isSyncingLaunchAtLogin = false
 
     /// The most recent launch-at-login error, surfaced to Settings.
     @Published private(set) var launchAtLoginError: String?
 
     private func applyLaunchAtLogin(_ enabled: Bool) {
-        // Login-item registration is macOS-only (SMAppService); a no-op on Linux, where
-        // `launchAtLogin` is just a stored preference with no system side effect.
-        #if canImport(ServiceManagement)
-        guard #available(macOS 13.0, *) else { return }
-        do {
-            if enabled {
-                if SMAppService.mainApp.status != .enabled {
-                    try SMAppService.mainApp.register()
-                }
-            } else {
-                if SMAppService.mainApp.status == .enabled {
-                    try SMAppService.mainApp.unregister()
-                }
-            }
-            launchAtLoginError = nil
-            defaults.set(enabled, forKey: Key.launchAtLogin)
-        } catch {
-            NSLog("Top Drawer: failed to update launch-at-login: \(error.localizedDescription)")
-            launchAtLoginError = error.localizedDescription
+        // The `LoginItemManaging` seam applies the change (macOS `SMAppService`; a no-op
+        // where there is no system login item). Either way `launchAtLogin` is a real
+        // stored preference and round-trips.
+        if let errorMessage = loginItem.setEnabled(enabled) {
+            NSLog("Top Drawer: failed to update launch-at-login: \(errorMessage)")
+            launchAtLoginError = errorMessage
+            // The system state didn't change — roll the toggle back to what it actually is.
             isSyncingLaunchAtLogin = true
-            launchAtLogin = Self.systemLaunchAtLoginEnabled() ?? !enabled
+            launchAtLogin = loginItem.isEnabled() ?? !enabled
             isSyncingLaunchAtLogin = false
             defaults.set(launchAtLogin, forKey: Key.launchAtLogin)
+        } else {
+            launchAtLoginError = nil
+            defaults.set(enabled, forKey: Key.launchAtLogin)
         }
-        #else
-        // No SMAppService on Linux, so there is no system login item to toggle — but
-        // `launchAtLogin` is still a real stored preference: persist it (and clear the
-        // sync flag) so it round-trips like every other setting, ready for whenever a
-        // Linux autostart mechanism is wired up.
-        isSyncingLaunchAtLogin = false
-        defaults.set(enabled, forKey: Key.launchAtLogin)
-        #endif
     }
 
     /// Re-reads the authoritative login-item state (e.g. when Settings appears)
     /// so an external change in System Settings is reflected.
     func refreshLaunchAtLoginStatus() {
-        guard let actual = Self.systemLaunchAtLoginEnabled(), actual != launchAtLogin else { return }
+        guard let actual = loginItem.isEnabled(), actual != launchAtLogin else { return }
         isSyncingLaunchAtLogin = true
         launchAtLogin = actual
         isSyncingLaunchAtLogin = false

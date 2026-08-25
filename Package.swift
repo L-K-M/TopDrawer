@@ -84,6 +84,11 @@ let macDringSources: [String] = [
     "Model/IconName.swift",
     "Model/IconMap.swift",
     "Model/CuratedSymbols.swift",
+    // LP-13 part 2: platform seams for login item + display identity. The macOS
+    // conformances (SystemLoginItem's SMAppService branch, DisplayRegistry) stay
+    // macOS-only; the protocols and the Linux no-op login item compile here.
+    "Model/LoginItemManaging.swift",
+    "Screens/DisplayIdentity.swift",
     "Store/VolumeListing.swift",
     "Store/DisksLister.swift",
     "Store/NetworkLister.swift",
