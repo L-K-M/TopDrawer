@@ -79,7 +79,7 @@ final class DisksListerTests: XCTestCase {
                       kind: .disks)
         let listing = FakeVolumeListing(volumes: [
             .fake("USB", ejectable: true),
-            .fake("Macintosh HD", isInternal: true),   // internal boot disk → excluded
+            .fake("Macintosh HD"),   // bare fake = internal boot disk (the isInternal default) → excluded
             .fake("VM", browsable: false),             // hidden system volume → excluded
         ])
         let items = DisksLister.contents(of: tab, listing: listing)
