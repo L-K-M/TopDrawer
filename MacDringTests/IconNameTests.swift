@@ -6,7 +6,9 @@ final class IconNameTests: XCTestCase {
     // MARK: Mapping completeness (the LP-13 acceptance)
 
     func testEveryCuratedSymbolHasALinuxMapping() {
-        let missing = CuratedSymbols.all.filter { IconMap.linux[$0] == nil }
+        // A missing entry OR an empty-string value (an easy typo across ~250 hand pairs)
+        // both leave the symbol falling back to the generic glyph — treat both as missing.
+        let missing = CuratedSymbols.all.filter { (IconMap.linux[$0] ?? "").isEmpty }
         XCTAssertTrue(missing.isEmpty, "curated picker symbols with no Linux icon mapping: \(missing)")
     }
 
@@ -19,7 +21,11 @@ final class IconNameTests: XCTestCase {
 
     func testResolvedOnMacOSReturnsTheStoredSFNameUnchanged() {
         // Storage keeps SF names; macOS rendering is unchanged (no document migration).
-        for symbol in ["folder.fill", "square.grid.2x2.fill", "star", "trash"] {
+        // Includes an UNMAPPED symbol: macOS resolution must never consult IconMap or
+        // return the generic fallback, or it would corrupt stored names for legacy/custom
+        // documents whose glyph isn't in the curated set.
+        for symbol in ["folder.fill", "square.grid.2x2.fill", "star", "trash",
+                       "definitely.not.a.real.symbol.zzz"] {
             XCTAssertEqual(IconName(sfSymbol: symbol).resolved(for: .macOS), symbol)
         }
     }

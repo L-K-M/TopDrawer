@@ -16,12 +16,16 @@ struct IconName: Equatable {
         case macOS, linux
 
         /// The platform this build renders for — so a call site can resolve without
-        /// hard-coding one (`.resolved(for: .current)`).
+        /// hard-coding one (`.resolved(for: .current)`). The port targets macOS and Linux
+        /// only; a third platform compiling this file fails loudly rather than silently
+        /// feeding Lucide names into an SF Symbol path.
         static var current: Platform {
             #if os(macOS)
             return .macOS
-            #else
+            #elseif os(Linux)
             return .linux
+            #else
+            #error("IconName.Platform.current supports only macOS and Linux")
             #endif
         }
     }

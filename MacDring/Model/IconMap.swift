@@ -6,8 +6,11 @@ import Foundation
 /// `CuratedSymbols.all` plus a few names the code references directly; `IconNameTests`
 /// asserts the curated list is fully covered. Where SF has no clean Lucide analogue a
 /// nearby glyph is chosen, and any symbol not listed here falls back to
-/// `IconName.genericLinuxIcon`. Names are best-effort against Lucide's inventory; the
-/// actual Linux rendering that consumes them is a later LP. See PLAN.md §LP-13.
+/// `IconName.genericLinuxIcon`. Names use Lucide's current (post-rename) inventory and
+/// are best-effort; the actual Linux rendering that consumes them is a later LP. When it
+/// lands, pin the bundled Lucide version and add a test asserting every value below
+/// exists in it (an unknown name would silently degrade to the generic fallback). See
+/// PLAN.md §LP-13.
 enum IconMap {
     static let linux: [String: String] = [
         // Files & folders
@@ -107,8 +110,8 @@ enum IconMap {
         // Charts & misc
         "magnifyingglass": "search", "magnifyingglass.circle": "search", "line.3.horizontal": "menu",
         "line.3.horizontal.decrease": "list-filter", "ellipsis": "ellipsis", "ellipsis.circle": "circle-ellipsis",
-        "chart.bar": "bar-chart", "chart.bar.fill": "bar-chart", "chart.pie.fill": "pie-chart",
-        "chart.line.uptrend.xyaxis": "line-chart", "function": "square-function", "percent": "percent",
+        "chart.bar": "chart-column", "chart.bar.fill": "chart-column", "chart.pie.fill": "chart-pie",
+        "chart.line.uptrend.xyaxis": "chart-line", "function": "square-function", "percent": "percent",
         "number": "hash", "qrcode": "qr-code", "barcode": "barcode", "lightbulb": "lightbulb",
         "lightbulb.fill": "lightbulb", "powerplug.fill": "plug",
         // Transport & nature
