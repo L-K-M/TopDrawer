@@ -61,26 +61,42 @@ protocol ObservableObject: AnyObject {
     var objectWillChange: ObservableObjectPublisher { get }
 }
 
-// The registry holds each object's publisher strongly (nothing else does), keyed by
-// `ObjectIdentifier`. It never evicts, so it leaks one small publisher per
-// ObservableObject instance ever created — acceptable here because this shim only
-// runs on Linux, where these models are exercised by a bounded set of tests and there
-// is no `objc_setAssociatedObject` to hang per-instance storage off instead. An
-// identifier is only reused after its object is freed (its subscribers gone with it),
-// so a later object at the same address consistently resolves to the same entry with
-// no cross-talk.
+// Each object's publisher lives in a box that keeps the object itself only *weakly*,
+// keyed by `ObjectIdentifier`. Identifiers are unique among live objects, so a box
+// whose `object === self` is genuinely ours; a stale box — its object deallocated and
+// its address recycled into `self` — is replaced with a fresh publisher on the next
+// access. That `=== self` check is load-bearing: a subscriber lives in its
+// `AnyCancellable` (see below), not in the observable object, so a cancellable that
+// outlives its object keeps that object's subscribers registered on the boxed
+// publisher; without the check a new object at the recycled address would inherit the
+// dead object's publisher and fire its subscribers on every `@Published` set. Replacing
+// the box also drops the old publisher and its captured closures, close to how real
+// Combine releases them with the object. (There is no `objc_setAssociatedObject` on
+// Linux to hang per-instance storage off instead; a box for an object that is freed and
+// never has its address reused lingers, but it holds no live subscribers.)
+private final class ObjectWillChangeBox {
+    weak var object: AnyObject?
+    let publisher: ObservableObjectPublisher
+    init(object: AnyObject, publisher: ObservableObjectPublisher) {
+        self.object = object
+        self.publisher = publisher
+    }
+}
+
 private let objectWillChangeRegistryLock = NSLock()
-private var objectWillChangeRegistry: [ObjectIdentifier: ObservableObjectPublisher] = [:]
+private var objectWillChangeRegistry: [ObjectIdentifier: ObjectWillChangeBox] = [:]
 
 extension ObservableObject {
     var objectWillChange: ObservableObjectPublisher {
         let key = ObjectIdentifier(self)
         objectWillChangeRegistryLock.lock()
         defer { objectWillChangeRegistryLock.unlock() }
-        if let existing = objectWillChangeRegistry[key] { return existing }
-        let publisher = ObservableObjectPublisher()
-        objectWillChangeRegistry[key] = publisher
-        return publisher
+        if let box = objectWillChangeRegistry[key], box.object === self {
+            return box.publisher
+        }
+        let box = ObjectWillChangeBox(object: self, publisher: ObservableObjectPublisher())
+        objectWillChangeRegistry[key] = box
+        return box.publisher
     }
 }
 

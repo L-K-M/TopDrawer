@@ -81,6 +81,8 @@ let macDringTestsSources: [String] = [
     "FolderListerTests.swift",
     "PreferencesTests.swift",
     "DrawerModelTests.swift",
+    // Linux-only: pins the ObservationCompat shim (compiles to nothing on macOS).
+    "ObservationCompatTests.swift",
 ]
 
 let package = Package(

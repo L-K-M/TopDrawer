@@ -290,6 +290,13 @@ final class Preferences: ObservableObject {
             isSyncingLaunchAtLogin = false
             defaults.set(launchAtLogin, forKey: Key.launchAtLogin)
         }
+        #else
+        // No SMAppService on Linux, so there is no system login item to toggle — but
+        // `launchAtLogin` is still a real stored preference: persist it (and clear the
+        // sync flag) so it round-trips like every other setting, ready for whenever a
+        // Linux autostart mechanism is wired up.
+        isSyncingLaunchAtLogin = false
+        defaults.set(enabled, forKey: Key.launchAtLogin)
         #endif
     }
 

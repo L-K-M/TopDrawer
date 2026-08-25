@@ -78,6 +78,18 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(reloaded.tabWindowLevel, .normal)
     }
 
+    #if !canImport(ServiceManagement)
+    // Linux has no SMAppService, so launchAtLogin is a plain persisted preference with
+    // no system side effect; it must still round-trip like every other setting.
+    func testLaunchAtLoginRoundTripsOnLinux() {
+        let prefs = Preferences(defaults: defaults)
+        prefs.launchAtLogin = true
+        XCTAssertTrue(Preferences(defaults: defaults).launchAtLogin)
+        prefs.launchAtLogin = false
+        XCTAssertFalse(Preferences(defaults: defaults).launchAtLogin)
+    }
+    #endif
+
     #if canImport(AppKit)
     // `drawerWindowLevel` returns an `NSWindow.Level` (AppKit), so this pins macOS
     // window-layering behaviour only; there is no Linux equivalent to assert.
