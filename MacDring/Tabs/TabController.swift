@@ -212,13 +212,13 @@ final class TabController {
             tabWindows[tab.id] = wc
             wc.update(tab: tab)
 
-            if let screen = registry.screen(for: tab.anchor.displayUUID) {
+            switch TabPlacementPolicy.placement(anchoredDisplay: registry.screen(for: tab.anchor.displayUUID),
+                                                mainDisplay: DisplayRegistry.primaryScreen,
+                                                disconnectPolicy: preferences.disconnectPolicy) {
+            case .place(let screen):
                 wc.place(on: screen)
                 wc.show()
-            } else if preferences.disconnectPolicy == .moveToMain, let primary = DisplayRegistry.primaryScreen {
-                wc.place(on: primary)
-                wc.show()
-            } else {
+            case .park:
                 wc.hide()                      // park until the display returns
                 if openTabID == tab.id { closeDrawer() }
             }
@@ -270,43 +270,36 @@ final class TabController {
         }
 
         for (key, group) in groups where group.count > 1 {
-            let sorted = group.sorted {
-                ($0.tab.anchor.order, $0.tab.anchor.position, $0.tab.id.uuidString)
-                    < ($1.tab.anchor.order, $1.tab.anchor.position, $1.tab.id.uuidString)
+            // Every member shares this screen (grouped by its number), so any one gives
+            // the visible frame the fold snaps within.
+            guard let visible = group.first?.wc.currentScreen?.visibleFrame else { continue }
+            let wcByID = Dictionary(group.map { ($0.tab.id, $0.wc) }, uniquingKeysWith: { first, _ in first })
+            let tabByID = Dictionary(group.map { ($0.tab.id, $0.tab) }, uniquingKeysWith: { first, _ in first })
+
+            // A pill displaced here by the move-to-main policy is a guest: its anchor
+            // still names its disconnected display, so it is de-overlapped on screen but
+            // its settled fraction is *not* persisted — writing this screen's fraction
+            // would corrupt the spot it must restore to when the display returns ("stable
+            // restore is sacred"). Own-display tabs persist. The decision lives in
+            // TabPlacementPolicy; the controller just applies the frames and anchors.
+            let inputs = group.map { entry in
+                TabPlacementPolicy.DeOverlapInput(
+                    id: entry.tab.id, order: entry.tab.anchor.order, position: entry.tab.anchor.position,
+                    restingFrame: entry.wc.restingFrame,
+                    isOnOwnDisplay: registry.screen(for: entry.tab.anchor.displayUUID)
+                        .map { screenNumber($0) == key.screen } ?? false)
             }
-            guard let visible = sorted.first?.wc.currentScreen?.visibleFrame else { continue }
-            var placed: [CGRect] = []
-            for entry in sorted {
-                let incoming = entry.wc.restingFrame
-                let snapped = EdgeLayout.snappedAlongEdge(incoming: incoming, fixed: placed,
-                                                          edge: key.edge, gap: EdgeLayout.minTabGap, in: visible)
-                entry.wc.setRestingFrame(snapped)
-                placed.append(snapped)
-                // Persist the settled position only while the tab is sitting on its
-                // *own* anchored display. A pill displaced here by the move-to-main
-                // policy is a guest: its anchor still names the disconnected display,
-                // and writing this screen's settled fraction into it would corrupt
-                // the spot it must restore to when that display returns ("stable
-                // restore is sacred"). Guests are de-overlapped on screen only.
-                if let anchored = registry.screen(for: entry.tab.anchor.displayUUID),
-                   screenNumber(anchored) == key.screen {
-                    persistSettledPosition(snapped, was: incoming, edge: key.edge, in: visible, tab: entry.tab)
+
+            for result in TabPlacementPolicy.deOverlap(inputs, edge: key.edge,
+                                                       gap: EdgeLayout.minTabGap, in: visible) {
+                wcByID[result.id]?.setRestingFrame(result.settledFrame)
+                if let position = result.persistedPosition, let tab = tabByID[result.id] {
+                    var anchor = tab.anchor
+                    anchor.position = position
+                    store.setAnchor(anchor, forTab: tab.id, notify: false)
                 }
             }
         }
-    }
-
-    /// Writes a de-overlapped frame's fractional position back onto its tab — but only
-    /// when the snap actually moved it (beyond float noise) — so the stored layout
-    /// stays legal. Uses `notify: false`: this runs mid-reconcile, and the point is to
-    /// settle the layout *without* kicking off another one.
-    private func persistSettledPosition(_ snapped: CGRect, was incoming: CGRect,
-                                        edge: Edge, in visible: CGRect, tab: Tab) {
-        guard abs(snapped.minX - incoming.minX) > 0.5 || abs(snapped.minY - incoming.minY) > 0.5 else { return }
-        let position = EdgeLayout.position(forTabFrame: snapped, edge: edge, in: visible)
-        var anchor = tab.anchor
-        anchor.position = position
-        store.setAnchor(anchor, forTab: tab.id, notify: false)
     }
 
     /// Gives tabs that share a display + edge a predictable z-order, so where they
@@ -472,9 +465,12 @@ final class TabController {
     /// Mirrors the placement decision in `reconcile`, so a drawer only opens where
     /// the tab is actually shown.
     private func resolvedScreen(for tab: Tab) -> NSScreen? {
-        if let screen = registry.screen(for: tab.anchor.displayUUID) { return screen }
-        if preferences.disconnectPolicy == .moveToMain { return DisplayRegistry.primaryScreen }
-        return nil
+        switch TabPlacementPolicy.placement(anchoredDisplay: registry.screen(for: tab.anchor.displayUUID),
+                                            mainDisplay: DisplayRegistry.primaryScreen,
+                                            disconnectPolicy: preferences.disconnectPolicy) {
+        case .place(let screen): return screen
+        case .park: return nil
+        }
     }
 
     /// Drawer open/close animation duration; 0 when *Reduce Motion* is on.
