@@ -3,6 +3,6 @@
     "allow": [
       "mcp__claude-code-remote__*"
     ],
-    "defaultMode": "auto"
+    "defaultMode": "bypassPermissions"
   }
 }
