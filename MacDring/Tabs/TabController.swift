@@ -127,12 +127,6 @@ final class TabController {
     /// The tab currently being dragged, excluded from concealment so it can't slide
     /// out from under the cursor mid-drag.
     private var draggingTabID: UUID?
-    /// How far past a tab's resting footprint the cursor still counts as "hovering"
-    /// it (an easier target than the thin revealed sliver).
-    private static let revealSlop: CGFloat = 6
-    /// A more generous reveal margin used while a *file drag* nears a concealed tab's
-    /// edge, so spring-loading has a real pill to target rather than a 3 pt sliver.
-    private static let peekSlop: CGFloat = 60
     /// The drag pasteboard's `changeCount` stamped at the latest observed mouse-down.
     /// A drag only counts as a *file* drag when the count has advanced past this —
     /// the pasteboard retains the previous drag's files, so content alone would
@@ -145,8 +139,6 @@ final class TabController {
     /// The guide the dragged tab is currently magnetized to, so the alignment haptic
     /// fires once per snap rather than every mouse-move while snapped.
     private var lastSnapGuide: Double?
-    /// Delay before an idle tab re-conceals after the cursor leaves its zone.
-    private static let reConcealDelay: TimeInterval = 0.45
     /// The pill's along-edge length captured at drag start, kept constant while
     /// previewing snaps to different edges.
     private var dragLength: CGFloat = 60
@@ -557,21 +549,21 @@ final class TabController {
     private func evaluateConcealment(_ tabs: [(id: UUID, wc: TabWindowController)], animated: Bool) {
         let mouse = NSEvent.mouseLocation
         // While a file is being dragged near a concealed tab, pre-reveal it from a
-        // more generous "peek" zone so spring-loading has a full pill to aim at.
+        // more generous "peek" zone so spring-loading has a full pill to aim at. The
+        // reveal decision (incl. reveal-all-together) lives in SpringLoadPolicy.
         let peeking = fileBeingDragged()
         func zone(_ wc: TabWindowController) -> CGRect { peeking ? peekZone(for: wc) : revealZone(for: wc) }
-        let revealAll = preferences.revealAllConcealedTogether
-            && tabs.contains { zone($0.wc).contains(mouse) }
-        for (id, wc) in tabs {
-            let reveal = revealAll || zone(wc).contains(mouse)
-            applyRevealState(id: id, wc: wc, reveal: reveal, animated: animated)
+        let reveals = SpringLoadPolicy.reveals(zones: tabs.map { zone($0.wc) }, mouse: mouse,
+                                               revealAllTogether: preferences.revealAllConcealedTogether)
+        for (index, (id, wc)) in tabs.enumerated() {
+            applyRevealState(id: id, wc: wc, reveal: reveals[index], animated: animated)
         }
     }
 
     /// The wider region whose hover reveals a concealed tab while a file drag is in
     /// flight (the drag-over "peek").
     private func peekZone(for wc: TabWindowController) -> CGRect {
-        wc.restingFrame.insetBy(dx: -Self.peekSlop, dy: -Self.peekSlop)
+        wc.restingFrame.insetBy(dx: -SpringLoadPolicy.peekSlop, dy: -SpringLoadPolicy.peekSlop)
     }
 
     /// Whether a file drag is currently in progress — gates the drag-over peek.
@@ -605,14 +597,15 @@ final class TabController {
     /// schedule the delayed re-conceal (animated pass) or snap it hidden at once.
     private func applyRevealState(id: UUID, wc: TabWindowController, reveal: Bool, animated: Bool) {
         let duration = animated ? animationDuration : 0
-        if reveal {
+        switch SpringLoadPolicy.revealTransition(reveal: reveal, isConcealed: wc.isConcealed, animated: animated) {
+        case .reveal:
             cancelReConceal(id)
             wc.reveal(duration: duration)
-        } else if wc.isConcealed {
+        case .keepConcealed:
             cancelReConceal(id)   // already hidden — nothing to schedule
-        } else if animated {
+        case .scheduleReConceal:
             scheduleReConceal(id)
-        } else {
+        case .concealNow:
             cancelReConceal(id)
             wc.conceal(duration: 0)
         }
@@ -620,7 +613,7 @@ final class TabController {
 
     /// The screen region whose hover reveals a concealed tab.
     private func revealZone(for wc: TabWindowController) -> CGRect {
-        wc.restingFrame.insetBy(dx: -Self.revealSlop, dy: -Self.revealSlop)
+        wc.restingFrame.insetBy(dx: -SpringLoadPolicy.revealSlop, dy: -SpringLoadPolicy.revealSlop)
     }
 
     /// Whether the current cursor location warrants `wc` staying revealed: it's in the
@@ -647,7 +640,7 @@ final class TabController {
             }
         }
         pendingReConceal[id] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.reConcealDelay, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + SpringLoadPolicy.reConcealDelay, execute: work)
     }
 
     private func cancelReConceal(_ id: UUID) {
@@ -891,20 +884,25 @@ final class TabController {
     /// Spring-loads a tab: hovering it with a file drag opens its drawer after a
     /// short delay, so the file can be dropped onto the drawer's contents.
     private func handleDragHover(_ id: UUID, targeted: Bool) {
-        guard targeted else { cancelSpringOpen(for: id); return }
-        guard openTabID != id else { return }
-        cancelSpringOpen()
-        let work = DispatchWorkItem { [weak self] in
-            self?.pendingSpringOpen = nil
-            self?.pendingSpringOpenTabID = nil
-            // A soft tick as the spring finally releases — the sibling of the
-            // drag-snap alignment haptic, marking "the drawer is opening under you".
-            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-            self?.openDrawer(id)
+        switch SpringLoadPolicy.springAction(isTargeted: targeted, isOpen: openTabID == id) {
+        case .cancel:
+            cancelSpringOpen(for: id)
+        case .alreadyOpen:
+            break
+        case .scheduleOpen:
+            cancelSpringOpen()
+            let work = DispatchWorkItem { [weak self] in
+                self?.pendingSpringOpen = nil
+                self?.pendingSpringOpenTabID = nil
+                // A soft tick as the spring finally releases — the sibling of the
+                // drag-snap alignment haptic, marking "the drawer is opening under you".
+                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+                self?.openDrawer(id)
+            }
+            pendingSpringOpen = work
+            pendingSpringOpenTabID = id
+            DispatchQueue.main.asyncAfter(deadline: .now() + SpringLoadPolicy.springOpenDelay, execute: work)
         }
-        pendingSpringOpen = work
-        pendingSpringOpenTabID = id
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     private func cancelSpringOpen(for id: UUID? = nil) {
@@ -920,42 +918,51 @@ final class TabController {
     /// the caller should include the tab in the bounded second registration pass.
     @discardableResult
     private func registerHotkeyIfNeeded(for tab: Tab) -> Bool {
-        guard let spec = tab.hotkey,
-              KeyCodes.isUsableHotkey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) else {
+        let spec = tab.hotkey
+        let usable = spec.map { KeyCodes.isUsableHotkey(keyCode: $0.keyCode, modifiers: $0.carbonModifiers) } ?? false
+        // Another *live* Top Drawer registration under the same spec. Excludes this tab,
+        // so it's unaffected by releasing this tab's own (stale) registration first.
+        let ownedByOther = spec.map { s in hotkeys.contains { $0.key != tab.id && $0.value.spec == s } } ?? false
+        let decision = HotkeyRegistrationPolicy.decide(
+            spec: spec, usable: usable, existing: hotkeys[tab.id]?.spec,
+            cachedFailure: failedHotkeySpecs[tab.id], ownedByOtherTab: ownedByOther)
+
+        // The policy chose the branch; the controller performs the Carbon / cache effects.
+        switch decision {
+        case .unregister:
             unregisterHotkey(tab.id)
-            return false
-        }
-        if let existing = hotkeys[tab.id] {
-            if existing.spec == spec { return false }
-            // Release a stale registration before checking ownership. This lets two or
-            // more tabs swap/cycle specs without retaining registrations that block one
-            // another for the entire reconciliation pass.
+        case .keepExisting, .skipCachedFailure:
+            break
+        case .releaseStaleThenDefer:
+            // Release the stale registration (this also clears its cached failure); the
+            // bounded second pass retries once the owner frees the spec.
             unregisterHotkey(tab.id)
+        case .deferToOwner:
+            // No stale registration to release, but clear any old cached failure so the
+            // bounded pass stays free to retry — mirrors the original ordering.
+            failedHotkeySpecs[tab.id] = nil
+        case .releaseStaleThenRegister:
+            unregisterHotkey(tab.id)
+            if let spec { registerHotkey(spec, for: tab.id) }
+        case .register:
+            failedHotkeySpecs[tab.id] = nil
+            if let spec { registerHotkey(spec, for: tab.id) }
         }
+        return HotkeyRegistrationPolicy.isBlocked(decision)
+    }
 
-        // A changed spec gets one Carbon attempt; an unchanged external failure remains
-        // cached for the session so unrelated reconciles cannot retry or re-log it.
-        if failedHotkeySpecs[tab.id] == spec { return false }
-        failedHotkeySpecs[tab.id] = nil
-
-        // Do not ask Carbon to confirm a conflict Top Drawer already owns. Besides avoiding
-        // a misleading failure log, keeping this out of `failedHotkeySpecs` allows the
-        // bounded pass above to retry as soon as the owner releases or changes the spec.
-        if hotkeys.contains(where: { $0.key != tab.id && $0.value.spec == spec }) {
-            return true
-        }
-
+    /// Asks Carbon to register `spec` for a tab, recording success in `hotkeys` and an
+    /// external failure in `failedHotkeySpecs` (so unrelated reconciles don't retry it).
+    private func registerHotkey(_ spec: HotkeySpec, for id: UUID) {
         let hotkey = CarbonHotkey(identifier: hotkeyCounter)
         hotkeyCounter += 1
-        let id = tab.id
         hotkey.onPressed = { [weak self] in self?.toggleDrawer(id) }
         if hotkey.register(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) {
-            hotkeys[tab.id] = (hotkey, spec)
-            failedHotkeySpecs[tab.id] = nil
+            hotkeys[id] = (hotkey, spec)
+            failedHotkeySpecs[id] = nil
         } else {
-            failedHotkeySpecs[tab.id] = spec
+            failedHotkeySpecs[id] = spec
         }
-        return false
     }
 
     private func unregisterHotkey(_ id: UUID) {

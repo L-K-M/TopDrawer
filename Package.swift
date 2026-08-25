@@ -70,6 +70,10 @@ let macDringSources: [String] = [
     // LP-10: pure drag-snap/magnetization + z-restack decisions, also lifted out of
     // TabController.
     "Screens/TabDragPolicy.swift",
+    // LP-11: pure spring-load/drag-peek state machine + hotkey-conflict resolution,
+    // lifted out of TabController.
+    "Screens/SpringLoadPolicy.swift",
+    "Hotkeys/HotkeyRegistrationPolicy.swift",
 ]
 
 let macDringTestsSources: [String] = [
@@ -103,6 +107,9 @@ let macDringTestsSources: [String] = [
     "TabPlacementPolicyTests.swift",
     // LP-10
     "TabDragPolicyTests.swift",
+    // LP-11
+    "SpringLoadPolicyTests.swift",
+    "HotkeyRegistrationPolicyTests.swift",
 ]
 
 let package = Package(
