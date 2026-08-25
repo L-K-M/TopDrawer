@@ -102,4 +102,26 @@ final class TabPlacementPolicyTests: XCTestCase {
         XCTAssertNotEqual(guestResult.settledFrame.origin.y, 400, "the guest is still de-overlapped on screen")
         XCTAssertNil(guestResult.persistedPosition, "but a guest never persists — stable restore is sacred")
     }
+
+    func testASubThresholdNudgeIsNotPersisted() throws {
+        // TabController's old persistSettledPosition skipped the anchor write when the fold
+        // moved a tab by ≤ 0.5pt (float noise); TabPlacementPolicy keeps that guard. With the
+        // negative minTabGap, a tab dropped a hair inside its neighbour's blocked span snaps
+        // by only a fraction of a point — that must NOT persist, or every reconcile would
+        // churn setAnchor writes for sub-pixel corrections. This pins the in-between case the
+        // "didn't move" and "moved a lot" tests leave open.
+        let held = UUID(), nudged = UUID()
+        // 427.7 snaps to minY 428 (a 0.3pt nudge) under this visible/height/gap geometry.
+        let nudgedY: CGFloat = 427.7
+        let results = TabPlacementPolicy.deOverlap([
+            input(held, order: 0, position: 0.5, y: 400),
+            input(nudged, order: 1, position: 0.5, y: nudgedY),
+        ], edge: .right, gap: EdgeLayout.minTabGap, in: visible)
+
+        let nudgedResult = try XCTUnwrap(results.first { $0.id == nudged })
+        let delta = abs(nudgedResult.settledFrame.minY - nudgedY)
+        XCTAssertGreaterThan(delta, 0, "precondition: the tab did snap off its neighbour")
+        XCTAssertLessThanOrEqual(delta, 0.5, "precondition: but only by float noise (≤ 0.5pt)")
+        XCTAssertNil(nudgedResult.persistedPosition, "a sub-threshold nudge is not persisted")
+    }
 }
