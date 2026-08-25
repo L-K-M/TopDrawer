@@ -1,7 +1,6 @@
+import Foundation   // UUID (and, on Linux, CGRect/CGFloat) live here
 #if canImport(CoreGraphics)
-import CoreGraphics
-#else
-import Foundation   // CGRect/CGFloat live in Foundation on Linux
+import CoreGraphics  // macOS: CGRect/CGFloat come from here; Foundation still vends UUID
 #endif
 
 /// Pure placement decisions lifted out of `TabController` (LP-09): given value inputs
