@@ -31,7 +31,9 @@ struct SystemLoginItem: LoginItemManaging {
     }
 
     func setEnabled(_ enabled: Bool) -> String? {
-        guard #available(macOS 13.0, *) else { return nil }
+        // Unreachable at the macOS 13 deployment target, but honest defensively: macOS
+        // < 13 does have login items, so surface an error rather than silently "succeed".
+        guard #available(macOS 13.0, *) else { return "Launch at login requires macOS 13 or later." }
         do {
             if enabled {
                 if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }

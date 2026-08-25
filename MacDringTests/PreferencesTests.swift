@@ -234,4 +234,12 @@ final class PreferencesTests: XCTestCase {
         prefs.refreshLaunchAtLoginStatus()
         XCTAssertTrue(prefs.launchAtLogin)
     }
+
+    func testInitFallsBackToStoredLoginStateWhenSeamReportsNothing() {
+        // When the seam has no authoritative state to report (Linux's no-op, or a
+        // platform where the status is unknown), the stored preference is what wins.
+        defaults.set(true, forKey: "launchAtLogin")
+        let prefs = Preferences(defaults: defaults, loginItem: FakeLoginItem(enabled: nil))
+        XCTAssertTrue(prefs.launchAtLogin, "stored preference wins when the seam reports nil")
+    }
 }
