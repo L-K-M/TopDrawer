@@ -9,24 +9,33 @@ final class TabDragPolicyTests: XCTestCase {
 
     func testPositionSnapsToTheNearestQuarterGuideWithinTolerance() {
         // 0.26 is 0.01 from the ¼ guide — inside the 0.03 tolerance — so it locks on.
-        let snap = TabDragPolicy.magnetize(position: 0.26, neighbours: [])
+        let snap = TabDragPolicy.magnetize(position: 0.26, neighbors: [])
         XCTAssertEqual(snap.position, 0.25, accuracy: 1e-9)
         XCTAssertEqual(snap.guide, 0.25)
     }
 
     func testPositionStaysFreeWhenNoGuideIsCloseEnough() {
         // 0.4 is 0.1 from the nearest quarter guide (0.5) — well outside tolerance.
-        let snap = TabDragPolicy.magnetize(position: 0.4, neighbours: [])
+        let snap = TabDragPolicy.magnetize(position: 0.4, neighbors: [])
         XCTAssertEqual(snap.position, 0.4, accuracy: 1e-9, "a free drag keeps its raw position")
         XCTAssertNil(snap.guide, "nothing to lock onto")
     }
 
-    func testPositionMagnetizesToANeighbourFractionNotJustQuarterPoints() {
-        // No quarter guide is near 0.4, but a neighbour sits at 0.42 (0.02 away) — the
-        // neighbour fractions join the fixed guides, so the pill lines up with it.
-        let snap = TabDragPolicy.magnetize(position: 0.4, neighbours: [0.42])
+    func testPositionMagnetizesToANeighborFractionNotJustQuarterPoints() {
+        // No quarter guide is near 0.4, but a neighbor sits at 0.42 (0.02 away) — the
+        // neighbor fractions join the fixed guides, so the pill lines up with it.
+        let snap = TabDragPolicy.magnetize(position: 0.4, neighbors: [0.42])
         XCTAssertEqual(snap.position, 0.42, accuracy: 1e-9)
         XCTAssertEqual(snap.guide, 0.42)
+    }
+
+    func testTheNearerOfAQuarterGuideAndANeighborWins() {
+        // Both are within tolerance of 0.52: the ¼-point 0.5 (0.02 away) and a neighbor at
+        // 0.53 (0.01 away). snappedPosition takes the nearest, so the neighbor wins — the
+        // pill lines up with the tab rather than the coarser quarter grid.
+        let snap = TabDragPolicy.magnetize(position: 0.52, neighbors: [0.53])
+        XCTAssertEqual(snap.position, 0.53, accuracy: 1e-9, "nearest guide wins the tie-in-tolerance")
+        XCTAssertEqual(snap.guide, 0.53)
     }
 
     // MARK: Alignment haptic (fire-once-on-lock transition)
@@ -93,6 +102,12 @@ final class TabDragPolicyTests: XCTestCase {
             .init(id: b, restingFrame: frame(y: 400)),
         ], edge: .right)
         XCTAssertEqual(order, expected)
+    }
+
+    func testRestackOrderOfAnEmptyEdgeIsEmpty() {
+        // The controller only calls this for groups of 2+, but the fold must stay total:
+        // an empty (or single) input returns as-is so the `1..<count` re-seat loop is safe.
+        XCTAssertEqual(TabDragPolicy.restackOrder([], edge: .right), [])
     }
 
     // MARK: Next stack order (newcomer slot)

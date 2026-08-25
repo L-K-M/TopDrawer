@@ -4,7 +4,7 @@ import CoreGraphics  // macOS: CGRect/CGFloat come from here; Foundation still v
 #endif
 
 /// Pure drag-and-restack decisions lifted out of `TabController` (LP-10): given value
-/// inputs — the drag target's raw position, the neighbouring tabs' fractions on the
+/// inputs — the drag target's raw position, the neighboring tabs' fractions on the
 /// target edge, and the tabs' resting frames — it returns *what to do* (where the pill
 /// magnetizes, whether the alignment haptic fires, the front-to-back order to restack,
 /// the stacking slot for a newcomer), while the controller keeps the AppKit side
@@ -17,13 +17,13 @@ enum TabDragPolicy {
     // MARK: Magnetization — where a dragged pill snaps along its edge
 
     /// The dragged pill's position magnetized to the quarter guides (0/¼/½/¾/1) **and**
-    /// to its neighbours' fractional positions, plus the guide it locked onto (`nil` =
-    /// free) for haptic timing. Neighbour fractions join the fixed quarter guides so the
+    /// to its neighbors' fractional positions, plus the guide it locked onto (`nil` =
+    /// free) for haptic timing. Neighbor fractions join the fixed quarter guides so the
     /// pill lines up with a tab already on the edge, not only with the quarter points;
     /// `EdgeLayout.snappedPosition` then picks the nearest guide within tolerance.
-    static func magnetize(position: Double, neighbours: [Double],
+    static func magnetize(position: Double, neighbors: [Double],
                           guides: [Double] = EdgeLayout.snapGuides) -> (position: Double, guide: Double?) {
-        let snap = EdgeLayout.snappedPosition(position, guides: guides + neighbours)
+        let snap = EdgeLayout.snappedPosition(position, guides: guides + neighbors)
         return (snap.position, snap.snappedGuide)
     }
 

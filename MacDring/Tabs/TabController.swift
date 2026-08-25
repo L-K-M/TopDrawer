@@ -326,16 +326,19 @@ final class TabController {
         }
 
         for (key, entries) in groups where entries.count > 1 {
-            let wcByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.wc) })
+            // ids are unique here — they are `tabWindows` keys — so this never collapses
+            // an entry; the duplicate-safe init (matching deOverlapStackedTabs) states that
+            // invariant without trapping on a hypothetical dupe.
+            let wcByID = Dictionary(entries.map { ($0.id, $0.wc) }, uniquingKeysWith: { first, _ in first })
             // Leading first (front): top on a vertical edge, left on a horizontal one;
             // the id breaks ties (level tabs) so the order is stable. The ordering
             // decision lives in TabDragPolicy; the controller just re-seats the windows.
-            let orderedIDs = TabDragPolicy.restackOrder(
+            let ordered = TabDragPolicy.restackOrder(
                 entries.map { .init(id: $0.id, restingFrame: $0.wc.restingFrame) }, edge: key.edge)
+                .compactMap { wcByID[$0] }   // total: every ordered id came from `entries`
             // Tuck each tab just below the previous one, so the leading tab stays on top.
-            for i in 1..<orderedIDs.count {
-                guard let below = wcByID[orderedIDs[i]], let above = wcByID[orderedIDs[i - 1]] else { continue }
-                below.order(below: above.windowNumber)
+            for i in 1..<ordered.count {
+                ordered[i].order(below: ordered[i - 1].windowNumber)
             }
         }
     }
@@ -731,7 +734,7 @@ final class TabController {
         let neighbors = restingFrames(onEdge: target.edge, screen: target.screen, excluding: id).map {
             EdgeLayout.position(forPoint: CGPoint(x: $0.midX, y: $0.midY), edge: target.edge, in: vf)
         }
-        return TabDragPolicy.magnetize(position: target.position, neighbours: neighbors)
+        return TabDragPolicy.magnetize(position: target.position, neighbors: neighbors)
     }
 
     /// Commit the **snapped** position on release — the same legal slot the preview
