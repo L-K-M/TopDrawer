@@ -4,7 +4,7 @@ import AppKit
 /// `ScreenAnchor`, and notifies when the display configuration changes. The UUID
 /// (`CGDisplayCreateUUIDFromDisplayID`) is stable across reboots and
 /// reconnections, which is what makes tab restore stable. See PLAN.md §6.
-final class DisplayRegistry {
+final class DisplayRegistry: DisplayIdentity {   // Screen == NSScreen (LP-13 seam)
 
     /// Called on the main thread when displays are added, removed, or reconfigured.
     var onChange: (() -> Void)?
