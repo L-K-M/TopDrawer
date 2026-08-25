@@ -6,6 +6,9 @@ import Foundation
 // real Combine — this file is compiled only where Combine is absent — so the shipping
 // app is untouched. Fidelity is deliberately limited to what the ported code and its
 // tests exercise: `ObservableObject` + `@Published` + `objectWillChange.send()/.sink`.
+// NOT shimmed: `$`-projected publishers (`$foo`), `store(in:)`, `receive(on:)`, and any
+// `Publisher` operators/subjects — shared code must stay off them or the Linux build
+// breaks at the use site; add the missing piece here when a ported file first needs it.
 // See docs/linux-port/implementation-plan.md §LP-07.
 //
 // The types are named to match Combine's so the shared code (`TabStore`, `Preferences`,
