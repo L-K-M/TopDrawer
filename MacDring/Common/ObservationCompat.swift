@@ -16,10 +16,20 @@ import Foundation
 /// Cancels a subscription when cancelled or deinited — enough of Combine's
 /// `AnyCancellable` for the `let c = ….sink { … }` pattern the tests use.
 final class AnyCancellable {
+    private let lock = NSLock()
     private var onCancel: (() -> Void)?
     init(_ onCancel: @escaping () -> Void) { self.onCancel = onCancel }
-    func cancel() { onCancel?(); onCancel = nil }
-    deinit { onCancel?() }
+    func cancel() {
+        // Swap the handler out under the lock and run it outside — the way
+        // ObservableObjectPublisher.send() fires callbacks outside its lock — so two
+        // racing cancels (or a cancel racing deinit) run the handler at most once.
+        lock.lock()
+        let handler = onCancel
+        onCancel = nil
+        lock.unlock()
+        handler?()
+    }
+    deinit { cancel() }
 }
 
 /// The publisher `objectWillChange` vends. `send()` notifies every live subscriber;
