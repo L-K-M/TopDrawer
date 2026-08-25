@@ -962,6 +962,13 @@ final class TabController {
     /// Asks the registrar to register `spec` for a tab, recording success in `hotkeys` and
     /// an external failure in `failedHotkeySpecs` (so unrelated reconciles don't retry it).
     private func registerHotkey(_ spec: HotkeySpec, for id: UUID) {
+        // Preserve the pre-seam self-healing: the old code held the CarbonHotkey in
+        // `hotkeys` alone, so overwriting the entry dropped its last strong reference and
+        // ARC's deinit unregistered it. The registrar now retains it, so an overwrite would
+        // otherwise leak a still-live registration — release any stale token first. A no-op
+        // on the normal unregister-then-register paths (`hotkeys[id]` is already nil there),
+        // and it leaves `failedHotkeySpecs` untouched, exactly like the old overwrite.
+        if let stale = hotkeys[id]?.token { hotkeyRegistrar.unregister(stale) }
         if let token = hotkeyRegistrar.register(spec, onPressed: { [weak self] in self?.toggleDrawer(id) }) {
             hotkeys[id] = (token, spec)
             failedHotkeySpecs[id] = nil
