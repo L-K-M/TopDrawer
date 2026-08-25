@@ -145,17 +145,21 @@ final class TabController {
     /// Whether the tab currently being dragged is locked (won't move).
     private var dragLocked = false
     /// The Trash backend (metadata reads + recoverable move-to-Trash + Empty Trash),
-    /// behind the platform-neutral `TrashServicing` seam. See PLAN.md §LP-12.
-    private let trashService: TrashServicing = SystemTrashService()
+    /// behind the platform-neutral `TrashServicing` seam. Injected (defaulting to the
+    /// macOS backend) so the drop-on-Trash and Empty-Trash flows can be faked in tests
+    /// and a Linux controller can supply its own. See PLAN.md §LP-12.
+    private let trashService: TrashServicing
 
     /// Invoked to open Settings for a tab (the tab's context menu or the drawer's
     /// gear). `nil` opens Settings without selecting a tab. Wired by `AppDelegate`.
     var onOpenSettings: ((UUID?) -> Void)?
 
-    init(store: TabStore, preferences: Preferences, registry: DisplayRegistry) {
+    init(store: TabStore, preferences: Preferences, registry: DisplayRegistry,
+         trashService: TrashServicing = SystemTrashService()) {
         self.store = store
         self.preferences = preferences
         self.registry = registry
+        self.trashService = trashService
         self.drawer = DrawerWindowController(preferences: preferences)
 
         wireDrawer()

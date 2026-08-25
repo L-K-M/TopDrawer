@@ -52,7 +52,7 @@ struct SystemVolumeListing: VolumeListing {
                 isBrowsable: values.volumeIsBrowsable ?? true)
         }
         #else
-        []
+        return []
         #endif
     }
 }
