@@ -82,8 +82,9 @@ protocol ObservableObject: AnyObject {
 // dead object's publisher and fire its subscribers on every `@Published` set. Replacing
 // the box also drops the old publisher and its captured closures, close to how real
 // Combine releases them with the object. (There is no `objc_setAssociatedObject` on
-// Linux to hang per-instance storage off instead; a box for an object that is freed and
-// never has its address reused lingers, but it holds no live subscribers.)
+// Linux to hang per-instance storage off instead, so a dead object's box would linger
+// until its address is reused — including any subscriber closures an outlived
+// cancellable keeps registered — so the accessor sweeps dead boxes on each cache miss.)
 private final class ObjectWillChangeBox {
     weak var object: AnyObject?
     let publisher: ObservableObjectPublisher
@@ -104,6 +105,13 @@ extension ObservableObject {
         if let box = objectWillChangeRegistry[key], box.object === self {
             return box.publisher
         }
+        // Cache miss (once per object): sweep boxes whose weak object has deallocated, so
+        // the registry can't grow without bound and an outlived cancellable's subscriber
+        // closures are released with their object rather than pinned. `object` goes nil
+        // only after full deallocation, so no live object's box is ever removed; a
+        // publisher still strongly referenced elsewhere survives (the box drop just
+        // stops the registry being its last owner).
+        objectWillChangeRegistry = objectWillChangeRegistry.filter { $0.value.object != nil }
         let box = ObjectWillChangeBox(object: self, publisher: ObservableObjectPublisher())
         objectWillChangeRegistry[key] = box
         return box.publisher

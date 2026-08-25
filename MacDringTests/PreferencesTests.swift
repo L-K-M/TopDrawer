@@ -88,6 +88,17 @@ final class PreferencesTests: XCTestCase {
         prefs.launchAtLogin = false
         XCTAssertFalse(Preferences(defaults: defaults).launchAtLogin)
     }
+
+    // A refresh has no authoritative system state to read on Linux
+    // (systemLaunchAtLoginEnabled() is nil), so it must leave the stored value alone
+    // rather than clobber the preference the round-trip above relies on.
+    func testRefreshLaunchAtLoginDoesNotClobberOnLinux() {
+        let prefs = Preferences(defaults: defaults)
+        prefs.launchAtLogin = true
+        prefs.refreshLaunchAtLoginStatus()
+        XCTAssertTrue(prefs.launchAtLogin)
+        XCTAssertTrue(Preferences(defaults: defaults).launchAtLogin)
+    }
     #endif
 
     #if canImport(AppKit)
