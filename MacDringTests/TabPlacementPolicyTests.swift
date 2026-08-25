@@ -67,7 +67,7 @@ final class TabPlacementPolicyTests: XCTestCase {
         XCTAssertEqual(results.map(\.id), [a, b, c], "order, then position, then id")
     }
 
-    func testAnOverlappingOwnDisplayTabSnapsAndPersists() {
+    func testAnOverlappingOwnDisplayTabSnapsAndPersists() throws {
         // Two pills at the same spot: the lower-order one holds, the higher-order one is
         // displaced and — being on its own display — persists its new position.
         let held = UUID(), yields = UUID()
@@ -76,15 +76,20 @@ final class TabPlacementPolicyTests: XCTestCase {
             input(yields, order: 1, position: 0.5, y: 400),
         ], edge: .right, gap: EdgeLayout.minTabGap, in: visible)
 
-        let heldResult = try! XCTUnwrap(results.first { $0.id == held })
-        let yieldsResult = try! XCTUnwrap(results.first { $0.id == yields })
+        let heldResult = try XCTUnwrap(results.first { $0.id == held })
+        let yieldsResult = try XCTUnwrap(results.first { $0.id == yields })
         XCTAssertEqual(heldResult.settledFrame.origin.y, 400, "the tab already there stays put")
         XCTAssertNil(heldResult.persistedPosition, "it didn't move, so nothing to persist")
         XCTAssertNotEqual(yieldsResult.settledFrame.origin.y, 400, "the newcomer is displaced")
         XCTAssertNotNil(yieldsResult.persistedPosition, "an own-display tab that moved persists")
+        // The persisted fraction must describe the *settled* frame (not the incoming one or
+        // the stale stored position) — that's what keeps a written-back anchor legal.
+        XCTAssertEqual(yieldsResult.persistedPosition,
+                       EdgeLayout.position(forTabFrame: yieldsResult.settledFrame, edge: .right, in: visible),
+                       "persisted fraction must come from the settled frame")
     }
 
-    func testAGuestThatMovesIsNotPersisted() {
+    func testAGuestThatMovesIsNotPersisted() throws {
         // Same displacement, but the newcomer is a move-to-main guest: it de-overlaps on
         // screen yet must not overwrite the anchor it has to restore to.
         let held = UUID(), guest = UUID()
@@ -93,7 +98,7 @@ final class TabPlacementPolicyTests: XCTestCase {
             input(guest, order: 1, position: 0.5, y: 400, ownDisplay: false),
         ], edge: .right, gap: EdgeLayout.minTabGap, in: visible)
 
-        let guestResult = try! XCTUnwrap(results.first { $0.id == guest })
+        let guestResult = try XCTUnwrap(results.first { $0.id == guest })
         XCTAssertNotEqual(guestResult.settledFrame.origin.y, 400, "the guest is still de-overlapped on screen")
         XCTAssertNil(guestResult.persistedPosition, "but a guest never persists — stable restore is sacred")
     }
