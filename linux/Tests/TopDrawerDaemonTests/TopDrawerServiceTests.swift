@@ -602,15 +602,15 @@ final class TopDrawerServiceTests: XCTestCase {
 
     // MARK: - Harness
 
-    /// Runs a `TopDrawerService` on its own session-bus connection until the test
-    /// cancels it. All backends are injectable; they default to the production ones
-    /// except `trashDirectory`, which defaults to a temp subdirectory so a test never
-    /// watches (or counts) the developer's real Trash.
     /// The fast interval `startServer` configures so change-waiting tests don't need
     /// seconds per signal. Tests that reason "a poll tick passes" derive their wait
     /// windows from this, so the window/interval coupling can't silently drift.
     private static let fastPollInterval = Duration.milliseconds(200)
 
+    /// Runs a `TopDrawerService` on its own session-bus connection until the test
+    /// cancels it. All backends are injectable; they default to the production ones
+    /// except `trashDirectory`, which defaults to a temp subdirectory so a test never
+    /// watches (or counts) the developer's real Trash.
     private func startServer(volumeSource: VolumeSnapshotProviding = ProcMounts(),
                              trashService: TrashServicing = FakeTrashService(count: 0),
                              trashDirectory: URL? = nil,
