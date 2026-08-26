@@ -282,16 +282,17 @@ public enum VolumeEjector {
             // fall back to gio if udisksctl isn't present or refuses.
             _ = LinuxProcess.succeeds("udisksctl", ["unmount", "-b", volume.device])
             if LinuxProcess.succeeds("udisksctl", ["power-off", "-b", volume.device]) { return true }
-            return LinuxProcess.succeeds("gio", ["mount", "-e", volume.path])
+            return LinuxProcess.succeeds("gio", ["mount", "-e", volume.path], timeout: 5)
         case .network, .cloud:
             // `gio mount -u` only manages GIO GMounts (gvfs/udisks-backed). A share the
             // user mounted from the CLI — sshfs, rclone — usually isn't a GMount, so gio
             // errors out; fall back to fusermount (the tool for user FUSE mounts), then a
-            // plain umount.
+            // plain umount. The fallbacks get a tight 5s budget each so the whole chain
+            // stays well under a typical D-Bus client timeout even when every probe fails.
             if LinuxProcess.succeeds("gio", ["mount", "-u", volume.path]) { return true }
-            if LinuxProcess.succeeds("fusermount", ["-u", volume.path]) { return true }
-            if LinuxProcess.succeeds("fusermount3", ["-u", volume.path]) { return true }
-            return LinuxProcess.succeeds("umount", [volume.path])
+            if LinuxProcess.succeeds("fusermount", ["-u", volume.path], timeout: 5) { return true }
+            if LinuxProcess.succeeds("fusermount3", ["-u", volume.path], timeout: 5) { return true }
+            return LinuxProcess.succeeds("umount", [volume.path], timeout: 5)
         }
     }
 }

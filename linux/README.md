@@ -43,8 +43,12 @@ docks:
   them needs `gio mount -l` — a documented follow-up.
 
 Trash follows the freedesktop spec: state is the count under
-`$XDG_DATA_HOME/Trash/files`; trashing/emptying (when wired to drops) uses
-`gio trash` (from `libglib2.0-bin`).
+`$XDG_DATA_HOME/Trash/files` — the **home trash only**. Per the spec, `gio trash`
+places an item from a *different* filesystem (a USB stick, a network mount) into
+that volume's own `.Trash-$UID`, which `GetTrashState`/`TrashChanged` do not yet
+count or watch — a documented follow-up (it can reuse this LP's volume
+enumeration). Trashing/emptying (when wired to drops) uses `gio trash` (from
+`libglib2.0-bin`).
 
 ## Build
 

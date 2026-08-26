@@ -1,5 +1,6 @@
 #if os(Linux)
 import Foundation
+import Glibc
 
 /// Minimal synchronous subprocess helper for the small CLI tools the daemon shells out
 /// to (`gio`, `udisksctl`). Looks the binary up on `PATH` via `/usr/bin/env` so it
@@ -28,9 +29,15 @@ enum LinuxProcess {
         } catch {
             return (-1, "")
         }
-        // Kill a hung tool instead of blocking the handler forever. terminate() (SIGTERM)
-        // makes waitUntilExit return with a signalled (non-zero) status → succeeds() false.
-        let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
+        // Kill a hung tool instead of blocking the handler forever; SIGTERM makes
+        // waitUntilExit return with a signalled (non-zero) status → succeeds() false.
+        // kill(pid) rather than process.terminate(): terminate() is a check-then-act on
+        // process state that can trap if the child exits between the isRunning check and
+        // the call, whereas kill(2) on an exited/reaped pid is a harmless no-op (ESRCH).
+        // SIGTERM (not SIGKILL) is enough — the tools invoked here (gio / udisksctl /
+        // fusermount / umount) don't trap it.
+        let pid = process.processIdentifier
+        let watchdog = DispatchWorkItem { if process.isRunning { kill(pid, SIGTERM) } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog)
         // Read before waiting so a tool that fills the pipe buffer can't deadlock.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -40,8 +47,8 @@ enum LinuxProcess {
     }
 
     /// `true` when `tool args…` exits 0.
-    static func succeeds(_ tool: String, _ args: [String]) -> Bool {
-        run(tool, args).status == 0
+    static func succeeds(_ tool: String, _ args: [String], timeout: TimeInterval = 15) -> Bool {
+        run(tool, args, timeout: timeout).status == 0
     }
 }
 #endif
