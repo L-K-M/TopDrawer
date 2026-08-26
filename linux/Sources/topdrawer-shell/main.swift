@@ -83,7 +83,9 @@ gtk_widget_set_margin_top(strip, 6)
 gtk_widget_set_margin_bottom(strip, 6)
 gtk_window_set_child(asWindow(window), strip)
 
-let stripLabel = gtk_label_new("Top Drawer — waiting for topdrawerd…")
+// Held as OpaquePointer: gtk_label_new returns a typed pointer but the label
+// accessors take the opaque one — normalize once, at creation.
+let stripLabel = OpaquePointer(gtk_label_new("Top Drawer — waiting for topdrawerd…")!)
 gtk_box_append(asBox(strip), asWidget(stripLabel))
 
 // MARK: - Pointer logging (the LP-20 interaction probe)

@@ -21,6 +21,12 @@ func asWidget<P>(_ child: UnsafeMutablePointer<P>?) -> GWidget? {
     child.map { UnsafeMutablePointer<GtkWidget>(OpaquePointer($0)) }
 }
 
+/// Opaque-child flavor (the label's accessors take OpaquePointer even though its
+/// constructor hands back a typed pointer — GTK4's mixed import modes).
+func asWidget(_ child: OpaquePointer?) -> GWidget? {
+    child.map { UnsafeMutablePointer<GtkWidget>($0) }
+}
+
 // MARK: - Signals
 
 /// A Swift closure boxed for C: the signal's user-data pointer.
