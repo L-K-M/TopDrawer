@@ -177,10 +177,18 @@ public struct TabInfo: Equatable {
     /// (`recently-used.xbel`) — recentsSource `system` or `both`. The single predicate
     /// both `recentsHits` and the `RecentsChanged` fan-out use, so they can't drift
     /// (a macDring-only tab neither serves xbel data nor should be signalled on an xbel
-    /// change). The `macDring` launch-history part lands with LP-19.
+    /// change).
     public var servesSystemRecents: Bool {
         let source = recentsSource ?? "macDring"
         return source == "system" || source == "both"
+    }
+
+    /// Whether this recents tab draws (in part) from Top Drawer's own launch history
+    /// (`RecentsStore`) — recentsSource `macDring` (the default) or `both`. Populated by
+    /// `Launch` recording into the recorder (LP-19).
+    public var servesMacDringRecents: Bool {
+        let source = recentsSource ?? "macDring"
+        return source == "macDring" || source == "both"
     }
 }
 

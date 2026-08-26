@@ -96,18 +96,22 @@ final class LinuxRecentsTests: XCTestCase {
 
     func testRecentsHitsFollowsTabKindAndRecentsSource() {
         let now = ISO8601DateFormatter().date(from: "2026-08-25T10:00:00Z")!
-        let hits = RecentlyUsedFile.hits(xbel: xbel, limit: 10, now: now)   // 2 within-window
-        let stub = StubRecents(systemHits: hits, freshHits: hits)
+        let sys = RecentlyUsedFile.hits(xbel: xbel, limit: 10, now: now)   // 2 within-window
+        let stub = StubRecents(systemHits: sys, freshHits: sys)
+        // A distinct macDring launch-history hit (LP-19), so a `both` merge is visible.
+        let mac = [RecentFileHit(url: URL(fileURLWithPath: "/home/alice/launched.txt"),
+                                 name: "launched.txt", date: Date(timeIntervalSince1970: 5))]
         let json = #"{"version":1,"tabs":[{"id":"R","kind":"recents"},{"id":"S","kind":"recents","recentsSource":"system"},{"id":"B","kind":"recents","recentsSource":"both"},{"id":"F","kind":"fresh"},{"id":"I","kind":"items"}]}"#
-        XCTAssertTrue(TopDrawerService.recentsHits(forTab: "R", document: json, provider: stub).isEmpty,
-                      "default macDring source serves nothing until LP-19")
-        XCTAssertEqual(TopDrawerService.recentsHits(forTab: "S", document: json, provider: stub).count, 2)
-        XCTAssertEqual(TopDrawerService.recentsHits(forTab: "B", document: json, provider: stub).count, 2)
-        XCTAssertEqual(TopDrawerService.recentsHits(forTab: "F", document: json, provider: stub).count, 2)
-        XCTAssertTrue(TopDrawerService.recentsHits(forTab: "I", document: json, provider: stub).isEmpty,
-                      "an items tab has no recents")
-        XCTAssertTrue(TopDrawerService.recentsHits(forTab: "Z", document: json, provider: stub).isEmpty,
-                      "an unknown tab id is empty")
+        func hits(_ id: String) -> [RecentFileHit] {
+            TopDrawerService.recentsHits(forTab: id, document: json, provider: stub, macDringHits: mac)
+        }
+        XCTAssertEqual(hits("R").map(\.name), ["launched.txt"],
+                       "the default macDring source now serves the recorded launch history")
+        XCTAssertEqual(hits("S").count, 2, "system source only")
+        XCTAssertEqual(hits("B").count, 3, "both = system(2) + macDring(1), distinct URLs")
+        XCTAssertEqual(hits("F").count, 2, "fresh source")
+        XCTAssertTrue(hits("I").isEmpty, "an items tab has no recents")
+        XCTAssertTrue(hits("Z").isEmpty, "an unknown tab id is empty")
     }
 
     func testEncodeRecentsShape() {

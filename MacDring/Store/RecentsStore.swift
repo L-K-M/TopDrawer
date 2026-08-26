@@ -7,30 +7,35 @@ import Combine
 /// App-global launch history (like `Preferences`), persisted to `UserDefaults` as
 /// JSON: most-recent-first, de-duplicated by URL, capped. `TabController` records a
 /// launch here; `RecentsLister` reads it.
-final class RecentsStore: ObservableObject {
+public final class RecentsStore: ObservableObject {
 
-    static let shared = RecentsStore()
-    static let limit = 30
+    public static let shared = RecentsStore()
+    public static let limit = 30
 
     @Published private(set) var items: [RecentItem]
+
+    /// A plain public snapshot of `items`. `items` itself stays internal because its
+    /// `@Published` wrapper is Combine's on macOS but the module-internal `ObservationCompat`
+    /// shim on Linux, and a public property can't be backed by an internal wrapper type.
+    public var currentItems: [RecentItem] { items }
 
     private let defaults: UserDefaults
     private static let key = "recentItems"
 
     /// A custom `UserDefaults` can be injected for tests.
-    init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         items = RecentsStore.load(from: defaults)
     }
 
     /// Records a freshly-opened target: moves it to the front, de-duplicating by URL,
     /// capped to `limit`.
-    func record(_ item: RecentItem) {
+    public func record(_ item: RecentItem) {
         items = RecentsStore.merging(items, with: item, limit: RecentsStore.limit)
         save()
     }
 
-    func clear() {
+    public func clear() {
         items = []
         save()
     }

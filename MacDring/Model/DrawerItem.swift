@@ -8,7 +8,7 @@ import Foundation
 /// What a drawer item points at. `.group` is a container of other items (an
 /// iOS-folder-like group), not a launchable target — its `children` hold the group's
 /// contents.
-enum ItemKind: String, Codable { case application, file, folder, url, trash, disk, cloud, group }
+public enum ItemKind: String, Codable { case application, file, folder, url, trash, disk, cloud, group }
 
 /// A single launchable entry inside a drawer: an app, file, folder, or URL.
 ///
