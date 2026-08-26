@@ -146,7 +146,7 @@ public actor TopDrawerService {
         lastModified = source.modificationDate()
         lastVolumes = volumeSource.volumes()
         lastTrashCount = trashService.trashCount()
-        lastRunningApps = runningApps.runningAppIDs()
+        lastRunningApps = runningApps.runningAppIDs() ?? []
         lastXbelModified = xbelModificationDate()
         startTrashWatcher()
         startFreshWatchers()
@@ -290,7 +290,7 @@ public actor TopDrawerService {
                 name: "GetRunningAppIDs",
                 outputArgs: [.init(name: "json", type: "s")]
             ) { _ in
-                [.string(Self.encodeRunningApps(runningApps.runningAppIDs()))]
+                [.string(Self.encodeRunningApps(runningApps.runningAppIDs() ?? []))]
             },
             DBusObjectServer.Method(
                 name: "AddDroppedURIs",
@@ -384,8 +384,8 @@ public actor TopDrawerService {
     }
 
     private func checkForRunningAppsChange() async {
-        let current = runningApps.runningAppIDs()
-        guard current != lastRunningApps else { return }
+        // A failed scan (nil) is not a change — don't clobber the last-known set or signal.
+        guard let current = runningApps.runningAppIDs(), current != lastRunningApps else { return }
         lastRunningApps = current
         await emitSignal("RunningAppsChanged")
     }

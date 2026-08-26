@@ -55,8 +55,10 @@ public enum RunningAppScope {
 /// The daemon's source of running-application ids. `ProcRunningApps` reads `/proc` in
 /// production; a fake drives the D-Bus tests deterministically.
 public protocol RunningAppsScanning: Sendable {
-    /// The desktop-file ids of currently-running apps, de-duplicated and sorted.
-    func runningAppIDs() -> [String]
+    /// The desktop-file ids of currently-running apps (de-duplicated, sorted), or `nil` if the
+    /// scan itself failed — distinct from `[]`, a successful scan that found nothing running.
+    /// The poll uses that distinction so a transient failure doesn't read as "every app quit".
+    func runningAppIDs() -> [String]?
 }
 
 /// Scans `/proc/<pid>/cgroup` for `app-*.scope` membership — the boring, inotify-free
@@ -75,9 +77,11 @@ public struct ProcRunningApps: RunningAppsScanning {
         self.uid = uid
     }
 
-    public func runningAppIDs() -> [String] {
+    public func runningAppIDs() -> [String]? {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: procRoot.path) else { return [] }
+        // nil (not []) when the listing itself fails, so a transient /proc read error isn't
+        // mistaken for "no apps running". A per-pid cgroup read that fails just skips that pid.
+        guard let entries = try? fm.contentsOfDirectory(atPath: procRoot.path) else { return nil }
         var ids = Set<String>()
         // Only this user's own session: a cgroup v2 path for the user's apps runs through
         // `…/user@<uid>.service/…`. (The trailing `.service` can't be a prefix of another

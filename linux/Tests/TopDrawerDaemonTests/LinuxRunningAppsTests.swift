@@ -96,8 +96,9 @@ final class LinuxRunningAppsTests: XCTestCase {
                        "deduped, sorted, and scoped to uid 1000 (the other user's app excluded)")
     }
 
-    func testProcScanOfMissingRootIsEmpty() {
-        XCTAssertTrue(ProcRunningApps(procRoot: URL(fileURLWithPath: "/no/such/proc")).runningAppIDs().isEmpty)
+    func testProcScanOfMissingRootReturnsNil() {
+        // A failed listing is nil (distinct from [], a successful scan of nothing running).
+        XCTAssertNil(ProcRunningApps(procRoot: URL(fileURLWithPath: "/no/such/proc")).runningAppIDs())
     }
 }
 #endif

@@ -743,7 +743,7 @@ final class FakeRecorder: RecentsRecording, @unchecked Sendable {
 /// A fixed running-apps set, so `GetRunningAppIDs` is deterministic without a real `/proc`.
 private struct FakeRunningApps: RunningAppsScanning {
     var ids: [String] = []
-    func runningAppIDs() -> [String] { ids }
+    func runningAppIDs() -> [String]? { ids }
 }
 
 /// A mutable running-apps set the `RunningAppsChanged` test flips after subscribing, to
@@ -753,7 +753,7 @@ final class MutableRunningApps: RunningAppsScanning, @unchecked Sendable {
     private var _ids: [String]
     init(_ ids: [String] = []) { _ids = ids }
     func set(_ ids: [String]) { lock.lock(); _ids = ids; lock.unlock() }
-    func runningAppIDs() -> [String] { lock.lock(); defer { lock.unlock() }; return _ids }
+    func runningAppIDs() -> [String]? { lock.lock(); defer { lock.unlock() }; return _ids }
 }
 
 /// Records every volume handed to the ejector, so a test can prove the call happened
