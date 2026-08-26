@@ -53,3 +53,18 @@ jobs:
 
       - name: Test
         run: swift test -v --disable-automatic-resolution
+
+      # The Linux daemon package (LP-16) lives in `linux/` and is built only here —
+      # the macOS app never resolves it. It pulls SwiftNIO via wendylabsinc/dbus, and
+      # its end-to-end D-Bus tests need a session bus (dbus-run-session provides a
+      # private one; the tests skip themselves without a bus).
+      - name: Install D-Bus (for the daemon's session-bus tests)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends dbus dbus-bin
+
+      - name: Build the Linux daemon package
+        run: swift build -v --package-path linux --disable-automatic-resolution
+
+      - name: Test the Linux daemon package (under a private session bus)
+        run: dbus-run-session -- swift test -v --package-path linux --disable-automatic-resolution

@@ -1,0 +1,16 @@
+[Unit]
+Description=Top Drawer daemon (D-Bus service for the Linux frontend)
+Documentation=https://github.com/L-K-M/TopDrawer
+# The session bus is where we claim ch.lkmc.TopDrawer, so wait for it.
+After=dbus.socket
+Requires=dbus.socket
+
+[Service]
+Type=simple
+# Installed per-user (see linux/README.md). %h is the user's home directory.
+ExecStart=%h/.local/bin/topdrawerd
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

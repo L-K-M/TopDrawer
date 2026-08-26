@@ -1,0 +1,173 @@
+#if os(Linux)
+import XCTest
+import Foundation
+import Glibc
+import DBUS
+@testable import TopDrawerDaemon
+
+/// End-to-end tests: a real `TopDrawerService` exported on the session bus, driven
+/// by a separate client connection. They need a bus, so run them under
+/// `dbus-run-session -- swift test --package-path linux` (plain `swift test` skips
+/// them). This is the LP-16 acceptance: `Ping` (and the rest of the interface) over
+/// a real D-Bus round trip.
+final class TopDrawerServiceTests: XCTestCase {
+
+    private var tempDir: URL!
+    private var launcherURL: URL!
+    private let launcherJSON = #"{"version":1,"tabs":[{"id":"apps","title":"Apps"}]}"#
+    private var serverTask: Task<Void, Never>?
+
+    override func setUpWithError() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["DBUS_SESSION_BUS_ADDRESS"] == nil,
+            "no session bus — run under `dbus-run-session -- swift test --package-path linux`")
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("topdrawerd-svc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        launcherURL = tempDir.appendingPathComponent("launcher.json")
+        try launcherJSON.write(to: launcherURL, atomically: true, encoding: .utf8)
+    }
+
+    override func tearDown() async throws {
+        serverTask?.cancel()
+        serverTask = nil
+        if let tempDir, FileManager.default.fileExists(atPath: tempDir.path) {
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+    }
+
+    // MARK: - Tests
+
+    func testPingGetDocumentAndStubsRoundTripOverDBus() async throws {
+        startServer()
+        try await withClient { client in
+            let ping = try await self.callReady(client, method: "Ping")
+            XCTAssertEqual(ping.body.first?.string, "topdrawerd \(TopDrawerService.version) alive")
+
+            let doc = try await self.call(client, method: "GetDocument")
+            XCTAssertEqual(doc.messageType, .methodReturn, "\(doc)")
+            XCTAssertEqual(doc.body.first?.string, self.launcherJSON, "GetDocument serves the file verbatim")
+
+            let launch = try await self.call(client, method: "Launch", body: [.string("some-item")])
+            XCTAssertEqual(launch.body.first?.boolean, false, "Launch is a skeleton stub (LP-19)")
+
+            let dropped = try await self.call(
+                client, method: "AddDroppedURIs",
+                body: [.string("tab"), .array([.string("file:///tmp/x")])])
+            XCTAssertEqual(dropped.body.first?.boolean, false, "AddDroppedURIs is a skeleton stub (LP-17)")
+        }
+    }
+
+    func testIntrospectionExportsTheInterfaceMethodsAndSignal() async throws {
+        startServer()
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")   // wait until exported
+            let reply = try await client.send(
+                .createMethodCall(
+                    destination: TopDrawerService.busName,
+                    path: TopDrawerService.objectPath,
+                    interface: "org.freedesktop.DBus.Introspectable",
+                    method: "Introspect"),
+                timeoutNanoseconds: 5_000_000_000)
+            let xml = try XCTUnwrap(reply?.body.first?.string)
+            XCTAssertTrue(xml.contains(#"interface name="ch.lkmc.TopDrawer1""#), xml)
+            for method in ["Ping", "GetDocument", "Launch", "AddDroppedURIs"] {
+                XCTAssertTrue(xml.contains(#"method name="\#(method)""#), "missing \(method) in \(xml)")
+            }
+            XCTAssertTrue(xml.contains(#"signal name="DocumentChanged""#), xml)
+        }
+    }
+
+    func testDocumentChangedSignalFiresWhenTheLauncherFileChanges() async throws {
+        startServer()
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")   // wait until exported
+            // Ask the bus to route our signal to this client, then subscribe locally.
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus",
+                    path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus",
+                    method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='DocumentChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "DocumentChanged")
+
+            // Change the launcher file — the daemon's modification-time watch should notice
+            // and broadcast DocumentChanged.
+            try #"{"version":1,"tabs":[]}"#.write(to: self.launcherURL, atomically: true, encoding: .utf8)
+
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertNotNil(received, "DocumentChanged should fire after the launcher file changes")
+            XCTAssertEqual(received?.member, "DocumentChanged")
+        }
+    }
+
+    /// The first element of `stream`, or `nil` if `timeout` elapses first.
+    private static func firstElement(of stream: AsyncStream<DBusMessage>,
+                                     timeout: Duration) async -> DBusMessage? {
+        await withTaskGroup(of: DBusMessage?.self) { group in
+            group.addTask {
+                for await message in stream { return message }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
+    // MARK: - Harness
+
+    /// Runs a `TopDrawerService` on its own session-bus connection until the test
+    /// cancels it.
+    private func startServer() {
+        let source = LauncherDocumentSource(url: launcherURL)
+        serverTask = Task {
+            try? await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
+                let service = TopDrawerService(source: source)
+                try await service.run(on: connection, watchInterval: .milliseconds(200))
+                // Keep the export alive for the duration of the test; tearDown cancels us.
+                try await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    private func withClient(_ body: @escaping @Sendable (DBusClient.Connection) async throws -> Void) async throws {
+        try await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { client in
+            try await body(client)
+        }
+    }
+
+    /// One method call to our service, returning the reply message.
+    private func call(_ client: DBusClient.Connection, method: String,
+                      body: [DBusValue] = []) async throws -> DBusMessage {
+        let reply = try await client.send(
+            .createMethodCall(
+                destination: TopDrawerService.busName,
+                path: TopDrawerService.objectPath,
+                interface: TopDrawerService.interfaceName,
+                method: method, body: body),
+            timeoutNanoseconds: 5_000_000_000)
+        return try XCTUnwrap(reply, "no reply to \(method)")
+    }
+
+    /// Calls `method`, retrying while the name has no owner yet (the server races the
+    /// client at start-up), until a real method return arrives or we give up.
+    @discardableResult
+    private func callReady(_ client: DBusClient.Connection, method: String) async throws -> DBusMessage {
+        for _ in 0..<40 {
+            let reply = try await call(client, method: method)
+            if reply.messageType == .methodReturn { return reply }
+            try await Task.sleep(for: .milliseconds(250))   // ServiceUnknown while the server starts
+        }
+        XCTFail("service never became ready on \(TopDrawerService.busName)")
+        return try await call(client, method: method)
+    }
+}
+#endif
