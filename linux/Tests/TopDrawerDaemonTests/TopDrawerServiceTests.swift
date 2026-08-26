@@ -506,6 +506,36 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    func testFailedScanServesTheLastKnownRunningApps() async throws {
+        // Start empty (no nil to race the initial snapshot), then establish a known running
+        // set via the poll-driven signal — so lastRunningApps is provably ["org.example.One"]
+        // before the next scan fails. A failed scan must then serve that set, not empty
+        // (proving both the poll's no-clobber guard and GetRunningAppIDs' fallback).
+        let apps = MutableRunningApps([])
+        startServer(runningApps: apps)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RunningAppsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RunningAppsChanged")
+            apps.set(["org.example.One"])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.member, "RunningAppsChanged")   // lastRunningApps is now set
+
+            apps.failScan()
+            let reply = try await self.call(client, method: "GetRunningAppIDs")
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            XCTAssertEqual(root?["appIDs"] as? [String], ["org.example.One"],
+                           "a failed scan serves the last-known set, not empty")
+        }
+    }
+
     func testRecentsChangedFiresWhenAFreshScopeChanges() async throws {
         try writeDocument(#"{"version":1,"tabs":[{"id":"fr","kind":"fresh"}]}"#)
         let scope = tempDir.appendingPathComponent("Downloads", isDirectory: true)
@@ -750,9 +780,11 @@ private struct FakeRunningApps: RunningAppsScanning {
 /// drive the poll. Thread-safe: the watch loop reads it off the test's thread.
 final class MutableRunningApps: RunningAppsScanning, @unchecked Sendable {
     private let lock = NSLock()
-    private var _ids: [String]
+    private var _ids: [String]?
     init(_ ids: [String] = []) { _ids = ids }
     func set(_ ids: [String]) { lock.lock(); _ids = ids; lock.unlock() }
+    /// Simulates a transient `/proc` scan failure (the scan returns nil, not []).
+    func failScan() { lock.lock(); _ids = nil; lock.unlock() }
     func runningAppIDs() -> [String]? { lock.lock(); defer { lock.unlock() }; return _ids }
 }
 

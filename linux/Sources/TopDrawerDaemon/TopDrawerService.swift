@@ -177,7 +177,6 @@ public actor TopDrawerService {
         let recentsProvider = self.recentsProvider
         let launcher = self.launcher
         let recorder = self.recorder
-        let runningApps = self.runningApps
         return [
             DBusObjectServer.Method(
                 name: "Ping",
@@ -289,8 +288,10 @@ public actor TopDrawerService {
             DBusObjectServer.Method(
                 name: "GetRunningAppIDs",
                 outputArgs: [.init(name: "json", type: "s")]
-            ) { _ in
-                [.string(Self.encodeRunningApps(runningApps.runningAppIDs() ?? []))]
+            ) { [weak self] _ in
+                // Through the actor so a failed scan falls back to the last-known set (see
+                // currentRunningAppIDs) — the query and the RunningAppsChanged state agree.
+                [.string(Self.encodeRunningApps(await self?.currentRunningAppIDs() ?? []))]
             },
             DBusObjectServer.Method(
                 name: "AddDroppedURIs",
@@ -388,6 +389,14 @@ public actor TopDrawerService {
         guard let current = runningApps.runningAppIDs(), current != lastRunningApps else { return }
         lastRunningApps = current
         await emitSignal("RunningAppsChanged")
+    }
+
+    /// The set a `GetRunningAppIDs` reply serves: a fresh scan, or the last-known set if the
+    /// scan just failed — so the query agrees with the `RunningAppsChanged` state the poll
+    /// holds. Deliberately does not mutate `lastRunningApps` (that stays the poll's job, so a
+    /// real change is never silently swallowed between polls).
+    private func currentRunningAppIDs() -> [String] {
+        runningApps.runningAppIDs() ?? lastRunningApps
     }
 
     // MARK: - Trash watch
