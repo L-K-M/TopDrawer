@@ -249,6 +249,10 @@ final class TopDrawerServiceTests: XCTestCase {
             XCTAssertEqual(list.count, 1)
             XCTAssertEqual(list.first?["name"] as? String, "report.pdf")
             XCTAssertEqual(list.first?["path"] as? String, "/home/alice/report.pdf")
+            // Pin the documented wire contract: `date` is Unix epoch seconds, not a
+            // string, not milliseconds. `as? Double` is robust to Int/Double NSNumber
+            // bridging (same cast the encode-shape unit test uses).
+            XCTAssertEqual(list.first?["date"] as? Double, 1_000_000)
         }
     }
 
@@ -276,6 +280,10 @@ final class TopDrawerServiceTests: XCTestCase {
             XCTAssertTrue(itemsList.isEmpty, "an items tab has no recents")
             let macList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("mac")]))
             XCTAssertTrue(macList.isEmpty, "a macDring-only recents tab is empty until LP-19 (system source excluded)")
+            // A tab id absent from the document hits the lookup-miss path (not a kind
+            // mismatch); it too returns {"recents":[]}, matching the README's "any other tab".
+            let unknownList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("does-not-exist")]))
+            XCTAssertTrue(unknownList.isEmpty, #"an unknown tab id also returns {"recents":[]}"#)
         }
     }
 
