@@ -56,6 +56,11 @@ final class TrashLocationTests: XCTestCase {
         // A trashed directory counts as one item, like Finder's Empty Trash.
         try FileManager.default.createDirectory(
             at: files.appendingPathComponent("folder"), withIntermediateDirectories: true)
+        // The .trashinfo sidecars under info/ (one per trashed item, per the freedesktop
+        // spec) must NOT inflate the count — only files/ entries are items.
+        let info = tempDir.appendingPathComponent("info", isDirectory: true)
+        try FileManager.default.createDirectory(at: info, withIntermediateDirectories: true)
+        try "x".write(to: info.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
         XCTAssertEqual(TrashLocation.count(trashDirectory: tempDir), 3)
     }
 }
