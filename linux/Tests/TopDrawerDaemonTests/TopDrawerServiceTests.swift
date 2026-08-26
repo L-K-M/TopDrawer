@@ -188,11 +188,12 @@ final class TopDrawerServiceTests: XCTestCase {
             let signals = await client.subscribeToSignal(
                 interface: TopDrawerService.interfaceName, member: "TrashChanged")
 
-            // Trash a file — the inotify watch on files/ should notice the new entry.
-            try "gone".write(to: files.appendingPathComponent("deleted.txt"),
-                             atomically: true, encoding: .utf8)
-
+            // Trash files repeatedly (each new file bumps the count → a fresh
+            // TrashChanged) while waiting, so a single emit that races the bus
+            // subscription becoming effective can't make this flaky.
+            let writer = Self.repeatedlyTrashFiles(into: files)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            writer.cancel()
             XCTAssertNotNil(received, "TrashChanged should fire after the Trash changes")
             XCTAssertEqual(received?.member, "TrashChanged")
         }
@@ -218,11 +219,24 @@ final class TopDrawerServiceTests: XCTestCase {
                 interface: TopDrawerService.interfaceName, member: "TrashChanged")
 
             try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
-            try "gone".write(to: files.appendingPathComponent("deleted.txt"),
-                             atomically: true, encoding: .utf8)
-
+            let writer = Self.repeatedlyTrashFiles(into: files)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            writer.cancel()
             XCTAssertNotNil(received, "the poll backstop should deliver TrashChanged on a fresh profile")
+        }
+    }
+
+    /// Writes a fresh file into `directory` every 300ms until cancelled — each write
+    /// bumps the trashed-item count, so a single `TrashChanged` emit that races the bus
+    /// subscription setup can't make the signal tests flaky (the next write emits again).
+    private static func repeatedlyTrashFiles(into directory: URL) -> Task<Void, Never> {
+        Task {
+            for i in 0..<50 {
+                if Task.isCancelled { break }
+                try? "gone".write(to: directory.appendingPathComponent("deleted-\(i).txt"),
+                                  atomically: true, encoding: .utf8)
+                try? await Task.sleep(for: .milliseconds(300))
+            }
         }
     }
 
