@@ -3,6 +3,7 @@ import XCTest
 import Foundation
 import Glibc
 import DBUS
+import MacDring
 @testable import TopDrawerDaemon
 
 /// End-to-end tests: a real `TopDrawerService` exported on the session bus, driven
@@ -78,10 +79,13 @@ final class TopDrawerServiceTests: XCTestCase {
                 timeoutNanoseconds: 5_000_000_000)
             let xml = try XCTUnwrap(reply?.body.first?.string)
             XCTAssertTrue(xml.contains(#"interface name="ch.lkmc.TopDrawer1""#), xml)
-            for method in ["Ping", "GetDocument", "Launch", "AddDroppedURIs"] {
+            for method in ["Ping", "GetDocument", "GetVolumes", "Eject", "GetTrashState",
+                           "Launch", "AddDroppedURIs"] {
                 XCTAssertTrue(xml.contains(#"method name="\#(method)""#), "missing \(method) in \(xml)")
             }
-            XCTAssertTrue(xml.contains(#"signal name="DocumentChanged""#), xml)
+            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged"] {
+                XCTAssertTrue(xml.contains(#"signal name="\#(signal)""#), "missing \(signal) in \(xml)")
+            }
         }
     }
 
@@ -111,6 +115,77 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - LP-17: volumes / trash
+
+    func testGetVolumesSerializesTheInjectedSnapshotAsJSON() async throws {
+        let volumes = [
+            LinuxVolume(id: "/media/alice/USB", name: "USB", path: "/media/alice/USB",
+                        kind: .disk, device: "/dev/sdb1", ejectable: true),
+            LinuxVolume(id: "/home/alice/nas", name: "nas", path: "/home/alice/nas",
+                        kind: .network, device: "//server/share", ejectable: true),
+        ]
+        startServer(volumeSource: FakeVolumeSource(volumes))
+        try await withClient { client in
+            let reply = try await self.callReady(client, method: "GetVolumes")
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            let list = try XCTUnwrap(root?["volumes"] as? [[String: Any]])
+            XCTAssertEqual(list.count, 2)
+            XCTAssertEqual(list.first?["kind"] as? String, "disk")
+            XCTAssertEqual(list.first?["name"] as? String, "USB")
+            XCTAssertEqual(list.last?["kind"] as? String, "network")
+        }
+    }
+
+    func testGetTrashStateReportsTheInjectedCountAndEmptiness() async throws {
+        startServer(trashService: FakeTrashService(count: 3))
+        try await withClient { client in
+            let reply = try await self.callReady(client, method: "GetTrashState")
+            XCTAssertEqual(reply.body.first?.boolean, false, "3 items → not empty")
+            XCTAssertEqual(reply.body.dropFirst().first?.uint32, 3)
+        }
+    }
+
+    func testEjectResolvesTheVolumeIDAndInvokesTheEjector() async throws {
+        let volume = LinuxVolume(id: "/media/alice/USB", name: "USB", path: "/media/alice/USB",
+                                 kind: .disk, device: "/dev/sdb1", ejectable: true)
+        startServer(volumeSource: FakeVolumeSource([volume]), ejector: { $0.device == "/dev/sdb1" })
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let unknown = try await self.call(client, method: "Eject", body: [.string("/no/such")])
+            XCTAssertEqual(unknown.body.first?.boolean, false, "an unknown id ejects nothing")
+
+            let known = try await self.call(client, method: "Eject", body: [.string("/media/alice/USB")])
+            XCTAssertEqual(known.body.first?.boolean, true, "a known id is handed to the ejector")
+        }
+    }
+
+    func testTrashChangedFiresWhenTheTrashDirectoryChanges() async throws {
+        let trashDir = tempDir.appendingPathComponent("trash", isDirectory: true)
+        let files = trashDir.appendingPathComponent("files", isDirectory: true)
+        try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+        startServer(trashDirectory: trashDir)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")   // wait until exported
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='TrashChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "TrashChanged")
+
+            // Trash a file — the inotify watch on files/ should notice the new entry.
+            try "gone".write(to: files.appendingPathComponent("deleted.txt"),
+                             atomically: true, encoding: .utf8)
+
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertNotNil(received, "TrashChanged should fire after the Trash changes")
+            XCTAssertEqual(received?.member, "TrashChanged")
+        }
+    }
+
     /// The first element of `stream`, or `nil` if `timeout` elapses first.
     private static func firstElement(of stream: AsyncStream<DBusMessage>,
                                      timeout: Duration) async -> DBusMessage? {
@@ -132,13 +207,21 @@ final class TopDrawerServiceTests: XCTestCase {
     // MARK: - Harness
 
     /// Runs a `TopDrawerService` on its own session-bus connection until the test
-    /// cancels it.
-    private func startServer() {
+    /// cancels it. All backends are injectable; they default to the production ones
+    /// except `trashDirectory`, which defaults to a temp subdirectory so a test never
+    /// watches (or counts) the developer's real Trash.
+    private func startServer(volumeSource: VolumeSnapshotProviding = ProcMounts(),
+                             trashService: TrashServicing = GioTrashService(),
+                             trashDirectory: URL? = nil,
+                             ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject) {
         let source = LauncherDocumentSource(url: launcherURL)
+        let trashDir = trashDirectory ?? tempDir.appendingPathComponent("trash", isDirectory: true)
         serverTask = Task {
             do {
                 try await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
-                    let service = TopDrawerService(source: source)
+                    let service = TopDrawerService(
+                        source: source, volumeSource: volumeSource, trashService: trashService,
+                        trashDirectory: trashDir, ejector: ejector)
                     try await service.run(on: connection, watchInterval: .milliseconds(200))
                     // Keep the export alive for the duration of the test; tearDown cancels us.
                     try await Task.sleep(for: .seconds(30))
@@ -191,5 +274,23 @@ final class TopDrawerServiceTests: XCTestCase {
         XCTFail("service never became ready on \(TopDrawerService.busName)")
         return try await call(client, method: method)
     }
+}
+
+// MARK: - Test doubles
+
+/// A fixed volume snapshot, so `GetVolumes` is deterministic without a real `/proc`.
+private struct FakeVolumeSource: VolumeSnapshotProviding {
+    let list: [LinuxVolume]
+    init(_ list: [LinuxVolume]) { self.list = list }
+    func volumes() -> [LinuxVolume] { list }
+}
+
+/// A fixed trash count, so `GetTrashState` is deterministic without a real Trash.
+private struct FakeTrashService: TrashServicing {
+    let count: Int
+    func trashCount() -> Int { count }
+    func trashIsEmpty() -> Bool { count == 0 }
+    func trash(_ urls: [URL]) -> Bool { true }
+    func emptyTrash() -> Bool { true }
 }
 #endif

@@ -6,19 +6,45 @@ the session-bus name **`ch.lkmc.TopDrawer`** and exports one object,
 layer-shell frontend (LP-20+) talks to it over D-Bus; the macOS app is unaffected —
 this package is built only on Linux.
 
-This is the **LP-16 skeleton**: the D-Bus surface, a systemd user unit, and CI. It
-serves the launcher document verbatim and stubs the launch/drop methods; later LPs
-fill them in (see the plan's LP-17 – LP-19).
+LP-16 built the skeleton (the D-Bus surface, a systemd user unit, and CI). **LP-17**
+adds the volumes and Trash surface: mounted-volume listing + eject, and Trash state,
+with change signals. The launch/drop methods are still stubs; later LPs fill them in
+(see the plan's LP-18 – LP-19).
 
 ## The interface (`ch.lkmc.TopDrawer1`)
 
-| Member | Signature | LP-16 behavior |
+| Member | Signature | Behavior |
 | --- | --- | --- |
 | `Ping` | `() → s` | Returns `topdrawerd <version> alive` — the liveness smoke test. |
 | `GetDocument` | `() → s` | The launcher JSON (`$XDG_DATA_HOME/MacDring/launcher.json`), served verbatim; `{}` if absent. |
+| `GetVolumes` | `() → s` | The classified mounted volumes as JSON: `{"volumes":[{"id","name","path","kind","device","ejectable"}]}`, `kind` ∈ `disk`/`network`/`cloud` (LP-17). |
+| `Eject` | `(s volumeID) → b` | Unmounts/powers off the volume with that `id` (its mount point); `false` if unknown or it failed (LP-17). |
+| `GetTrashState` | `() → b u` | Whether the Trash is empty, and its item count (LP-17). |
 | `Launch` | `(s itemID) → b` | Stub — returns `false` (real launching lands in LP-19). |
-| `AddDroppedURIs` | `(s tabID, as uris) → b` | Stub — returns `false` (drops land in LP-17). |
+| `AddDroppedURIs` | `(s tabID, as uris) → b` | Stub — returns `false` (drops land in LP-19). |
 | `DocumentChanged` | signal `()` | Emitted when the launcher file changes on disk (a modification-time watch). |
+| `VolumesChanged` | signal `()` | Emitted when the set of mounted volumes changes (a `/proc` poll — inotify can't watch `/proc`) (LP-17). |
+| `TrashChanged` | signal `()` | Emitted when the Trash contents change (an inotify watch on `Trash/files`) (LP-17). |
+
+### Volume classification (LP-17)
+
+Volumes come from `/proc/self/mountinfo`, filtered to user-facing mounts (pseudo and
+system filesystems dropped), and classified to mirror the macOS Disks/Network/Cloud
+docks:
+
+- **disk** — a real block device that is removable (`/sys/block/<base>/removable`) or
+  auto-mounted under `/media/$USER` or `/run/media/$USER`. Ejected via `udisksctl
+  unmount -b` + `power-off -b`, falling back to `gio mount -e`.
+- **network** — a remote-share fstype (`cifs`, `nfs`, `fuse.sshfs`, `davfs`, …).
+  "Ejected" (disconnected) via `gio mount -u`.
+- **cloud** — an `rclone` FUSE mount, plus Dropbox via its documented
+  `~/.dropbox/info.json`. gvfs/GOA providers (`google-drive://`, `onedrive://`) live
+  inside the single `fuse.gvfsd-fuse` root rather than as separate mounts, so surfacing
+  them needs `gio mount -l` — a documented follow-up.
+
+Trash follows the freedesktop spec: state is the count under
+`$XDG_DATA_HOME/Trash/files`; trashing/emptying (when wired to drops) uses
+`gio trash` (from `libglib2.0-bin`).
 
 ## Build
 
@@ -50,15 +76,23 @@ terminal):
 ```sh
 # Liveness:
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
-#   s "topdrawerd 0.1.0 alive"
+#   s "topdrawerd 0.2.0 alive"
 
 # The launcher document:
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetDocument
 
-# The whole interface (methods + the DocumentChanged signal):
+# Mounted volumes (JSON) and Trash state:
+busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetVolumes
+busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetTrashState
+#   b u   false 2
+
+# Eject a volume by its id (the mount point):
+busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Eject s /media/$USER/MyStick
+
+# The whole interface (methods + the DocumentChanged/VolumesChanged/TrashChanged signals):
 busctl --user introspect ch.lkmc.TopDrawer /ch/lkmc/TopDrawer
 
-# Watch the change signal, then touch the launcher file in another terminal:
+# Watch the change signals, then touch the launcher file / plug in a stick / trash a file:
 busctl --user monitor ch.lkmc.TopDrawer
 ```
 
@@ -77,9 +111,7 @@ under `dbus-run-session`.
 
 ## Scope / dependencies
 
-Per the port plan, this package will also depend on the root `MacDring` package
-(`.package(path: "..")`) and `PictKit` (via its Git URL) once the daemon consumes
-their APIs — the document/lister types in `MacDring` are still module-internal, and
-icon rendering isn't wired yet. Those dependencies land with LP-17, the first daemon
-features that need them, keeping this skeleton's dependency and build surface to what
-it actually uses.
+LP-17 adds the root **`MacDring`** package as a path dependency (`.package(path:
+"..")`): the daemon consumes its `VolumeListing` / `TrashServicing` seams (LP-12) and
+the `INotifyWatcher` copied there from PictKit. `PictKit` (icon rendering) is still not
+needed and stays deferred to the LP that wires icons.

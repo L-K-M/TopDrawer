@@ -1,0 +1,4 @@
+module CInotify [system] {
+    header "shim.h"
+    export *
+}
