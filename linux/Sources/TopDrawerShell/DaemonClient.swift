@@ -60,8 +60,16 @@ public enum DaemonClient {
                                    retryDelay: Duration = .seconds(5)) async {
         while true {
             do {
+                // Subscribe BEFORE the initial fetch: a DocumentChanged landing between
+                // the fetch's reply and the match-rule installation would otherwise be
+                // missed until the *next* change — a stale strip, unbounded on a
+                // rarely-changing document. A signal racing the fetch now either arrives
+                // (triggering a redundant, harmless re-fetch) or the change is already in
+                // the fetched document; both converge. AddMatch needs no name owner, so
+                // the no-daemon path still fails at the fetch and drives onError/retry.
+                let changes = try await documentChanges(connection)
                 onChange(try await fetchTabs(connection))
-                for await _ in try await documentChanges(connection) {
+                for await _ in changes {
                     onChange(try await fetchTabs(connection))
                 }
                 if Task.isCancelled { return }   // the stream ends on cancel too

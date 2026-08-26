@@ -116,7 +116,13 @@ final class DaemonClientTests: XCTestCase {
             let observation = Task {
                 await DaemonClient.observeTabs(client,
                                                onChange: { strips.record($0) },
-                                               onError: { XCTFail("unexpected error: \($0)") },
+                                               onError: {
+                                                   // Teardown races the observer: once
+                                                   // cancelled, connection errors are
+                                                   // expected shutdown interleaving.
+                                                   guard !Task.isCancelled else { return }
+                                                   XCTFail("unexpected error: \($0)")
+                                               },
                                                retryDelay: .milliseconds(100))
             }
 

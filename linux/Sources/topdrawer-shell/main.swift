@@ -12,6 +12,7 @@
 import CGtk4
 import CGtkLayerShell
 import DBUS
+import Foundation
 import Logging
 import TopDrawerShell
 
@@ -68,7 +69,9 @@ if let flag = CommandLine.arguments.firstIndex(of: "--monitor"),
    let display = gdk_display_get_default() {
     let monitors = gdk_display_get_monitors(display)
     let count = g_list_model_get_n_items(monitors)
-    if UInt32(index) < count, let raw = g_list_model_get_item(monitors, UInt32(index)) {
+    // `index >= 0`: UInt32(negative) traps rather than failing, and a hostile/typo'd
+    // `--monitor -1` shouldn't crash the dock.
+    if index >= 0, UInt32(index) < count, let raw = g_list_model_get_item(monitors, UInt32(index)) {
         gtk_layer_set_monitor(asWindow(window), OpaquePointer(raw))
         g_object_unref(raw)
     } else {

@@ -74,6 +74,9 @@ jobs:
           apt-get install -y --no-install-recommends \
             pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
           git clone --depth 1 --branch v1.3.0 https://github.com/wmww/gtk4-layer-shell /tmp/gtk4-layer-shell
+          # The tag is the pin, the commit hash the verification — same discipline as
+          # the pinned actions/container above (a moved tag fails the build loudly).
+          test "$(git -C /tmp/gtk4-layer-shell rev-parse HEAD)" = 1c963c51514581c41b9bdae08cdf69171265cdda
           meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
             --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false \
             -Dsmoke-tests=false -Dintrospection=false -Dvapi=false
