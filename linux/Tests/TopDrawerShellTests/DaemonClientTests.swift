@@ -108,6 +108,10 @@ final class DaemonClientTests: XCTestCase {
     func testObserveTabsEmitsTheStripThenTheChangedStrip() async throws {
         startMockDaemon()
         try await withClient { client in
+            // Observe only once the mock owns the name, so the strict onError below
+            // pins real failures, not the startup race (the app-level observeTabs
+            // retries through that race by design).
+            try await Self.pingReady(client)
             let strips = TabStripRecorder()
             let observation = Task {
                 await DaemonClient.observeTabs(client,
@@ -138,6 +142,22 @@ final class DaemonClientTests: XCTestCase {
         }
         XCTFail("mock daemon never became ready")
         return []
+    }
+
+    /// Pings until the mock's method returns — it races the client at startup (the
+    /// name is claimed late on purpose since PR #123).
+    private static func pingReady(_ client: DBusClient.Connection,
+                                  attempts: Int = 40) async throws {
+        for _ in 0..<attempts {
+            if let reply = try? await client.send(
+                .createMethodCall(
+                    destination: DaemonClient.busName, path: DaemonClient.objectPath,
+                    interface: DaemonClient.interfaceName, method: "Ping", body: []),
+                timeoutNanoseconds: 5_000_000_000),
+               reply.messageType == .methodReturn { return }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        XCTFail("mock daemon never answered Ping")
     }
 
     /// Polls `condition` on a short cadence until it holds or `timeout` elapses — a
