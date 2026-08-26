@@ -60,9 +60,10 @@ private let gtkCoordinateCallbackDestroy: GClosureNotify? = { data, _ in
     Unmanaged<GtkCoordinateCallback>.fromOpaque(data).release()
 }
 
-/// Connects an argumentless signal (`leave`, `close-request`, …) to a closure —
+/// Connects an argumentless, void-returning signal (`leave`, …) to a closure —
 /// typed-pointer instance flavor (callers that already hold an opaque controller
-/// pointer use the OpaquePointer overload).
+/// pointer use the OpaquePointer overload). Boolean-returning signals like
+/// `close-request` need their own trampoline: `gtkConnectCloseRequest`.
 func gtkConnect<P>(_ instance: UnsafeMutablePointer<P>?, signal: String,
                    _ action: @escaping () -> Void) {
     gtkConnectRaw(instance.map { UnsafeMutableRawPointer($0) }, signal: signal,
