@@ -7,9 +7,10 @@ layer-shell frontend (LP-20+) talks to it over D-Bus; the macOS app is unaffecte
 this package is built only on Linux.
 
 LP-16 built the skeleton; **LP-17** added volumes + Trash; **LP-18** added the Recents
-and Fresh tab contents (`GetRecents` + `RecentsChanged`); **LP-19** implements launching
-(`Launch` / `OpenWith` / `Reveal`) and records launches into the recents history. Running
-apps (`GetRunningAppIDs`) and drop-to-tab (`AddDroppedURIs`) remain follow-ups.
+and Fresh tab contents (`GetRecents` + `RecentsChanged`); **LP-19** implemented launching
+(`Launch` / `OpenWith` / `Reveal`) and records launches into the recents history;
+**LP-19b** adds running-apps detection (`GetRunningAppIDs` + `RunningAppsChanged`).
+Drop-to-tab (`AddDroppedURIs`) remains a follow-up.
 
 ## The interface (`ch.lkmc.TopDrawer1`)
 
@@ -24,11 +25,13 @@ apps (`GetRunningAppIDs`) and drop-to-tab (`AddDroppedURIs`) remain follow-ups.
 | `Launch` | `(s itemID) → b` | Opens the item with that id (resolved from the launcher document) via `gio open`/`gio launch`, and records a successful open into the recents history; `false` if the id is unknown or the launch failed (LP-19). |
 | `OpenWith` | `(s appID, as uris) → b` | Opens `uris` with the application named by its desktop-file id (`gio launch <.desktop>`, `gtk-launch` fallback) (LP-19). |
 | `Reveal` | `(s uri) → b` | Reveals a file in the file manager (`org.freedesktop.FileManager1.ShowItems`, opening the parent directory as a fallback) (LP-19). |
+| `GetRunningAppIDs` | `() → s` | The running apps' desktop-file ids as JSON: `{"appIDs":["…"]}`, deduped and sorted (LP-19b). |
 | `AddDroppedURIs` | `(s tabID, as uris) → b` | Stub — returns `false`; appending dropped files mutates the launcher document, which lands with the frontend's drag & drop (LP-23). |
 | `DocumentChanged` | signal `()` | Emitted when the launcher file changes on disk (a modification-time watch). |
 | `VolumesChanged` | signal `()` | Emitted when the set of mounted volumes changes (a `/proc` poll — inotify can't watch `/proc`) (LP-17). |
 | `TrashChanged` | signal `()` | Emitted when the Trash contents change (an inotify watch on `Trash/files`) (LP-17). |
 | `RecentsChanged` | signal `(s tabID)` | Emitted (per affected tab) when a Recents tab's source (`recently-used.xbel`) or a Fresh tab's landing zone changes (LP-18). |
+| `RunningAppsChanged` | signal `()` | Emitted when the set of running apps changes (a `/proc` poll — inotify can't watch `/proc`) (LP-19b). |
 
 ### Recents & Fresh (LP-18)
 
@@ -73,10 +76,28 @@ user entries shadowing system ones, honoring `NoDisplay`/`Hidden` and the `Exec`
 codes (`%f/%F/%u/%U` expansion, others dropped). A successful `Launch` records the target
 into `RecentsStore` (the macDring recents source above).
 
-- **Out of scope** (recorded follow-ups): running-apps detection (`GetRunningAppIDs` + a
-  change signal, via systemd user `app-*.scope` and `/proc`) — split out as the next item;
-  `AddDroppedURIs` (appending dropped files to a tab) awaits the launcher-document write
-  path (LP-23).
+- **Out of scope** (recorded follow-up): `AddDroppedURIs` (appending dropped files to a tab)
+  awaits the launcher-document write path (LP-23).
+
+### Running apps (LP-19b)
+
+`GetRunningAppIDs` reports which applications are running so the frontend can draw a
+running-app dot. On stock GNOME the Shell's introspection D-Bus is allow-listed away, so this
+uses the documented fallback: every app is launched into a transient **systemd user scope**
+named `app[-<launcher>]-<ApplicationID>[-<pid>|@<random>].scope`, which shows up in each
+process's `/proc/<pid>/cgroup`. The daemon scans `/proc`, extracts the desktop-file id from
+each `app-*.scope` (stripping the launcher prefix and the instance token, unescaping systemd's
+`\x2d`), and returns the deduplicated, sorted set. `/proc` can't be inotify-watched, so a poll
+(alongside the volumes poll) drives `RunningAppsChanged`.
+
+The ids are returned as JSON (`{"appIDs":[…]}`), matching `GetVolumes`/`GetRecents` — a native
+D-Bus `as` array is avoided because the D-Bus library signs an *empty* array as `ay`, not `as`,
+which would break the (common) no-apps-running reply.
+
+- **Out of scope** (recorded follow-ups): the exact GNOME-extension / KDE / wlroots
+  running-app sources (`Shell.AppSystem`, plasma-window-management, foreign-toplevel) land
+  with their respective frontends; matching scope ids against the installed `.desktop` set
+  (to drop stray scopes) can reuse LP-19's `DesktopEntryScanner`.
 
 ### Volume classification (LP-17)
 
@@ -132,7 +153,7 @@ terminal):
 ```sh
 # Liveness:
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
-#   s "topdrawerd 0.4.0 alive"
+#   s "topdrawerd 0.5.0 alive"
 
 # The launcher document:
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetDocument
@@ -153,7 +174,11 @@ busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Launc
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 OpenWith sas org.gnome.gedit 1 file:///home/$USER/notes.txt
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Reveal s file:///home/$USER/notes.txt
 
-# The whole interface (all methods + the four change signals):
+# The running apps' desktop-file ids (JSON):
+busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetRunningAppIDs
+#   s "{\"appIDs\":[\"org.gnome.Nautilus\"]}"
+
+# The whole interface (all methods + the five change signals):
 busctl --user introspect ch.lkmc.TopDrawer /ch/lkmc/TopDrawer
 
 # Watch the change signals, then touch the launcher file / plug in a stick / trash a

@@ -80,10 +80,12 @@ final class TopDrawerServiceTests: XCTestCase {
             let xml = try XCTUnwrap(reply?.body.first?.string)
             XCTAssertTrue(xml.contains(#"interface name="ch.lkmc.TopDrawer1""#), xml)
             for method in ["Ping", "GetDocument", "GetVolumes", "Eject", "GetTrashState",
-                           "GetRecents", "Launch", "OpenWith", "Reveal", "AddDroppedURIs"] {
+                           "GetRecents", "Launch", "OpenWith", "Reveal", "GetRunningAppIDs",
+                           "AddDroppedURIs"] {
                 XCTAssertTrue(xml.contains(#"method name="\#(method)""#), "missing \(method) in \(xml)")
             }
-            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged", "RecentsChanged"] {
+            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged", "RecentsChanged",
+                           "RunningAppsChanged"] {
                 XCTAssertTrue(xml.contains(#"signal name="\#(signal)""#), "missing \(signal) in \(xml)")
             }
         }
@@ -454,6 +456,49 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - LP-19b: running apps
+
+    func testGetRunningAppIDsReturnsTheScannedSet() async throws {
+        startServer(runningApps: FakeRunningApps(ids: ["com.example.App", "org.gnome.Nautilus"]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "GetRunningAppIDs")
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            XCTAssertEqual(root?["appIDs"] as? [String], ["com.example.App", "org.gnome.Nautilus"])
+        }
+    }
+
+    func testGetRunningAppIDsIsEmptyWhenNothingRuns() async throws {
+        startServer(runningApps: FakeRunningApps(ids: []))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "GetRunningAppIDs")
+            XCTAssertEqual(reply.body.first?.string, #"{"appIDs":[]}"#,
+                           "the empty set is still valid JSON (not a mis-signed empty D-Bus array)")
+        }
+    }
+
+    func testRunningAppsChangedFiresWhenTheSetChanges() async throws {
+        let apps = MutableRunningApps([])
+        startServer(runningApps: apps)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RunningAppsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RunningAppsChanged")
+            // A new app appears — the /proc poll should notice and broadcast.
+            apps.set(["org.gnome.Nautilus"])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.member, "RunningAppsChanged")
+        }
+    }
+
     func testRecentsChangedFiresWhenAFreshScopeChanges() async throws {
         try writeDocument(#"{"version":1,"tabs":[{"id":"fr","kind":"fresh"}]}"#)
         let scope = tempDir.appendingPathComponent("Downloads", isDirectory: true)
@@ -525,6 +570,7 @@ final class TopDrawerServiceTests: XCTestCase {
                              recentsProvider: RecentsProviding = FakeRecentsProvider(),
                              launcher: LinuxLaunching = FakeLauncher(),
                              recorder: RecentsRecording = FakeRecorder(),
+                             runningApps: RunningAppsScanning = FakeRunningApps(),
                              xbelLocation: URL? = nil,
                              freshScopes: [URL]? = nil) {
         let source = LauncherDocumentSource(url: launcherURL)
@@ -544,7 +590,7 @@ final class TopDrawerServiceTests: XCTestCase {
                         source: source, volumeSource: volumeSource, trashService: trashService,
                         trashDirectory: trashDir, ejector: ejector,
                         recentsProvider: recentsProvider, launcher: launcher, recorder: recorder,
-                        xbelLocation: xbel, freshScopes: scopes)
+                        runningApps: runningApps, xbelLocation: xbel, freshScopes: scopes)
                     try await service.run(on: connection, watchInterval: .milliseconds(200))
                     // Keep the export alive for the duration of the test; tearDown cancels us.
                     try await Task.sleep(for: .seconds(30))
@@ -685,6 +731,22 @@ final class FakeRecorder: RecentsRecording, @unchecked Sendable {
         lock.lock(); _recorded.append((url, kind, name, date)); lock.unlock()
     }
     func recents(limit: Int) async -> [RecentFileHit] { Array(canned.prefix(limit)) }
+}
+
+/// A fixed running-apps set, so `GetRunningAppIDs` is deterministic without a real `/proc`.
+private struct FakeRunningApps: RunningAppsScanning {
+    var ids: [String] = []
+    func runningAppIDs() -> [String] { ids }
+}
+
+/// A mutable running-apps set the `RunningAppsChanged` test flips after subscribing, to
+/// drive the poll. Thread-safe: the watch loop reads it off the test's thread.
+final class MutableRunningApps: RunningAppsScanning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _ids: [String]
+    init(_ ids: [String] = []) { _ids = ids }
+    func set(_ ids: [String]) { lock.lock(); _ids = ids; lock.unlock() }
+    func runningAppIDs() -> [String] { lock.lock(); defer { lock.unlock() }; return _ids }
 }
 
 /// Records every volume handed to the ejector, so a test can prove the call happened

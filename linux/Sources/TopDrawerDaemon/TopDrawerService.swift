@@ -19,11 +19,13 @@ import MacDring
 /// - `Launch(s itemID) -> b` — open an item and record it into recents (LP-19).
 /// - `OpenWith(s appID, as uris) -> b` — open URIs with a specific application (LP-19).
 /// - `Reveal(s uri) -> b` — reveal a file in the file manager (LP-19).
+/// - `GetRunningAppIDs() -> s` — the running apps' desktop-file ids as JSON (LP-19b).
 /// - `AddDroppedURIs(s tabID, as uris) -> b` — stub; document mutation lands with LP-23.
 /// - signal `DocumentChanged()` — the launcher file changed on disk.
 /// - signal `VolumesChanged()` — the set of mounted volumes changed (LP-17).
 /// - signal `TrashChanged()` — the Trash contents changed (LP-17).
 /// - signal `RecentsChanged(s tabID)` — a Recents/Fresh tab's contents changed (LP-18).
+/// - signal `RunningAppsChanged()` — the set of running apps changed (a `/proc` poll) (LP-19b).
 ///
 /// `wendylabsinc/dbus` exposes no `RequestName` helper and does not auto-route
 /// inbound calls, so this type does both itself: it registers a message handler that
@@ -35,7 +37,7 @@ public actor TopDrawerService {
     public static let objectPath = "/ch/lkmc/TopDrawer"
     public static let interfaceName = "ch.lkmc.TopDrawer1"
     /// Reported by `Ping`; bump alongside the interface as the daemon grows.
-    public static let version = "0.4.0"
+    public static let version = "0.5.0"
 
     /// How many entries `GetRecents` returns per tab kind.
     private static let recentsLimit = 50
@@ -49,6 +51,7 @@ public actor TopDrawerService {
     private let recentsProvider: RecentsProviding
     private let launcher: LinuxLaunching
     private let recorder: RecentsRecording
+    private let runningApps: RunningAppsScanning
     private let xbelLocation: URL
     private let freshScopes: [URL]
     private let logger: Logger
@@ -56,6 +59,7 @@ public actor TopDrawerService {
     private var lastModified: Date?
     private var lastVolumes: [LinuxVolume] = []
     private var lastTrashCount: Int = 0
+    private var lastRunningApps: [String] = []
     private var lastXbelModified: Date?
     private var watchTask: Task<Void, Never>?
     private var trashWatcher: INotifyWatcher?
@@ -85,6 +89,7 @@ public actor TopDrawerService {
                 recentsProvider: RecentsProviding? = nil,
                 launcher: LinuxLaunching = LinuxLauncher(),
                 recorder: RecentsRecording = MacDringRecentsRecorder(),
+                runningApps: RunningAppsScanning = ProcRunningApps(),
                 xbelLocation: URL = RecentlyUsedFile.location(
                     environment: ProcessInfo.processInfo.environment,
                     home: FileManager.default.homeDirectoryForCurrentUser),
@@ -99,6 +104,7 @@ public actor TopDrawerService {
             ?? LinuxRecentsProvider(xbelURL: xbelLocation, freshScopes: freshScopes)
         self.launcher = launcher
         self.recorder = recorder
+        self.runningApps = runningApps
         self.xbelLocation = xbelLocation
         self.freshScopes = freshScopes
         self.logger = logger
@@ -125,6 +131,7 @@ public actor TopDrawerService {
             DBusObjectServer.Signal(name: "VolumesChanged"),
             DBusObjectServer.Signal(name: "TrashChanged"),
             DBusObjectServer.Signal(name: "RecentsChanged", args: [.init(name: "tabID", type: "s")]),
+            DBusObjectServer.Signal(name: "RunningAppsChanged"),
         ]
         await server.export(DBusObjectServer.ExportedObject(path: Self.objectPath,
                                                             interfaces: [interface]))
@@ -139,6 +146,7 @@ public actor TopDrawerService {
         lastModified = source.modificationDate()
         lastVolumes = volumeSource.volumes()
         lastTrashCount = trashService.trashCount()
+        lastRunningApps = runningApps.runningAppIDs()
         lastXbelModified = xbelModificationDate()
         startTrashWatcher()
         startFreshWatchers()
@@ -169,6 +177,7 @@ public actor TopDrawerService {
         let recentsProvider = self.recentsProvider
         let launcher = self.launcher
         let recorder = self.recorder
+        let runningApps = self.runningApps
         return [
             DBusObjectServer.Method(
                 name: "Ping",
@@ -278,6 +287,12 @@ public actor TopDrawerService {
                 return [.boolean(launcher.reveal(uri: uri))]
             },
             DBusObjectServer.Method(
+                name: "GetRunningAppIDs",
+                outputArgs: [.init(name: "json", type: "s")]
+            ) { _ in
+                [.string(Self.encodeRunningApps(runningApps.runningAppIDs()))]
+            },
+            DBusObjectServer.Method(
                 name: "AddDroppedURIs",
                 inputArgs: [.init(name: "tabID", type: "s"), .init(name: "uris", type: "as")],
                 outputArgs: [.init(name: "ok", type: "b")]
@@ -337,6 +352,9 @@ public actor TopDrawerService {
                 guard let self else { break }
                 await self.checkForDocumentChange()
                 await self.checkForVolumeChange()
+                // Running apps come from systemd `app-*.scope` membership in `/proc`, which
+                // inotify can't watch (like `/proc` mounts generally), so poll and diff.
+                await self.checkForRunningAppsChange()
                 // Poll the Trash count too, as a guaranteed-delivery backstop to the
                 // inotify watch: the watch lowers latency, but a poll can't be defeated
                 // by an inotify edge case (the files/ dir not existing yet, the dir being
@@ -363,6 +381,13 @@ public actor TopDrawerService {
         guard current != lastVolumes else { return }
         lastVolumes = current
         await emitSignal("VolumesChanged")
+    }
+
+    private func checkForRunningAppsChange() async {
+        let current = runningApps.runningAppIDs()
+        guard current != lastRunningApps else { return }
+        lastRunningApps = current
+        await emitSignal("RunningAppsChanged")
     }
 
     // MARK: - Trash watch
@@ -547,6 +572,18 @@ public actor TopDrawerService {
         struct Envelope: Encodable { let recents: [RecentEntry] }
         let entries = hits.map(RecentEntry.init)
         guard let data = try? encoder.encode(Envelope(recents: entries)) else { return #"{"recents":[]}"# }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// `{"appIDs":["…"]}` — the running desktop-file ids as JSON, matching the daemon's
+    /// list-as-JSON convention (`encodeVolumes`/`encodeRecents`). A JSON string rather than a
+    /// native `as` array because the D-Bus library signs an *empty* array as `ay`, not `as`,
+    /// which would break the (common) no-apps-running reply.
+    static func encodeRunningApps(_ ids: [String]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        struct Envelope: Encodable { let appIDs: [String] }
+        guard let data = try? encoder.encode(Envelope(appIDs: ids)) else { return #"{"appIDs":[]}"# }
         return String(decoding: data, as: UTF8.self)
     }
 }
