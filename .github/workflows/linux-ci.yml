@@ -63,6 +63,23 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends dbus dbus-bin
 
+      # LP-20: the topdrawer-shell frontend links GTK4 + gtk4-layer-shell. Noble has
+      # libgtk-4-dev but does NOT package the GTK4 layer-shell binding (only the
+      # GTK3-era libgtk-layer-shell; do not confuse them), so build it from source,
+      # pinned to the upstream tag (v1.3.0 == 1c963c51 — also what Ubuntu 26.04 ships).
+      # Introspection/vapi are off: nothing in this package uses them, and dropping
+      # them trims the gobject-introspection dev packages from the apt set.
+      - name: Install GTK4 and build gtk4-layer-shell (for the shell frontend)
+        run: |
+          apt-get install -y --no-install-recommends \
+            pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
+          git clone --depth 1 --branch v1.3.0 https://github.com/wmww/gtk4-layer-shell /tmp/gtk4-layer-shell
+          meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
+            --prefix=/usr -Dexamples=disabled -Ddocs=disabled -Dtests=disabled \
+            -Dsmoke-tests=disabled -Dintrospection=disabled -Dvapi=disabled
+          ninja -C /tmp/gtk4-layer-shell/build install
+          ldconfig
+
       - name: Build the Linux daemon package
         run: swift build -v --package-path linux --disable-automatic-resolution
 

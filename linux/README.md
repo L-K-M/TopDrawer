@@ -9,8 +9,35 @@ this package is built only on Linux.
 LP-16 built the skeleton; **LP-17** added volumes + Trash; **LP-18** added the Recents
 and Fresh tab contents (`GetRecents` + `RecentsChanged`); **LP-19** implemented launching
 (`Launch` / `OpenWith` / `Reveal`) and records launches into the recents history;
-**LP-19b** adds running-apps detection (`GetRunningAppIDs` + `RunningAppsChanged`).
-Drop-to-tab (`AddDroppedURIs`) remains a follow-up.
+**LP-19b** adds running-apps detection (`GetRunningAppIDs` + `RunningAppsChanged`);
+**LP-20** adds the first frontend, **`topdrawer-shell`** — a GTK4 + layer-shell
+"hello dock". Drop-to-tab (`AddDroppedURIs`) remains a follow-up.
+
+## `topdrawer-shell` — the layer-shell frontend (LP-20)
+
+A minimal dock strip to prove the frontend stack: one undecorated GTK4 window,
+anchored through **gtk4-layer-shell** to a configured screen edge (layer `top`, a
+small margin, exclusive zone 0 — it reserves no screen space), showing the tab
+titles from `GetDocument` and refreshing on `DocumentChanged`. Pointer enter/leave
+and clicks are logged — the interaction probe the later UI LPs build on.
+
+```sh
+# Run it (on a layer-shell compositor: KDE Plasma 6, sway, hyprland, COSMIC…):
+swift run --package-path linux topdrawer-shell -- --edge bottom [--monitor 0]
+```
+
+- **Runtime support**: any compositor implementing the wlr-layer-shell protocol.
+  On **GNOME and X11 it exits with an error by design** (GNOME never adopted
+  layer-shell; that tier is the LP-27 Shell extension).
+- **Build dependencies**: `pkg-config`, `libgtk-4-dev`, and `gtk4-layer-shell`.
+  Ubuntu packages the GTK4 binding only from **25.10** (`libgtk4-layer-shell-dev`);
+  on older releases build it from source — Linux CI does exactly that, pinned to
+  upstream tag `v1.3.0` (see `.github/workflows/linux-ci.yml`). CI only *builds* the
+  shell (no compositor there); the D-Bus client (`TopDrawerShell`) is covered by
+  tests under `dbus-run-session` like the daemon's.
+- The GTK interop lives in the `topdrawer-shell` executable (C API, dexbar-pattern
+  signal trampolines); everything bus-facing is in the GTK-free `TopDrawerShell`
+  library so it stays testable without a display.
 
 ## The interface (`ch.lkmc.TopDrawer1`)
 
