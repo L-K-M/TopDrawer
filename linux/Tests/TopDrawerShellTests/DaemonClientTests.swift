@@ -133,7 +133,7 @@ final class DaemonClientTests: XCTestCase {
 
             // The initial strip proves the watch is fully established (both match
             // rules live) before the daemon disappears.
-            try await Self.waitUntil { !strips.all.isEmpty }
+            try await Self.waitUntil({ !strips.all.isEmpty }, what: "initial strip (watch established)")
 
             // Kill the mock exactly like teardown does; the name release is the
             // NameOwnerChanged (new_owner == "") the client must react to.
@@ -141,7 +141,7 @@ final class DaemonClientTests: XCTestCase {
             await self.serverTask?.value
             self.serverTask = nil
 
-            try await Self.waitUntil { !errors.all.isEmpty }
+            try await Self.waitUntil({ !errors.all.isEmpty }, what: "owner-lost error after daemon left")
             XCTAssertTrue(errors.all.contains { $0.contains("daemon left the bus") },
                           "expected the owner-lost error, got: \(errors.all)")
             observation.cancel()
@@ -170,12 +170,12 @@ final class DaemonClientTests: XCTestCase {
             }
 
             // Initial strip arrives once the mock owns the name…
-            try await Self.waitUntil { strips.all.first == ["Apps", "Files"] }
+            try await Self.waitUntil({ strips.all.first == ["Apps", "Files"] }, what: "initial strip")
 
             // …and rewriting the launcher document drives DocumentChanged → a new strip.
             try Self.document(tabs: [("apps", "Apps"), ("trash", "Trash")])
                 .write(to: self.launcherURL, atomically: true, encoding: .utf8)
-            try await Self.waitUntil { strips.all.last == ["Apps", "Trash"] }
+            try await Self.waitUntil({ strips.all.last == ["Apps", "Trash"] }, what: "strip after DocumentChanged")
 
             observation.cancel()
         }
