@@ -47,6 +47,11 @@ final class LinuxRunningAppsTests: XCTestCase {
         XCTAssertEqual(
             RunningAppScope.desktopID(fromScopeName: "app-snap-snap\\x2dstore_snap\\x2dstore-321.scope"),
             "snap-store_snap-store")
+        // The real-world form: snap desktop entries are launched by GNOME Shell, so the
+        // launcher segment is `gnome` — the composite is what Ubuntu snaps actually produce.
+        XCTAssertEqual(
+            RunningAppScope.desktopID(fromScopeName: "app-gnome-snap\\x2dstore_snap\\x2dstore-321.scope"),
+            "snap-store_snap-store")
     }
 
     func testRejectsNonAppScopes() {
