@@ -174,7 +174,7 @@ let package = Package(
                 // The inotify(7) syscalls for INotifyWatcher (LP-17). Linux-only, so the
                 // macOS build never sees it — and MacDring.xcodeproj never resolves this
                 // manifest anyway.
-                .target(name: "CInotify", condition: .when(platforms: [.linux])),
+                .target(name: "MacDringCInotify", condition: .when(platforms: [.linux])),
             ],
             path: "MacDring",
             // macOS-bundle artifacts that have no place in a Linux library build.
@@ -183,8 +183,10 @@ let package = Package(
         ),
         // A header-only system-library shim exposing the inotify(7) syscalls (LP-17),
         // mirroring PictKit's CInotify. The IN_* masks are hard-coded in INotifyWatcher,
-        // not imported from here (see CInotify/shim.h).
-        .systemLibrary(name: "CInotify", path: "CInotify"),
+        // not imported from here (see CInotify/shim.h). Named MacDringCInotify (not the
+        // dir's `CInotify`) so it can't collide with PictKit's identically-named module
+        // once both packages land in the daemon's graph.
+        .systemLibrary(name: "MacDringCInotify", path: "CInotify"),
         .testTarget(
             name: "MacDringTests",
             dependencies: ["MacDring"],

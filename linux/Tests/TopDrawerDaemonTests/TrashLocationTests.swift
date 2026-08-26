@@ -37,6 +37,13 @@ final class TrashLocationTests: XCTestCase {
         XCTAssertEqual(dir.path, "/home/alice/.local/share/Trash")
     }
 
+    func testDirectoryIgnoresRelativeXDGDataHome() {
+        // The XDG spec says a relative $XDG_DATA_HOME must be treated as unset.
+        let dir = TrashLocation.directory(
+            environment: ["XDG_DATA_HOME": "rel/data"], home: URL(fileURLWithPath: "/home/alice"))
+        XCTAssertEqual(dir.path, "/home/alice/.local/share/Trash")
+    }
+
     func testCountIsZeroWhenTrashIsAbsent() {
         XCTAssertEqual(TrashLocation.count(trashDirectory: tempDir), 0)
     }

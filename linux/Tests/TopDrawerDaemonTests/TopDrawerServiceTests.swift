@@ -149,14 +149,18 @@ final class TopDrawerServiceTests: XCTestCase {
     func testEjectResolvesTheVolumeIDAndInvokesTheEjector() async throws {
         let volume = LinuxVolume(id: "/media/alice/USB", name: "USB", path: "/media/alice/USB",
                                  kind: .disk, device: "/dev/sdb1", ejectable: true)
-        startServer(volumeSource: FakeVolumeSource([volume]), ejector: { $0.device == "/dev/sdb1" })
+        let spy = EjectSpy()
+        startServer(volumeSource: FakeVolumeSource([volume]), ejector: spy.eject)
         try await withClient { client in
             _ = try await self.callReady(client, method: "Ping")
             let unknown = try await self.call(client, method: "Eject", body: [.string("/no/such")])
             XCTAssertEqual(unknown.body.first?.boolean, false, "an unknown id ejects nothing")
+            XCTAssertTrue(spy.recordedDevices.isEmpty, "an unknown id must not reach the ejector")
 
             let known = try await self.call(client, method: "Eject", body: [.string("/media/alice/USB")])
             XCTAssertEqual(known.body.first?.boolean, true, "a known id is handed to the ejector")
+            XCTAssertEqual(spy.recordedDevices, ["/dev/sdb1"],
+                           "Eject must invoke the ejector with the resolved volume")
         }
     }
 
@@ -164,7 +168,9 @@ final class TopDrawerServiceTests: XCTestCase {
         let trashDir = tempDir.appendingPathComponent("trash", isDirectory: true)
         let files = trashDir.appendingPathComponent("files", isDirectory: true)
         try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
-        startServer(trashDirectory: trashDir)
+        // The signal gates on the served count, so point the service at the same temp
+        // Trash the watch fires on — a file there then changes both together.
+        startServer(trashService: DirCountingTrashService(directory: trashDir), trashDirectory: trashDir)
         try await withClient { client in
             _ = try await self.callReady(client, method: "Ping")   // wait until exported
             _ = try await client.send(
@@ -183,6 +189,34 @@ final class TopDrawerServiceTests: XCTestCase {
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
             XCTAssertNotNil(received, "TrashChanged should fire after the Trash changes")
             XCTAssertEqual(received?.member, "TrashChanged")
+        }
+    }
+
+    /// Fresh profile: the Trash `files/` dir doesn't exist when the daemon starts.
+    /// inotify can't attach to it yet, so the poll backstop must still deliver
+    /// `TrashChanged` once the directory and an item appear.
+    func testTrashChangedFiresOnAFreshProfileWhenFilesDirAppearsLater() async throws {
+        let trashDir = tempDir.appendingPathComponent("fresh-trash", isDirectory: true)
+        let files = trashDir.appendingPathComponent("files", isDirectory: true)
+        // Note: files/ (and trashDir) deliberately do NOT exist yet.
+        startServer(trashService: DirCountingTrashService(directory: trashDir), trashDirectory: trashDir)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='TrashChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "TrashChanged")
+
+            try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+            try "gone".write(to: files.appendingPathComponent("deleted.txt"),
+                             atomically: true, encoding: .utf8)
+
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertNotNil(received, "the poll backstop should deliver TrashChanged on a fresh profile")
         }
     }
 
@@ -211,7 +245,7 @@ final class TopDrawerServiceTests: XCTestCase {
     /// except `trashDirectory`, which defaults to a temp subdirectory so a test never
     /// watches (or counts) the developer's real Trash.
     private func startServer(volumeSource: VolumeSnapshotProviding = ProcMounts(),
-                             trashService: TrashServicing = GioTrashService(),
+                             trashService: TrashServicing = FakeTrashService(count: 0),
                              trashDirectory: URL? = nil,
                              ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject) {
         let source = LauncherDocumentSource(url: launcherURL)
@@ -292,5 +326,34 @@ private struct FakeTrashService: TrashServicing {
     func trashIsEmpty() -> Bool { count == 0 }
     func trash(_ urls: [URL]) -> Bool { true }
     func emptyTrash() -> Bool { true }
+}
+
+/// Counts a specific temp Trash directory — lets the `TrashChanged` test drive the
+/// served count (which the signal gates on) by writing into that directory.
+private struct DirCountingTrashService: TrashServicing {
+    let directory: URL
+    func trashCount() -> Int { TrashLocation.count(trashDirectory: directory) }
+    func trashIsEmpty() -> Bool { trashCount() == 0 }
+    func trash(_ urls: [URL]) -> Bool { true }
+    func emptyTrash() -> Bool { true }
+}
+
+/// Records every volume handed to the ejector, so a test can prove the call happened
+/// (not just that a lookup succeeded). Thread-safe: the D-Bus handler runs the ejector
+/// off the test's thread.
+final class EjectSpy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var devices: [String] = []
+
+    var recordedDevices: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return devices
+    }
+
+    func eject(_ volume: LinuxVolume) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        devices.append(volume.device)
+        return volume.device == "/dev/sdb1"
+    }
 }
 #endif

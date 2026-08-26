@@ -157,8 +157,11 @@ public enum VolumeClassifier {
         // plain synced folder, also not a mount) is picked up by the info.json probe.
         if mount.fsType == "fuse.rclone"
             || mount.device.hasPrefix("google-drive:") || mount.device.hasPrefix("onedrive:") {
+            // A cloud *mount* is a real FUSE mount that can be disconnected, so it's
+            // ejectable (Dropbox *folders*, added from the info.json probe below, are
+            // not — they're plain synced directories, ejectable: false there).
             return LinuxVolume(id: path, name: name, path: path, kind: .cloud,
-                               device: mount.device, ejectable: false)
+                               device: mount.device, ejectable: true)
         }
         // Disk: a real block device that is removable, or auto-mounted under the
         // /media/$USER (or /run/media/$USER) convention. Mirrors DisksLister.isEjectable
@@ -215,8 +218,14 @@ public struct ProcMounts: VolumeSnapshotProviding {
     /// devices delimit the partition with `p` (`nvme0n1p2`); `sd`/`vd`/`hd` append the
     /// number directly (`sda1`).
     static func baseBlockName(_ name: String) -> String {
+        // device-mapper (LUKS/LVM: `dm-0`) has no partition suffix and no /sys/block
+        // partition child — the whole name is the block name.
+        if name.hasPrefix("dm-") { return name }
         if name.hasPrefix("nvme") || name.hasPrefix("mmcblk") || name.hasPrefix("loop") {
-            if let range = name.range(of: "p[0-9]+$", options: .regularExpression) {
+            // The partition `p` always follows a digit (`nvme0n1p2`, `mmcblk0p1`); a
+            // whole disk like `loop0` ends in `…p0`-free digits and must be left intact
+            // (a bare `p[0-9]+$` would strip `loop0` to `loo`).
+            if let range = name.range(of: "(?<=[0-9])p[0-9]+$", options: .regularExpression) {
                 return String(name[..<range.lowerBound])
             }
             return name
@@ -275,7 +284,14 @@ public enum VolumeEjector {
             if LinuxProcess.succeeds("udisksctl", ["power-off", "-b", volume.device]) { return true }
             return LinuxProcess.succeeds("gio", ["mount", "-e", volume.path])
         case .network, .cloud:
-            return LinuxProcess.succeeds("gio", ["mount", "-u", volume.path])
+            // `gio mount -u` only manages GIO GMounts (gvfs/udisks-backed). A share the
+            // user mounted from the CLI — sshfs, rclone — usually isn't a GMount, so gio
+            // errors out; fall back to fusermount (the tool for user FUSE mounts), then a
+            // plain umount.
+            if LinuxProcess.succeeds("gio", ["mount", "-u", volume.path]) { return true }
+            if LinuxProcess.succeeds("fusermount", ["-u", volume.path]) { return true }
+            if LinuxProcess.succeeds("fusermount3", ["-u", volume.path]) { return true }
+            return LinuxProcess.succeeds("umount", [volume.path])
         }
     }
 }

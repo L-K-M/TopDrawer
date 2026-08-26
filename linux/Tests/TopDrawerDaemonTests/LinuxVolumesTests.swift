@@ -64,7 +64,8 @@ final class LinuxVolumesTests: XCTestCase {
         XCTAssertEqual(byPath["/home/alice/nas"]?.kind, .network)
         XCTAssertEqual(byPath["/home/alice/remote"]?.kind, .network)  // fuse.sshfs
         XCTAssertEqual(byPath["/home/alice/cloud"]?.kind, .cloud)     // fuse.rclone
-        XCTAssertEqual(byPath["/home/alice/cloud"]?.ejectable, false)
+        XCTAssertEqual(byPath["/home/alice/cloud"]?.ejectable, true,  // a cloud mount is disconnectable
+                       "an rclone cloud mount is a real mount and can be disconnected")
     }
 
     /// The /media/$USER convention alone marks the stick as a removable disk, even when
@@ -102,6 +103,28 @@ final class LinuxVolumesTests: XCTestCase {
         XCTAssertEqual(volumes.map(\.name), volumes.map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
     }
 
+    /// The /media convention is user-scoped: another user's media dir isn't offered as
+    /// ejectable (that's exactly what the `user:` parameter distinguishes).
+    func testClassifyIgnoresOtherUsersMediaDir() {
+        let line = "60 30 8:18 / /media/bob/Stick rw shared:40 - vfat /dev/sdd1 rw"
+        let volumes = VolumeClassifier.classify(
+            mounts: MountInfoParser.parse(line), user: "alice",
+            isRemovable: { _ in false })
+        XCTAssertTrue(volumes.isEmpty, "another user's /media mount is not this user's to eject")
+    }
+
+    /// A cloud *mount* (rclone) is disconnectable, so it's ejectable; a Dropbox *folder*
+    /// (not a mount) is not.
+    func testCloudMountIsEjectableButDropboxFolderIsNot() {
+        let line = "43 30 0:52 / /home/alice/cloud rw shared:23 - fuse.rclone gdrive: rw"
+        let volumes = VolumeClassifier.classify(
+            mounts: MountInfoParser.parse(line), user: "alice",
+            isRemovable: { _ in false },
+            dropboxRoots: ["/home/alice/Dropbox"])
+        XCTAssertEqual(volumes.first { $0.path == "/home/alice/cloud" }?.ejectable, true)
+        XCTAssertEqual(volumes.first { $0.path == "/home/alice/Dropbox" }?.ejectable, false)
+    }
+
     func testBaseBlockNameStripsPartitionSuffix() {
         // Only reachable from Linux, where ProcMounts is compiled.
         #if os(Linux)
@@ -110,6 +133,12 @@ final class LinuxVolumesTests: XCTestCase {
         XCTAssertEqual(ProcMounts.baseBlockName("nvme0n1p2"), "nvme0n1")
         XCTAssertEqual(ProcMounts.baseBlockName("mmcblk0p1"), "mmcblk0")
         XCTAssertEqual(ProcMounts.baseBlockName("vdb"), "vdb")
+        // A whole-disk loop device must survive intact (the trailing `p0`-style strip
+        // must not fire): loop0 → loop0, but a partition loop0p1 → loop0.
+        XCTAssertEqual(ProcMounts.baseBlockName("loop0"), "loop0")
+        XCTAssertEqual(ProcMounts.baseBlockName("loop0p1"), "loop0")
+        // device-mapper (LUKS/LVM) has no partition child.
+        XCTAssertEqual(ProcMounts.baseBlockName("dm-0"), "dm-0")
         #endif
     }
 }

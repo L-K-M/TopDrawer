@@ -10,7 +10,10 @@ public enum TrashLocation {
     public static func directory(environment: [String: String],
                                  home: URL) -> URL {
         let base: URL
-        if let xdg = environment["XDG_DATA_HOME"], !xdg.isEmpty {
+        // The XDG base-dir spec requires $XDG_DATA_HOME to be an absolute path; a
+        // relative (or empty) value must be treated as unset, else it would resolve
+        // against the daemon's CWD.
+        if let xdg = environment["XDG_DATA_HOME"], xdg.hasPrefix("/") {
             base = URL(fileURLWithPath: xdg, isDirectory: true)
         } else {
             base = home.appendingPathComponent(".local/share", isDirectory: true)

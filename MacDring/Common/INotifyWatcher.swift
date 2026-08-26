@@ -1,7 +1,7 @@
 #if os(Linux)
 import Foundation
 import Glibc
-import CInotify
+import MacDringCInotify
 
 /// Watches a single directory and calls `onChange` (coalesced, on the main queue)
 /// whenever its contents change — the Linux stand-in for the FSEvents/`DispatchSource`

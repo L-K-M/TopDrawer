@@ -8,7 +8,7 @@ import Foundation
 /// can implement `VolumeListing` from `/proc` and read these fields. All members are
 /// standard-library types, so widening the access level pulls no other type public and
 /// changes no macOS behavior.
-public struct MountedVolume: Equatable {
+public struct MountedVolume: Equatable, Sendable {
     public let url: URL
     public let name: String
     public let isEjectable: Bool

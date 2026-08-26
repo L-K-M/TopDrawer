@@ -9,8 +9,14 @@ enum LinuxProcess {
     /// Runs `tool args…` to completion. Returns the exit status (or -1 if it couldn't be
     /// launched) and captured stdout/stderr. Never throws — a missing tool is a failed
     /// status, which the callers treat as "couldn't do it".
+    ///
+    /// A `timeout` bounds the wait: `udisksctl` / `gio` can stall indefinitely (an
+    /// unanswered polkit prompt, a wedged FUSE daemon), and every caller runs
+    /// synchronously on a D-Bus handler, so an unbounded wait could freeze the daemon.
+    /// A timed-out tool is terminated and reported as a non-zero (failed) status.
     @discardableResult
-    static func run(_ tool: String, _ args: [String]) -> (status: Int32, output: String) {
+    static func run(_ tool: String, _ args: [String],
+                    timeout: TimeInterval = 15) -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [tool] + args
@@ -22,9 +28,14 @@ enum LinuxProcess {
         } catch {
             return (-1, "")
         }
+        // Kill a hung tool instead of blocking the handler forever. terminate() (SIGTERM)
+        // makes waitUntilExit return with a signalled (non-zero) status → succeeds() false.
+        let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog)
         // Read before waiting so a tool that fills the pipe buffer can't deadlock.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        watchdog.cancel()
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 

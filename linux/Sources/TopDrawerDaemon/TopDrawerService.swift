@@ -100,7 +100,7 @@ public actor TopDrawerService {
 
         lastModified = source.modificationDate()
         lastVolumes = volumeSource.volumes()
-        lastTrashCount = trashCount()
+        lastTrashCount = trashService.trashCount()
         startTrashWatcher()
         startWatching(interval: watchInterval)
     }
@@ -160,7 +160,12 @@ public actor TopDrawerService {
                 name: "GetTrashState",
                 outputArgs: [.init(name: "empty", type: "b"), .init(name: "count", type: "u")]
             ) { _ in
-                [.boolean(trashService.trashIsEmpty()), .uint32(UInt32(trashService.trashCount()))]
+                // One observation, so `empty` and `count` can't contradict each other
+                // (a file trashed between two calls). `clamping:` rather than a trapping
+                // conversion — a negative error sentinel or an absurd count must not take
+                // the daemon down.
+                let count = trashService.trashCount()
+                return [.boolean(count == 0), .uint32(UInt32(clamping: count))]
             },
             DBusObjectServer.Method(
                 name: "Launch",
@@ -228,6 +233,12 @@ public actor TopDrawerService {
                 guard let self else { break }
                 await self.checkForDocumentChange()
                 await self.checkForVolumeChange()
+                // Poll the Trash count too, as a guaranteed-delivery backstop to the
+                // inotify watch: the watch lowers latency, but a poll can't be defeated
+                // by an inotify edge case (the files/ dir not existing yet, the dir being
+                // deleted and recreated). The count gate keeps it idempotent, so the two
+                // sources never double-fire.
+                await self.checkForTrashChange()
             }
         }
     }
@@ -253,6 +264,7 @@ public actor TopDrawerService {
     /// on first use) fires `TrashChanged` when the count actually moves. Gating on the
     /// count avoids re-emitting for metadata-only churn.
     private func startTrashWatcher() {
+        trashWatcher?.stop()   // a second start() (reconnect, tests) must not leak the fd
         let watched = trashDirectory.appendingPathComponent("files", isDirectory: true)
         let watcher = INotifyWatcher(directory: watched) { [weak self] in
             Task { await self?.checkForTrashChange() }
@@ -262,14 +274,14 @@ public actor TopDrawerService {
     }
 
     private func checkForTrashChange() async {
-        let current = trashCount()
+        // Gate on the same count `GetTrashState` serves (`trashService`), so the signal
+        // can never diverge from the reported state. In production the injected
+        // `trashDirectory` the watch fires on and the service's own directory are the
+        // same freedesktop Trash, so a file event maps to a count change here.
+        let current = trashService.trashCount()
         guard current != lastTrashCount else { return }
         lastTrashCount = current
         await emitSignal("TrashChanged")
-    }
-
-    private func trashCount() -> Int {
-        TrashLocation.count(trashDirectory: trashDirectory)
     }
 
     // MARK: - Signals
