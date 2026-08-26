@@ -19,7 +19,7 @@ still stubs; LP-19 fills them in.
 | `GetVolumes` | `() → s` | The classified mounted volumes as JSON: `{"volumes":[{"id","name","path","kind","device","ejectable"}]}`, `kind` ∈ `disk`/`network`/`cloud` (LP-17). |
 | `Eject` | `(s volumeID) → b` | Unmounts/powers off the volume with that `id` (its mount point); `false` if unknown or it failed (LP-17). |
 | `GetTrashState` | `() → b u` | Whether the Trash is empty, and its item count (LP-17). |
-| `GetRecents` | `(s tabID) → s` | A Recents/Fresh tab's live contents as JSON: `{"recents":[{"path","name","date"}]}`, `date` = Unix epoch seconds; `{}`/empty for any other tab (LP-18). |
+| `GetRecents` | `(s tabID) → s` | A Recents/Fresh tab's live contents as JSON: `{"recents":[{"path","name","date"}]}`, `date` = Unix epoch seconds; `{"recents":[]}` (an empty array — always valid JSON, never `{}` or a bare empty string) for any other tab (LP-18). |
 | `Launch` | `(s itemID) → b` | Stub — returns `false` (real launching lands in LP-19). |
 | `AddDroppedURIs` | `(s tabID, as uris) → b` | Stub — returns `false` (drops land in LP-19). |
 | `DocumentChanged` | signal `()` | Emitted when the launcher file changes on disk (a modification-time watch). |

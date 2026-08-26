@@ -25,7 +25,7 @@ public enum FreshScanner {
     /// How far back a file still counts as "fresh". Derived from `RecentQueryMode`'s
     /// `dateAdded` window — the single source of truth — so the direct scan and the
     /// Spotlight query can't drift on the cutoff.
-    public static let window: TimeInterval = RecentQueryMode.dateAdded.window
+    static let window: TimeInterval = RecentQueryMode.dateAdded.window
 
     /// Newly-arrived files found by reading `scopes` directly, most-recently-added
     /// first and capped to `limit`. `now`, `fileManager`, and `dateAdded` are injectable
