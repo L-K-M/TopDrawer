@@ -57,12 +57,12 @@ final class TopDrawerServiceTests: XCTestCase {
             XCTAssertEqual(doc.body.first?.string, self.launcherJSON, "GetDocument serves the file verbatim")
 
             let launch = try await self.call(client, method: "Launch", body: [.string("some-item")])
-            XCTAssertEqual(launch.body.first?.boolean, false, "Launch is a skeleton stub (LP-19)")
+            XCTAssertEqual(launch.body.first?.boolean, false, "Launch of an item id absent from the document returns false")
 
             let dropped = try await self.call(
                 client, method: "AddDroppedURIs",
                 body: [.string("tab"), .array([.string("file:///tmp/x")])])
-            XCTAssertEqual(dropped.body.first?.boolean, false, "AddDroppedURIs is a skeleton stub (LP-17)")
+            XCTAssertEqual(dropped.body.first?.boolean, false, "AddDroppedURIs is still a stub (document mutation → LP-23)")
         }
     }
 
@@ -80,7 +80,7 @@ final class TopDrawerServiceTests: XCTestCase {
             let xml = try XCTUnwrap(reply?.body.first?.string)
             XCTAssertTrue(xml.contains(#"interface name="ch.lkmc.TopDrawer1""#), xml)
             for method in ["Ping", "GetDocument", "GetVolumes", "Eject", "GetTrashState",
-                           "GetRecents", "Launch", "AddDroppedURIs"] {
+                           "GetRecents", "Launch", "OpenWith", "Reveal", "AddDroppedURIs"] {
                 XCTAssertTrue(xml.contains(#"method name="\#(method)""#), "missing \(method) in \(xml)")
             }
             for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged", "RecentsChanged"] {
@@ -280,11 +280,177 @@ final class TopDrawerServiceTests: XCTestCase {
             let itemsList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("items")]))
             XCTAssertTrue(itemsList.isEmpty, "an items tab has no recents")
             let macList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("mac")]))
-            XCTAssertTrue(macList.isEmpty, "a macDring-only recents tab is empty until LP-19 (system source excluded)")
+            XCTAssertTrue(macList.isEmpty, "a macDring recents tab is empty when nothing has been launched (empty recorder)")
             // A tab id absent from the document hits the lookup-miss path (not a kind
             // mismatch); it too returns {"recents":[]}, matching the README's "any other tab".
             let unknownList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("does-not-exist")]))
             XCTAssertTrue(unknownList.isEmpty, #"an unknown tab id also returns {"recents":[]}"#)
+        }
+    }
+
+    // MARK: - LP-19: launching + recents recording
+
+    private static let oneItemDoc = #"{"version":1,"tabs":[{"id":"t","kind":"items","items":[{"id":"i1","kind":"file","displayName":"Doc","url":"file:///home/a/doc.txt"}]}]}"#
+
+    func testLaunchResolvesTheItemLaunchesAndRecords() async throws {
+        try writeDocument(Self.oneItemDoc)
+        let launcher = FakeLauncher(launchResult: true)
+        let recorder = FakeRecorder()
+        startServer(launcher: launcher, recorder: recorder)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "Launch", body: [.string("i1")])
+            XCTAssertEqual(reply.body.first?.boolean, true)
+            XCTAssertEqual(launcher.launched.map(\.id), ["i1"])
+            // A successful launch records into recents (the macDring source).
+            XCTAssertEqual(recorder.recorded.map { $0.url.path }, ["/home/a/doc.txt"])
+            XCTAssertEqual(recorder.recorded.first?.kind, "file")
+            XCTAssertEqual(recorder.recorded.first?.name, "Doc")
+            // The service stamps a real launch timestamp (not a placeholder).
+            let recordedDate = try XCTUnwrap(recorder.recorded.first?.date)
+            XCTAssertLessThan(abs(recordedDate.timeIntervalSinceNow), 60)
+        }
+    }
+
+    func testLaunchOfUnknownItemDoesNotLaunchOrRecord() async throws {
+        try writeDocument(#"{"version":1,"tabs":[{"id":"t","kind":"items","items":[]}]}"#)
+        let launcher = FakeLauncher()
+        let recorder = FakeRecorder()
+        startServer(launcher: launcher, recorder: recorder)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "Launch", body: [.string("nope")])
+            XCTAssertEqual(reply.body.first?.boolean, false)
+            XCTAssertTrue(launcher.launched.isEmpty)
+            XCTAssertTrue(recorder.recorded.isEmpty)
+        }
+    }
+
+    func testFailedLaunchIsNotRecorded() async throws {
+        try writeDocument(Self.oneItemDoc)
+        let launcher = FakeLauncher(launchResult: false)
+        let recorder = FakeRecorder()
+        startServer(launcher: launcher, recorder: recorder)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "Launch", body: [.string("i1")])
+            XCTAssertEqual(reply.body.first?.boolean, false)
+            XCTAssertEqual(launcher.launched.map(\.id), ["i1"])   // attempted…
+            XCTAssertTrue(recorder.recorded.isEmpty)              // …but a failure isn't recorded
+        }
+    }
+
+    func testOpenWithDispatchesToTheLauncher() async throws {
+        let launcher = FakeLauncher()
+        startServer(launcher: launcher)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "OpenWith",
+                body: [.string("org.gnome.gedit"), .array([.string("file:///a"), .string("file:///b")])])
+            XCTAssertEqual(reply.body.first?.boolean, true)
+            XCTAssertEqual(launcher.openWithCalls.first?.id, "org.gnome.gedit")
+            XCTAssertEqual(launcher.openWithCalls.first?.uris, ["file:///a", "file:///b"])
+        }
+    }
+
+    func testOpenWithReturnsTheLauncherResultOnFailure() async throws {
+        startServer(launcher: FakeLauncher(openWithResult: false))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "OpenWith",
+                body: [.string("no.such.app"), .array([.string("file:///a")])])
+            XCTAssertEqual(reply.body.first?.boolean, false)
+        }
+    }
+
+    func testRevealDispatchesToTheLauncher() async throws {
+        let launcher = FakeLauncher()
+        startServer(launcher: launcher)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "Reveal", body: [.string("file:///home/a/x.pdf")])
+            XCTAssertEqual(reply.body.first?.boolean, true)
+            XCTAssertEqual(launcher.revealed, ["file:///home/a/x.pdf"])
+        }
+    }
+
+    func testRevealReturnsTheLauncherResultOnFailure() async throws {
+        startServer(launcher: FakeLauncher(revealResult: false))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "Reveal", body: [.string("file:///home/a/x.pdf")])
+            XCTAssertEqual(reply.body.first?.boolean, false)
+        }
+    }
+
+    func testLaunchEmitsRecentsChangedForMacDringTabs() async throws {
+        // An items tab holds the launchable item; a macDring recents tab must be notified.
+        try writeDocument(#"""
+        {"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"macDring"},{"id":"t","kind":"items","items":[{"id":"i1","kind":"file","displayName":"Doc","url":"file:///home/a/doc.txt"}]}]}
+        """#)
+        startServer(launcher: FakeLauncher(launchResult: true), recorder: FakeRecorder())
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RecentsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RecentsChanged")
+            _ = try await self.call(client, method: "Launch", body: [.string("i1")])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.body.first?.string, "rec",
+                           "a recorded launch notifies the macDring recents tab")
+        }
+    }
+
+    func testGetRecentsServesTheMacDringLaunchHistory() async throws {
+        // A macDring-source recents tab (the default) now serves the recorded launch history.
+        try writeDocument(#"{"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"macDring"}]}"#)
+        let hit = RecentFileHit(url: URL(fileURLWithPath: "/home/a/opened.txt"),
+                                name: "opened.txt", date: Date(timeIntervalSince1970: 3_000_000))
+        startServer(recorder: FakeRecorder(canned: [hit]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
+            XCTAssertEqual(list.first?["name"] as? String, "opened.txt")
+            XCTAssertEqual(list.first?["path"] as? String, "/home/a/opened.txt")
+        }
+    }
+
+    func testGetRecentsBothSourceMergesSystemAndMacDring() async throws {
+        try writeDocument(#"{"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"both"}]}"#)
+        let sys = RecentFileHit(url: URL(fileURLWithPath: "/sys.txt"), name: "sys.txt",
+                                date: Date(timeIntervalSince1970: 1_000))
+        let mac = RecentFileHit(url: URL(fileURLWithPath: "/mac.txt"), name: "mac.txt",
+                                date: Date(timeIntervalSince1970: 2_000))
+        startServer(recentsProvider: FakeRecentsProvider(system: [sys]),
+                    recorder: FakeRecorder(canned: [mac]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
+            // Both sources fold in, newest (mac, t=2000) first.
+            XCTAssertEqual(list.compactMap { $0["name"] as? String }, ["mac.txt", "sys.txt"])
+        }
+    }
+
+    func testGetRecentsBothSourceDedupesTheSamePath() async throws {
+        // The common case: a launched file (macDring) that's also in the system xbel.
+        try writeDocument(#"{"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"both"}]}"#)
+        let sys = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "same.txt",
+                                date: Date(timeIntervalSince1970: 1_000))
+        let mac = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "mac-same.txt",
+                                date: Date(timeIntervalSince1970: 2_000))
+        startServer(recentsProvider: FakeRecentsProvider(system: [sys]),
+                    recorder: FakeRecorder(canned: [mac]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
+            XCTAssertEqual(list.count, 1, "a file present in both sources appears once")
+            XCTAssertEqual(list.first?["name"] as? String, "mac-same.txt",
+                           "the newer macDring record wins the URL dedupe (newest-first)")
         }
     }
 
@@ -357,6 +523,8 @@ final class TopDrawerServiceTests: XCTestCase {
                              trashDirectory: URL? = nil,
                              ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject,
                              recentsProvider: RecentsProviding = FakeRecentsProvider(),
+                             launcher: LinuxLaunching = FakeLauncher(),
+                             recorder: RecentsRecording = FakeRecorder(),
                              xbelLocation: URL? = nil,
                              freshScopes: [URL]? = nil) {
         let source = LauncherDocumentSource(url: launcherURL)
@@ -375,7 +543,8 @@ final class TopDrawerServiceTests: XCTestCase {
                     let service = TopDrawerService(
                         source: source, volumeSource: volumeSource, trashService: trashService,
                         trashDirectory: trashDir, ejector: ejector,
-                        recentsProvider: recentsProvider, xbelLocation: xbel, freshScopes: scopes)
+                        recentsProvider: recentsProvider, launcher: launcher, recorder: recorder,
+                        xbelLocation: xbel, freshScopes: scopes)
                     try await service.run(on: connection, watchInterval: .milliseconds(200))
                     // Keep the export alive for the duration of the test; tearDown cancels us.
                     try await Task.sleep(for: .seconds(30))
@@ -465,6 +634,57 @@ private struct FakeRecentsProvider: RecentsProviding {
     var freshHits: [RecentFileHit] = []
     func systemRecents(limit: Int) -> [RecentFileHit] { Array(system.prefix(limit)) }
     func fresh(limit: Int) -> [RecentFileHit] { Array(freshHits.prefix(limit)) }
+}
+
+/// Records what `Launch`/`OpenWith`/`Reveal` dispatch, so the D-Bus wiring is testable
+/// without shelling to `gio`. Thread-safe: the handler runs off the test's thread.
+final class FakeLauncher: LinuxLaunching, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _launched: [LauncherItem] = []
+    private var _openWith: [(id: String, uris: [String])] = []
+    private var _revealed: [String] = []
+    private let launchResult: Bool
+    private let openWithResult: Bool
+    private let revealResult: Bool
+
+    init(launchResult: Bool = true, openWithResult: Bool = true, revealResult: Bool = true) {
+        self.launchResult = launchResult
+        self.openWithResult = openWithResult
+        self.revealResult = revealResult
+    }
+
+    var launched: [LauncherItem] { lock.lock(); defer { lock.unlock() }; return _launched }
+    var openWithCalls: [(id: String, uris: [String])] { lock.lock(); defer { lock.unlock() }; return _openWith }
+    var revealed: [String] { lock.lock(); defer { lock.unlock() }; return _revealed }
+
+    func launch(_ item: LauncherItem) -> Bool {
+        lock.lock(); _launched.append(item); lock.unlock(); return launchResult
+    }
+    func openWith(desktopID: String, uris: [String]) -> Bool {
+        lock.lock(); _openWith.append((desktopID, uris)); lock.unlock(); return openWithResult
+    }
+    func reveal(uri: String) -> Bool {
+        lock.lock(); _revealed.append(uri); lock.unlock(); return revealResult
+    }
+}
+
+/// Collects recorded launches and serves canned history, so recents recording/serving is
+/// testable without touching the global `RecentsStore`/`UserDefaults`.
+final class FakeRecorder: RecentsRecording, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _recorded: [(url: URL, kind: String, name: String, date: Date)] = []
+    private let canned: [RecentFileHit]
+
+    init(canned: [RecentFileHit] = []) { self.canned = canned }
+
+    var recorded: [(url: URL, kind: String, name: String, date: Date)] {
+        lock.lock(); defer { lock.unlock() }; return _recorded
+    }
+
+    func record(url: URL, kind: String, name: String, date: Date) async {
+        lock.lock(); _recorded.append((url, kind, name, date)); lock.unlock()
+    }
+    func recents(limit: Int) async -> [RecentFileHit] { Array(canned.prefix(limit)) }
 }
 
 /// Records every volume handed to the ejector, so a test can prove the call happened

@@ -14,9 +14,12 @@ import MacDring
 /// - `GetVolumes() -> s` — the classified mounted volumes as JSON (LP-17).
 /// - `Eject(s volumeID) -> b` — unmount/power-off a volume by its id (LP-17).
 /// - `GetTrashState() -> b u` — whether the Trash is empty, and its item count (LP-17).
-/// - `GetRecents(s tabID) -> s` — a Recents/Fresh tab's live contents as JSON (LP-18).
-/// - `Launch(s itemID) -> b` — stub; returns `false` (real launching is LP-19).
-/// - `AddDroppedURIs(s tabID, as uris) -> b` — stub; returns `false` (drops are LP-19).
+/// - `GetRecents(s tabID) -> s` — a Recents/Fresh tab's live contents as JSON (LP-18);
+///   folds in Top Drawer's own launch history for a macDring/both source (LP-19).
+/// - `Launch(s itemID) -> b` — open an item and record it into recents (LP-19).
+/// - `OpenWith(s appID, as uris) -> b` — open URIs with a specific application (LP-19).
+/// - `Reveal(s uri) -> b` — reveal a file in the file manager (LP-19).
+/// - `AddDroppedURIs(s tabID, as uris) -> b` — stub; document mutation lands with LP-23.
 /// - signal `DocumentChanged()` — the launcher file changed on disk.
 /// - signal `VolumesChanged()` — the set of mounted volumes changed (LP-17).
 /// - signal `TrashChanged()` — the Trash contents changed (LP-17).
@@ -32,7 +35,7 @@ public actor TopDrawerService {
     public static let objectPath = "/ch/lkmc/TopDrawer"
     public static let interfaceName = "ch.lkmc.TopDrawer1"
     /// Reported by `Ping`; bump alongside the interface as the daemon grows.
-    public static let version = "0.3.0"
+    public static let version = "0.4.0"
 
     /// How many entries `GetRecents` returns per tab kind.
     private static let recentsLimit = 50
@@ -44,6 +47,8 @@ public actor TopDrawerService {
     private let trashDirectory: URL
     private let ejector: @Sendable (LinuxVolume) -> Bool
     private let recentsProvider: RecentsProviding
+    private let launcher: LinuxLaunching
+    private let recorder: RecentsRecording
     private let xbelLocation: URL
     private let freshScopes: [URL]
     private let logger: Logger
@@ -78,6 +83,8 @@ public actor TopDrawerService {
                     home: FileManager.default.homeDirectoryForCurrentUser),
                 ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject,
                 recentsProvider: RecentsProviding? = nil,
+                launcher: LinuxLaunching = LinuxLauncher(),
+                recorder: RecentsRecording = MacDringRecentsRecorder(),
                 xbelLocation: URL = RecentlyUsedFile.location(
                     environment: ProcessInfo.processInfo.environment,
                     home: FileManager.default.homeDirectoryForCurrentUser),
@@ -90,6 +97,8 @@ public actor TopDrawerService {
         self.ejector = ejector
         self.recentsProvider = recentsProvider
             ?? LinuxRecentsProvider(xbelURL: xbelLocation, freshScopes: freshScopes)
+        self.launcher = launcher
+        self.recorder = recorder
         self.xbelLocation = xbelLocation
         self.freshScopes = freshScopes
         self.logger = logger
@@ -158,6 +167,8 @@ public actor TopDrawerService {
         let trashService = self.trashService
         let ejector = self.ejector
         let recentsProvider = self.recentsProvider
+        let launcher = self.launcher
+        let recorder = self.recorder
         return [
             DBusObjectServer.Method(
                 name: "Ping",
@@ -218,18 +229,53 @@ public actor TopDrawerService {
                 outputArgs: [.init(name: "json", type: "s")]
             ) { context in
                 let tabID = context.arguments.first?.string ?? ""
-                let hits = Self.recentsHits(forTab: tabID, document: source.rawJSON(),
-                                            provider: recentsProvider)
+                let json = source.rawJSON()
+                // Only pay the recorder actor hop + store read when the tab actually draws on
+                // macDring history — a fresh/system/unknown tab discards it in `recentsHits`.
+                let needsMacDring = LauncherTabs.find(id: tabID, in: json)?.servesMacDringRecents ?? false
+                let macDringHits = needsMacDring ? await recorder.recents(limit: Self.recentsLimit) : []
+                let hits = Self.recentsHits(forTab: tabID, document: json,
+                                            provider: recentsProvider, macDringHits: macDringHits)
                 return [.string(Self.encodeRecents(hits))]
             },
             DBusObjectServer.Method(
                 name: "Launch",
                 inputArgs: [.init(name: "itemID", type: "s")],
                 outputArgs: [.init(name: "ok", type: "b")]
-            ) { context in
+            ) { [weak self] context in
                 let itemID = context.arguments.first?.string ?? ""
-                logger.info("Launch(\(itemID)): not implemented in the LP-16 skeleton (lands in LP-19)")
-                return [.boolean(false)]
+                guard let item = LauncherItems.find(id: itemID, in: source.rawJSON()) else {
+                    logger.info("Launch(\(itemID)): no such item in the launcher document")
+                    return [.boolean(false)]
+                }
+                let ok = launcher.launch(item)
+                // Record a successful open into Top Drawer's own recents history (the
+                // macDring source of a `.recents` tab), mirroring the macOS app's
+                // launch → RecentsStore.record path, and notify the affected tabs so a live
+                // frontend refreshes (mirrors the Fresh-scope → RecentsChanged wiring).
+                if ok, let url = item.targetURL {
+                    let name = item.name.isEmpty ? url.lastPathComponent : item.name
+                    await recorder.record(url: url, kind: item.kind, name: name, date: Date())
+                    await self?.emitMacDringRecentsChanged()
+                }
+                return [.boolean(ok)]
+            },
+            DBusObjectServer.Method(
+                name: "OpenWith",
+                inputArgs: [.init(name: "appID", type: "s"), .init(name: "uris", type: "as")],
+                outputArgs: [.init(name: "ok", type: "b")]
+            ) { context in
+                let appID = context.arguments.first?.string ?? ""
+                let uris = context.arguments.dropFirst().first?.array?.compactMap(\.string) ?? []
+                return [.boolean(launcher.openWith(desktopID: appID, uris: uris))]
+            },
+            DBusObjectServer.Method(
+                name: "Reveal",
+                inputArgs: [.init(name: "uri", type: "s")],
+                outputArgs: [.init(name: "ok", type: "b")]
+            ) { context in
+                let uri = context.arguments.first?.string ?? ""
+                return [.boolean(launcher.reveal(uri: uri))]
             },
             DBusObjectServer.Method(
                 name: "AddDroppedURIs",
@@ -238,7 +284,10 @@ public actor TopDrawerService {
             ) { context in
                 let tabID = context.arguments.first?.string ?? ""
                 let uris = context.arguments.dropFirst().first?.array?.compactMap(\.string) ?? []
-                logger.info("AddDroppedURIs(\(tabID), \(uris.count) uris): not implemented yet (drops land in LP-19)")
+                // Still a stub: appending dropped files as new items mutates the launcher
+                // document, which the daemon does not own writing yet — that lands with the
+                // frontend's drag & drop (LP-23).
+                logger.info("AddDroppedURIs(\(tabID), \(uris.count) uris): document mutation not implemented (LP-23)")
                 return [.boolean(false)]
             },
         ]
@@ -410,6 +459,17 @@ public actor TopDrawerService {
         }
     }
 
+    /// Fires `RecentsChanged(tabID)` for every recents tab that draws on the macDring launch
+    /// history — called after a `Launch` records into the recorder, so subscribers refresh.
+    private func emitMacDringRecentsChanged() async {
+        let ids = LauncherTabs.all(in: source.rawJSON())
+            .filter { $0.kind == "recents" && $0.servesMacDringRecents }
+            .map(\.id)
+        for id in ids {
+            await emitSignal("RecentsChanged", body: [.string(id)], signature: "s")
+        }
+    }
+
     // MARK: - Signals
 
     /// Emits `DocumentChanged` — kept for tests that exercise the signal path directly,
@@ -448,21 +508,35 @@ public actor TopDrawerService {
     /// The hits a `GetRecents(tabID)` should serve, resolved from the tab's kind in the
     /// launcher document. Static + injected provider so it's unit-testable without a bus.
     static func recentsHits(forTab tabID: String, document json: String,
-                            provider: RecentsProviding) -> [RecentFileHit] {
+                            provider: RecentsProviding,
+                            macDringHits: [RecentFileHit]) -> [RecentFileHit] {
         guard let tab = LauncherTabs.find(id: tabID, in: json) else { return [] }
         switch tab.kind {
         case "recents":
-            // LP-18 serves the *system* recents (recently-used.xbel). The macDring launch
-            // history (RecentsStore) is UserDefaults-backed and only populated by
-            // launching, so its merge lands with LP-19; honor the recentsSource's system
-            // part now. A macDring-only recents tab (the default) is therefore empty until
-            // LP-19 — correct, since nothing has been launched yet.
-            return tab.servesSystemRecents ? provider.systemRecents(limit: recentsLimit) : []
+            // A `.recents` tab draws from two sources per its `recentsSource`: the **system**
+            // recents (`recently-used.xbel`, LP-18) and Top Drawer's own **macDring** launch
+            // history (`RecentsStore`, recorded by `Launch`, LP-19). `both` folds them.
+            var hits: [RecentFileHit] = []
+            if tab.servesSystemRecents { hits += provider.systemRecents(limit: recentsLimit) }
+            if tab.servesMacDringRecents { hits += macDringHits }
+            return dedupedByURL(hits, limit: recentsLimit)
         case "fresh":
             return provider.fresh(limit: freshLimit)
         default:
             return []   // not a recents/fresh tab
         }
+    }
+
+    /// Newest-first, one entry per URL, capped — so a file present in both the system and
+    /// macDring sources of a `both` tab surfaces once. Mirrors `RecentsStore.deduplicatedByURL`.
+    private static func dedupedByURL(_ hits: [RecentFileHit], limit: Int) -> [RecentFileHit] {
+        var seen = Set<URL>()
+        // Newest first, with a URL tie-breaker so equal-timestamp merges are deterministic
+        // (Swift's sort isn't stable) — keeps `encodeRecents` output stable run-to-run.
+        let ordered = hits.sorted {
+            $0.date != $1.date ? $0.date > $1.date : $0.url.absoluteString < $1.url.absoluteString
+        }.filter { seen.insert($0.url).inserted }
+        return Array(ordered.prefix(max(0, limit)))
     }
 
     /// `{"recents":[{path,name,date}]}` — same stable-envelope + sorted-keys shape as
