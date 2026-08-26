@@ -173,6 +173,16 @@ public final class INotifyWatcher {
         if watchingParent, directoryAppeared {
             armWatch()                // the directory appeared → watch it directly
             sawChange = true          // it just appeared; treat it as a change
+        } else if watchingParent, !directoryExists(directory.deletingLastPathComponent()) {
+            // The watched *parent* was itself deleted or renamed away (e.g. a folder tab
+            // pointed inside removable media that got unplugged). The kernel drops the
+            // watch — IN_IGNORED is delivered (so drain runs) but it carries no name, so
+            // directoryAppeared stays false and neither branch below fires. Re-arm: the
+            // failed add_watch on the missing parent schedules the retry loop, so the
+            // watcher recovers on remount rather than going silent until relaunch. No
+            // sawChange — nothing the consumer cares about appeared, we only re-establish
+            // the watch.
+            armWatch()
         } else if !watchingParent, !directoryExists(directory) {
             // The watched directory was deleted or renamed away: the kernel drops the
             // watch (IN_DELETE_SELF/IN_IGNORED) or the path stops resolving (MOVE_SELF).

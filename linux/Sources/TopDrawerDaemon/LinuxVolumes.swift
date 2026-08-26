@@ -277,19 +277,24 @@ public enum VolumeEjector {
     @discardableResult
     public static func eject(_ volume: LinuxVolume) -> Bool {
         switch volume.kind {
+        // Every probe is bounded so the whole chain finishes well under a typical ~25s
+        // D-Bus client timeout even if each hung tool has to be killed: the eject path
+        // is the one most likely to stall (a dead share, a wedged device).
         case .disk:
             // Unmount first; only power-off's success matters for "safe to remove", but
-            // fall back to gio if udisksctl isn't present or refuses.
-            _ = LinuxProcess.succeeds("udisksctl", ["unmount", "-b", volume.device])
-            if LinuxProcess.succeeds("udisksctl", ["power-off", "-b", volume.device]) { return true }
+            // fall back to gio if udisksctl isn't present or refuses. power-off gets a
+            // longer budget than the others — spinning a drive down can legitimately take
+            // a few seconds. Worst case 5 + 10 + 5 = 20s.
+            _ = LinuxProcess.succeeds("udisksctl", ["unmount", "-b", volume.device], timeout: 5)
+            if LinuxProcess.succeeds("udisksctl", ["power-off", "-b", volume.device], timeout: 10) { return true }
             return LinuxProcess.succeeds("gio", ["mount", "-e", volume.path], timeout: 5)
         case .network, .cloud:
             // `gio mount -u` only manages GIO GMounts (gvfs/udisks-backed). A share the
             // user mounted from the CLI — sshfs, rclone — usually isn't a GMount, so gio
             // errors out; fall back to fusermount (the tool for user FUSE mounts), then a
-            // plain umount. The fallbacks get a tight 5s budget each so the whole chain
-            // stays well under a typical D-Bus client timeout even when every probe fails.
-            if LinuxProcess.succeeds("gio", ["mount", "-u", volume.path]) { return true }
+            // plain umount. gio -u is the probe most likely to hang on a dead share, so it
+            // gets the same 5s budget as the rest. Worst case 5 + 5 + 5 + 5 = 20s.
+            if LinuxProcess.succeeds("gio", ["mount", "-u", volume.path], timeout: 5) { return true }
             if LinuxProcess.succeeds("fusermount", ["-u", volume.path], timeout: 5) { return true }
             if LinuxProcess.succeeds("fusermount3", ["-u", volume.path], timeout: 5) { return true }
             return LinuxProcess.succeeds("umount", [volume.path], timeout: 5)
