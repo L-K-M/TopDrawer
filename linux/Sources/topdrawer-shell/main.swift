@@ -22,9 +22,15 @@ enum DockEdge: String {
     case top, bottom, left, right
 
     static func fromArguments(_ args: [String]) -> DockEdge? {
-        guard let flag = args.firstIndex(of: "--edge"),
-              args.indices.contains(flag + 1),
-              let edge = DockEdge(rawValue: args[flag + 1]) else { return nil }
+        guard let flag = args.firstIndex(of: "--edge") else { return nil }   // absent: default
+        guard args.indices.contains(flag + 1),
+              let edge = DockEdge(rawValue: args[flag + 1]) else {
+            // Present but bad/missing: same default, but say so — a typo'd edge would
+            // otherwise pin the strip to the wrong edge with a normal-looking startup log.
+            FileHandle.standardError.write(
+                Data("topdrawer-shell: --edge expects top|bottom|left|right — using the default\n".utf8))
+            return nil
+        }
         return edge
     }
 }
