@@ -80,10 +80,12 @@ final class TopDrawerServiceTests: XCTestCase {
             let xml = try XCTUnwrap(reply?.body.first?.string)
             XCTAssertTrue(xml.contains(#"interface name="ch.lkmc.TopDrawer1""#), xml)
             for method in ["Ping", "GetDocument", "GetVolumes", "Eject", "GetTrashState",
-                           "GetRecents", "Launch", "OpenWith", "Reveal", "AddDroppedURIs"] {
+                           "GetRecents", "Launch", "OpenWith", "Reveal", "GetRunningAppIDs",
+                           "AddDroppedURIs"] {
                 XCTAssertTrue(xml.contains(#"method name="\#(method)""#), "missing \(method) in \(xml)")
             }
-            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged", "RecentsChanged"] {
+            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged", "RecentsChanged",
+                           "RunningAppsChanged"] {
                 XCTAssertTrue(xml.contains(#"signal name="\#(signal)""#), "missing \(signal) in \(xml)")
             }
         }
@@ -454,6 +456,92 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - LP-19b: running apps
+
+    func testGetRunningAppIDsReturnsTheScannedSet() async throws {
+        startServer(runningApps: FakeRunningApps(ids: ["com.example.App", "org.gnome.Nautilus"]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "GetRunningAppIDs")
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            // A set semantically, so compare order-insensitively.
+            XCTAssertEqual((root?["appIDs"] as? [String])?.sorted(),
+                           ["com.example.App", "org.gnome.Nautilus"])
+        }
+    }
+
+    func testGetRunningAppIDsIsEmptyWhenNothingRuns() async throws {
+        startServer(runningApps: FakeRunningApps(ids: []))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "GetRunningAppIDs")
+            // Unwrapping `.string` also proves the reply is a JSON *string* (`s`), not a
+            // mis-signed empty native D-Bus array; parse rather than pin exact formatting.
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            XCTAssertEqual(root?["appIDs"] as? [String], [], json)
+        }
+    }
+
+    func testRunningAppsChangedFiresWhenTheSetChanges() async throws {
+        let apps = MutableRunningApps([])
+        startServer(runningApps: apps)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let addMatch = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RunningAppsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            // A rejected match rule would otherwise surface only as the 10s timeout below.
+            XCTAssertEqual(addMatch?.messageType, .methodReturn, "the bus rejected the AddMatch rule")
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RunningAppsChanged")
+            // A new app appears — the /proc poll should notice and broadcast.
+            apps.set(["org.gnome.Nautilus"])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.member, "RunningAppsChanged")
+        }
+    }
+
+    func testFailedScanServesTheLastKnownRunningApps() async throws {
+        // Start empty (no nil to race the initial snapshot), then establish a known running
+        // set via the poll-driven signal — so lastRunningApps is provably ["org.example.One"]
+        // before the next scan fails. A failed scan must then serve that set, not empty
+        // (proving both the poll's no-clobber guard and GetRunningAppIDs' fallback).
+        let apps = MutableRunningApps([])
+        startServer(runningApps: apps)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RunningAppsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RunningAppsChanged")
+            apps.set(["org.example.One"])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.member, "RunningAppsChanged")   // lastRunningApps is now set
+
+            apps.failScan()
+            // Force at least one poll tick over the failure before the query (a 10×
+            // window ≫ the interval), so the no-clobber guard is exercised
+            // deterministically — the assertion can't fail spuriously; at worst it
+            // waits out the window.
+            let stray = await Self.firstElement(of: signals, timeout: Self.fastPollInterval * 10)
+            XCTAssertNil(stray, "a failed scan must not emit RunningAppsChanged")
+            let reply = try await self.call(client, method: "GetRunningAppIDs")
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            XCTAssertEqual(root?["appIDs"] as? [String], ["org.example.One"],
+                           "a failed scan serves the last-known set, not empty")
+        }
+    }
+
     func testRecentsChangedFiresWhenAFreshScopeChanges() async throws {
         try writeDocument(#"{"version":1,"tabs":[{"id":"fr","kind":"fresh"}]}"#)
         let scope = tempDir.appendingPathComponent("Downloads", isDirectory: true)
@@ -514,6 +602,11 @@ final class TopDrawerServiceTests: XCTestCase {
 
     // MARK: - Harness
 
+    /// The fast interval `startServer` configures so change-waiting tests don't need
+    /// seconds per signal. Tests that reason "a poll tick passes" derive their wait
+    /// windows from this, so the window/interval coupling can't silently drift.
+    private static let fastPollInterval = Duration.milliseconds(200)
+
     /// Runs a `TopDrawerService` on its own session-bus connection until the test
     /// cancels it. All backends are injectable; they default to the production ones
     /// except `trashDirectory`, which defaults to a temp subdirectory so a test never
@@ -525,6 +618,7 @@ final class TopDrawerServiceTests: XCTestCase {
                              recentsProvider: RecentsProviding = FakeRecentsProvider(),
                              launcher: LinuxLaunching = FakeLauncher(),
                              recorder: RecentsRecording = FakeRecorder(),
+                             runningApps: RunningAppsScanning = FakeRunningApps(),
                              xbelLocation: URL? = nil,
                              freshScopes: [URL]? = nil) {
         let source = LauncherDocumentSource(url: launcherURL)
@@ -544,8 +638,8 @@ final class TopDrawerServiceTests: XCTestCase {
                         source: source, volumeSource: volumeSource, trashService: trashService,
                         trashDirectory: trashDir, ejector: ejector,
                         recentsProvider: recentsProvider, launcher: launcher, recorder: recorder,
-                        xbelLocation: xbel, freshScopes: scopes)
-                    try await service.run(on: connection, watchInterval: .milliseconds(200))
+                        runningApps: runningApps, xbelLocation: xbel, freshScopes: scopes)
+                    try await service.run(on: connection, watchInterval: Self.fastPollInterval)
                     // Keep the export alive for the duration of the test; tearDown cancels us.
                     try await Task.sleep(for: .seconds(30))
                 }
@@ -685,6 +779,24 @@ final class FakeRecorder: RecentsRecording, @unchecked Sendable {
         lock.lock(); _recorded.append((url, kind, name, date)); lock.unlock()
     }
     func recents(limit: Int) async -> [RecentFileHit] { Array(canned.prefix(limit)) }
+}
+
+/// A fixed running-apps set, so `GetRunningAppIDs` is deterministic without a real `/proc`.
+private struct FakeRunningApps: RunningAppsScanning {
+    var ids: [String] = []
+    func runningAppIDs() -> [String]? { ids }
+}
+
+/// A mutable running-apps set the `RunningAppsChanged` test flips after subscribing, to
+/// drive the poll. Thread-safe: the watch loop reads it off the test's thread.
+final class MutableRunningApps: RunningAppsScanning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _ids: [String]?
+    init(_ ids: [String] = []) { _ids = ids }
+    func set(_ ids: [String]) { lock.lock(); _ids = ids; lock.unlock() }
+    /// Simulates a transient `/proc` scan failure (the scan returns nil, not []).
+    func failScan() { lock.lock(); _ids = nil; lock.unlock() }
+    func runningAppIDs() -> [String]? { lock.lock(); defer { lock.unlock() }; return _ids }
 }
 
 /// Records every volume handed to the ejector, so a test can prove the call happened
