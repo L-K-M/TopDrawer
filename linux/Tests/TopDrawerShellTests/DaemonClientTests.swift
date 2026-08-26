@@ -8,8 +8,10 @@ import XCTest
 
 /// The LP-20 acceptance: the shell's D-Bus client, exercised against a live mock
 /// daemon — a real `TopDrawerService` whose backends are all injected fakes/fixtures
-/// — over a private session bus (`dbus-run-session -- swift test --package-path
-/// linux`; plain `swift test` skips these, exactly like the daemon's own tests).
+/// — over a private session bus (`dbus-run-session -- env
+/// TOPDRAWER_PRIVATE_TEST_BUS=1 swift test --package-path linux`; plain `swift test`
+/// or a sentinel-less `dbus-run-session` skips these, exactly like the daemon's own
+/// tests).
 final class DaemonClientTests: XCTestCase {
 
     /// These tests claim the daemon's well-known name on the bus they're given, so
@@ -112,6 +114,39 @@ final class DaemonClientTests: XCTestCase {
 
     // MARK: - Change observation
 
+    /// The daemon vanishing mid-session must surface: without the NameOwnerChanged
+    /// watch, its exit is invisible on the client connection (no signal, no error)
+    /// and the strip would silently go stale forever.
+    func testObserveTabsReportsTheDaemonLeavingTheBus() async throws {
+        startMockDaemon()
+        try await withClient { client in
+            try await Self.pingReady(client)
+            let strips = TabStripRecorder()
+            let errors = ErrorLog()
+            let observation = Task {
+                await DaemonClient.observeTabs(client,
+                                               onChange: { strips.record($0) },
+                                               onError: { errors.record("\($0)") },
+                                               retryDelay: .milliseconds(100))
+            }
+
+            // The initial strip proves the watch is fully established (both match
+            // rules live) before the daemon disappears.
+            try await Self.waitUntil { !strips.all.isEmpty }
+
+            // Kill the mock exactly like teardown does; the name release is the
+            // NameOwnerChanged (new_owner == "") the client must react to.
+            self.serverTask?.cancel()
+            await self.serverTask?.value
+            self.serverTask = nil
+
+            try await Self.waitUntil { !errors.all.isEmpty }
+            XCTAssertTrue(errors.all.contains { $0.contains("daemon left the bus") },
+                          "expected the owner-lost error, got: \(errors.all)")
+            observation.cancel()
+        }
+    }
+
     func testObserveTabsEmitsTheStripThenTheChangedStrip() async throws {
         startMockDaemon()
         try await withClient { client in
@@ -184,6 +219,21 @@ final class DaemonClientTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
         XCTFail("timed out waiting for \(what)")
+    }
+}
+
+/// Every recorded error message, lock-guarded (delivered from the observer's task).
+final class ErrorLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var messages: [String] = []
+
+    func record(_ message: String) {
+        lock.lock(); messages.append(message); lock.unlock()
+    }
+
+    var all: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return messages
     }
 }
 

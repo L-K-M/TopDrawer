@@ -68,13 +68,26 @@ public enum DaemonClient {
                 // the fetched document; both converge. AddMatch needs no name owner, so
                 // the no-daemon path still fails at the fetch and drives onError/retry.
                 let changes = try await documentChanges(connection)
+                let owners = try await ownerChanges(connection)
                 onChange(try await fetchTabs(connection))
-                for await _ in changes {
-                    onChange(try await fetchTabs(connection))
+                for await event in watchEvents(changes, owners) {
+                    switch event {
+                    case .documentChanged:
+                        onChange(try await fetchTabs(connection))
+                    case .ownerGained:
+                        // A (re)started daemon doesn't emit DocumentChanged at startup,
+                        // so re-read whatever document it came back with.
+                        onChange(try await fetchTabs(connection))
+                    case .ownerLost:
+                        // A vanished daemon emits nothing on this connection — without
+                        // this watch the stream would sit silent and the strip would be
+                        // stale forever. Report and fall into the retry cycle.
+                        throw ClientError.badReply("daemon left the bus")
+                    }
                 }
-                if Task.isCancelled { return }   // the stream ends on cancel too
-                // Stream ended without cancellation — the daemon's connection is gone.
-                onError(ClientError.badReply("DocumentChanged stream ended"))
+                if Task.isCancelled { return }   // the streams end on cancel too
+                // Ended without cancellation — our own connection is gone.
+                onError(ClientError.badReply("watch streams ended"))
             } catch is CancellationError {
                 return   // the caller shut the observer down; that's not a daemon problem
             } catch {
@@ -88,23 +101,84 @@ public enum DaemonClient {
         }
     }
 
+    /// What the watch loop reacts to.
+    private enum WatchEvent { case documentChanged, ownerGained, ownerLost }
+
+    /// Merges the two subscriptions into one event stream; both child tasks end with
+    /// the merged stream's termination.
+    private static func watchEvents(_ changes: AsyncStream<DBusMessage>,
+                                     _ owners: AsyncStream<DBusMessage>) -> AsyncStream<WatchEvent> {
+        AsyncStream { continuation in
+            let documents = Task {
+                for await _ in changes { continuation.yield(.documentChanged) }
+            }
+            let ownership = Task {
+                // NameOwnerChanged body: (name, old_owner, new_owner) — arg0-scoped to
+                // our bus name by the match rule, so every event here is about the daemon.
+                for await message in owners {
+                    let newOwner = message.body.dropFirst(2).first?.string ?? ""
+                    continuation.yield(newOwner.isEmpty ? .ownerLost : .ownerGained)
+                }
+            }
+            continuation.onTermination = { _ in
+                documents.cancel()
+                ownership.cancel()
+            }
+        }
+    }
+
     /// Subscribes to `DocumentChanged` (the explicit `AddMatch` mirrors the daemon's
     /// tests: the subscription alone doesn't guarantee bus-side routing). Scoped to
     /// the daemon's well-known name — the bus resolves it to the current owner's
     /// unique name, so any local process spoofing the interface can't drive refetch
     /// churn, and restarts keep working.
-    private static func documentChanges(_ connection: DBusClient.Connection) async throws -> AsyncStream<DBusMessage> {
+    /// The watch subscriptions' match rules, hoisted so the bus-side dedup below can
+    /// add and remove exactly these strings. dbus-daemon keeps every AddMatch copy —
+    /// one delivery per rule — so a retry cycle that re-adds without removing would
+    /// multiply refetches per change.
+    private static let documentChangedRule =
+        "type='signal',sender='\(busName)',interface='\(interfaceName)',member='DocumentChanged'"
+    private static let ownerChangedRule =
+        "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',"
+            + "member='NameOwnerChanged',arg0='\(busName)'"
+
+    /// Installs `rule`, replacing any stale copy from an earlier retry cycle (the
+    /// first RemoveMatch finds nothing — `try?` swallows that).
+    private static func addMatch(_ connection: DBusClient.Connection, rule: String) async throws {
+        _ = try? await connection.send(
+            .createMethodCall(
+                destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                interface: "org.freedesktop.DBus", method: "RemoveMatch",
+                body: [.string(rule)]),
+            timeoutNanoseconds: callTimeoutNanoseconds)
+
         let reply = try await connection.send(
             .createMethodCall(
                 destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
                 interface: "org.freedesktop.DBus", method: "AddMatch",
-                body: [.string("type='signal',sender='\(busName)',interface='\(interfaceName)',member='DocumentChanged'")]),
+                body: [.string(rule)]),
             timeoutNanoseconds: callTimeoutNanoseconds)
-
         guard let reply, reply.messageType == .methodReturn else {
             throw ClientError.badReply("AddMatch rejected: \(reply.map { Self.errorName(of: $0) } ?? "no reply")")
         }
+    }
+
+    /// Subscribes to `DocumentChanged` (the explicit match rule mirrors the daemon's
+    /// tests: the subscription alone doesn't guarantee bus-side routing). Scoped to
+    /// the daemon's well-known name — the bus resolves it to the current owner's
+    /// unique name, so any local process spoofing the interface can't drive refetch
+    /// churn, and restarts keep working.
+    private static func documentChanges(_ connection: DBusClient.Connection) async throws -> AsyncStream<DBusMessage> {
+        try await addMatch(connection, rule: documentChangedRule)
         return await connection.subscribeToSignal(interface: interfaceName, member: "DocumentChanged")
+    }
+
+    /// Subscribes to the bus's own `NameOwnerChanged` for the daemon's name, arg0-
+    /// scoped by the match rule: the daemon leaving the bus is otherwise invisible on
+    /// this connection (no signal, no error — just silence).
+    private static func ownerChanges(_ connection: DBusClient.Connection) async throws -> AsyncStream<DBusMessage> {
+        try await addMatch(connection, rule: ownerChangedRule)
+        return await connection.subscribeToSignal(interface: "org.freedesktop.DBus", member: "NameOwnerChanged")
     }
 }
 #endif
