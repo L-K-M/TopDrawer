@@ -44,8 +44,11 @@ final class GtkCoordinateCallback {
 private func gtkConnectRaw(_ instance: UnsafeMutableRawPointer?, signal: String,
                            trampoline: GCallback, box: gpointer?,
                            destroy: GClosureNotify?) {
-    g_signal_connect_data(instance, signal, trampoline, box, destroy,
-                          GConnectFlags(rawValue: 0))
+    let handlerId = g_signal_connect_data(instance, signal, trampoline, box, destroy,
+                                          GConnectFlags(rawValue: 0))
+    // Handler id 0 = GLib refused the connection (typo'd signal name, wrong instance
+    // type): the boxed closure would leak and the callback would simply never fire.
+    precondition(handlerId != 0, "g_signal_connect_data failed for signal '\(signal)'")
 }
 
 // g_signal_connect_data's destroy callback is a GClosureNotify — (data, closure) —
