@@ -75,8 +75,8 @@ jobs:
             pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
           git clone --depth 1 --branch v1.3.0 https://github.com/wmww/gtk4-layer-shell /tmp/gtk4-layer-shell
           meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
-            --prefix=/usr -Dexamples=disabled -Ddocs=disabled -Dtests=disabled \
-            -Dsmoke-tests=disabled -Dintrospection=disabled -Dvapi=disabled
+            --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false \
+            -Dsmoke-tests=false -Dintrospection=false -Dvapi=false
           ninja -C /tmp/gtk4-layer-shell/build install
           ldconfig
 
