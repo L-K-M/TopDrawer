@@ -17,17 +17,21 @@ import Foundation
 /// Shallow by design: it scans the **top level** of each scope (where downloads,
 /// copies, and screenshots actually land), which keeps it synchronous and bounded.
 /// Files saved deep inside sub-folders are left to Spotlight.
-enum FreshScanner {
+///
+/// `public` so the Linux `topdrawerd` package can reuse this exact ranking with a
+/// birth-time (`statx`) `dateAdded` closure — the plan's LP-18 hook. It returns
+/// `RecentFileHit`s (also public); nothing else is pulled public.
+public enum FreshScanner {
     /// How far back a file still counts as "fresh". Derived from `RecentQueryMode`'s
     /// `dateAdded` window — the single source of truth — so the direct scan and the
     /// Spotlight query can't drift on the cutoff.
-    static let window: TimeInterval = RecentQueryMode.dateAdded.window
+    public static let window: TimeInterval = RecentQueryMode.dateAdded.window
 
     /// Newly-arrived files found by reading `scopes` directly, most-recently-added
     /// first and capped to `limit`. `now`, `fileManager`, and `dateAdded` are injectable
     /// so the filtering/ranking is unit-testable without depending on real Date-Added
     /// metadata.
-    static func results(scopes: [URL],
+    public static func results(scopes: [URL],
                         limit: Int,
                         now: Date = Date(),
                         fileManager: FileManager = .default,
@@ -65,7 +69,8 @@ enum FreshScanner {
     /// A file's "date added" to its folder, falling back to its creation then
     /// modification date when the volume doesn't carry the attribute — so every entry
     /// gets a sensible freshness date even on filesystems that don't track Date Added.
-    static func dateAdded(of url: URL) -> Date? {
+    /// (The Linux daemon injects its own `statx`-based closure instead of this default.)
+    public static func dateAdded(of url: URL) -> Date? {
         let values = try? url.resourceValues(
             forKeys: [.addedToDirectoryDateKey, .creationDateKey, .contentModificationDateKey])
         return values?.addedToDirectoryDate ?? values?.creationDate ?? values?.contentModificationDate

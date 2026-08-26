@@ -14,11 +14,13 @@ import MacDring
 /// - `GetVolumes() -> s` — the classified mounted volumes as JSON (LP-17).
 /// - `Eject(s volumeID) -> b` — unmount/power-off a volume by its id (LP-17).
 /// - `GetTrashState() -> b u` — whether the Trash is empty, and its item count (LP-17).
+/// - `GetRecents(s tabID) -> s` — a Recents/Fresh tab's live contents as JSON (LP-18).
 /// - `Launch(s itemID) -> b` — stub; returns `false` (real launching is LP-19).
 /// - `AddDroppedURIs(s tabID, as uris) -> b` — stub; returns `false` (drops are LP-19).
 /// - signal `DocumentChanged()` — the launcher file changed on disk.
 /// - signal `VolumesChanged()` — the set of mounted volumes changed (LP-17).
 /// - signal `TrashChanged()` — the Trash contents changed (LP-17).
+/// - signal `RecentsChanged(s tabID)` — a Recents/Fresh tab's contents changed (LP-18).
 ///
 /// `wendylabsinc/dbus` exposes no `RequestName` helper and does not auto-route
 /// inbound calls, so this type does both itself: it registers a message handler that
@@ -30,20 +32,29 @@ public actor TopDrawerService {
     public static let objectPath = "/ch/lkmc/TopDrawer"
     public static let interfaceName = "ch.lkmc.TopDrawer1"
     /// Reported by `Ping`; bump alongside the interface as the daemon grows.
-    public static let version = "0.2.0"
+    public static let version = "0.3.0"
+
+    /// How many entries `GetRecents` returns per tab kind.
+    private static let recentsLimit = 50
+    private static let freshLimit = 40
 
     private let source: LauncherDocumentSource
     private let volumeSource: VolumeSnapshotProviding
     private let trashService: TrashServicing
     private let trashDirectory: URL
     private let ejector: @Sendable (LinuxVolume) -> Bool
+    private let recentsProvider: RecentsProviding
+    private let xbelLocation: URL
+    private let freshScopes: [URL]
     private let logger: Logger
     private var connection: DBusClient.Connection?
     private var lastModified: Date?
     private var lastVolumes: [LinuxVolume] = []
     private var lastTrashCount: Int = 0
+    private var lastXbelModified: Date?
     private var watchTask: Task<Void, Never>?
     private var trashWatcher: INotifyWatcher?
+    private var freshWatchers: [INotifyWatcher] = []
 
     /// - Parameters:
     ///   - volumeSource: the mounted-volume snapshot source (`/proc` in production).
@@ -51,6 +62,12 @@ public actor TopDrawerService {
     ///   - trashDirectory: the freedesktop Trash directory watched for `TrashChanged`
     ///     (its `files/` count gates emission). Defaults to the live `$XDG_DATA_HOME`.
     ///   - ejector: performs an eject; injectable so tests don't shell out.
+    ///   - recentsProvider: backs `GetRecents` (system recents + fresh scan).
+    ///   - xbelLocation: the `recently-used.xbel` polled for `RecentsChanged` on Recents
+    ///     tabs (inotify watches directories, not this single file). Defaults to
+    ///     `$XDG_DATA_HOME/recently-used.xbel`.
+    ///   - freshScopes: the landing-zone directories watched for `RecentsChanged` on
+    ///     Fresh tabs. Defaults to Downloads/Desktop/Documents.
     public init(source: LauncherDocumentSource,
                 volumeSource: VolumeSnapshotProviding = ProcMounts(),
                 trashService: TrashServicing = GioTrashService(),
@@ -58,12 +75,21 @@ public actor TopDrawerService {
                     environment: ProcessInfo.processInfo.environment,
                     home: FileManager.default.homeDirectoryForCurrentUser),
                 ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject,
+                recentsProvider: RecentsProviding? = nil,
+                xbelLocation: URL = RecentlyUsedFile.location(
+                    environment: ProcessInfo.processInfo.environment,
+                    home: FileManager.default.homeDirectoryForCurrentUser),
+                freshScopes: [URL] = FreshLister.scopes(),
                 logger: Logger = Logger(label: "topdrawerd")) {
         self.source = source
         self.volumeSource = volumeSource
         self.trashService = trashService
         self.trashDirectory = trashDirectory
         self.ejector = ejector
+        self.recentsProvider = recentsProvider
+            ?? LinuxRecentsProvider(xbelURL: xbelLocation, freshScopes: freshScopes)
+        self.xbelLocation = xbelLocation
+        self.freshScopes = freshScopes
         self.logger = logger
     }
 
@@ -87,6 +113,7 @@ public actor TopDrawerService {
             DBusObjectServer.Signal(name: "DocumentChanged"),
             DBusObjectServer.Signal(name: "VolumesChanged"),
             DBusObjectServer.Signal(name: "TrashChanged"),
+            DBusObjectServer.Signal(name: "RecentsChanged", args: [.init(name: "tabID", type: "s")]),
         ]
         await server.export(DBusObjectServer.ExportedObject(path: Self.objectPath,
                                                             interfaces: [interface]))
@@ -101,17 +128,21 @@ public actor TopDrawerService {
         lastModified = source.modificationDate()
         lastVolumes = volumeSource.volumes()
         lastTrashCount = trashService.trashCount()
+        lastXbelModified = xbelModificationDate()
         startTrashWatcher()
+        startFreshWatchers()
         startWatching(interval: watchInterval)
     }
 
-    /// Stops the file/volume watcher and the Trash watcher (the D-Bus export goes away
-    /// with the connection).
+    /// Stops the file/volume watcher, the Trash watcher, and the Fresh watchers (the
+    /// D-Bus export goes away with the connection).
     public func stop() {
         watchTask?.cancel()
         watchTask = nil
         trashWatcher?.stop()
         trashWatcher = nil
+        freshWatchers.forEach { $0.stop() }
+        freshWatchers = []
     }
 
     // MARK: - Methods
@@ -122,6 +153,7 @@ public actor TopDrawerService {
         let volumeSource = self.volumeSource
         let trashService = self.trashService
         let ejector = self.ejector
+        let recentsProvider = self.recentsProvider
         return [
             DBusObjectServer.Method(
                 name: "Ping",
@@ -175,6 +207,16 @@ public actor TopDrawerService {
                 // the daemon down.
                 let count = trashService.trashCount()
                 return [.boolean(count == 0), .uint32(UInt32(clamping: count))]
+            },
+            DBusObjectServer.Method(
+                name: "GetRecents",
+                inputArgs: [.init(name: "tabID", type: "s")],
+                outputArgs: [.init(name: "json", type: "s")]
+            ) { context in
+                let tabID = context.arguments.first?.string ?? ""
+                let hits = Self.recentsHits(forTab: tabID, document: source.rawJSON(),
+                                            provider: recentsProvider)
+                return [.string(Self.encodeRecents(hits))]
             },
             DBusObjectServer.Method(
                 name: "Launch",
@@ -248,6 +290,10 @@ public actor TopDrawerService {
                 // deleted and recreated). The count gate keeps it idempotent, so the two
                 // sources never double-fire.
                 await self.checkForTrashChange()
+                // recently-used.xbel is a single file (inotify watches directories), and
+                // it sits in the busy $XDG_DATA_HOME, so poll its mtime rather than watch
+                // that whole directory.
+                await self.checkForRecentsFileChange()
             }
         }
     }
@@ -293,18 +339,56 @@ public actor TopDrawerService {
         await emitSignal("TrashChanged")
     }
 
+    // MARK: - Recents / Fresh watches
+
+    /// One `INotifyWatcher` per Fresh landing zone (Downloads/Desktop/Documents). These
+    /// are real directories, so inotify fits: a file arriving fires `RecentsChanged` for
+    /// every Fresh tab. (Recents' xbel is polled instead — see the watch loop.)
+    private func startFreshWatchers() {
+        freshWatchers.forEach { $0.stop() }
+        freshWatchers = freshScopes.map { scope in
+            let watcher = INotifyWatcher(directory: scope) { [weak self] in
+                Task { await self?.emitRecentsChanged(forKind: "fresh") }
+            }
+            watcher.start()
+            return watcher
+        }
+    }
+
+    private func checkForRecentsFileChange() async {
+        let current = xbelModificationDate()
+        guard current != lastXbelModified else { return }
+        lastXbelModified = current
+        await emitRecentsChanged(forKind: "recents")
+    }
+
+    private func xbelModificationDate() -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: xbelLocation.path))?[.modificationDate] as? Date
+    }
+
+    /// Fires `RecentsChanged(tabID)` for every tab of `kind` in the current document, so
+    /// the frontend refreshes exactly the affected tabs.
+    private func emitRecentsChanged(forKind kind: String) async {
+        let ids = LauncherTabs.all(in: source.rawJSON()).filter { $0.kind == kind }.map(\.id)
+        for id in ids {
+            await emitSignal("RecentsChanged", body: [.string(id)], signature: "s")
+        }
+    }
+
     // MARK: - Signals
 
     /// Emits `DocumentChanged` — kept for tests that exercise the signal path directly,
     /// without waiting on the file-watch interval.
     public func emitDocumentChanged() async { await emitSignal("DocumentChanged") }
 
-    /// A parameterless `ch.lkmc.TopDrawer1` signal. Fired through the `Send` actor
-    /// (a signal expects no reply, unlike `connection.send(_:)` which would wait for one).
-    private func emitSignal(_ name: String) async {
+    /// A `ch.lkmc.TopDrawer1` signal (optionally with a body). Fired through the `Send`
+    /// actor (a signal expects no reply, unlike `connection.send(_:)` which would wait
+    /// for one).
+    private func emitSignal(_ name: String, body: [DBusValue] = [], signature: String? = nil) async {
         guard let connection else { return }
         let signal = DBusRequest.createSignal(
-            path: Self.objectPath, interface: Self.interfaceName, name: name)
+            path: Self.objectPath, interface: Self.interfaceName, name: name,
+            body: body, signature: signature)
         let sender: DBusClient.Send = await connection.send
         do {
             _ = try await sender.send(signal)
@@ -323,6 +407,39 @@ public actor TopDrawerService {
         encoder.outputFormatting = [.sortedKeys]
         struct Envelope: Encodable { let volumes: [LinuxVolume] }
         guard let data = try? encoder.encode(Envelope(volumes: volumes)) else { return #"{"volumes":[]}"# }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The hits a `GetRecents(tabID)` should serve, resolved from the tab's kind in the
+    /// launcher document. Static + injected provider so it's unit-testable without a bus.
+    static func recentsHits(forTab tabID: String, document json: String,
+                            provider: RecentsProviding) -> [RecentFileHit] {
+        guard let tab = LauncherTabs.find(id: tabID, in: json) else { return [] }
+        switch tab.kind {
+        case "recents":
+            // LP-18 serves the *system* recents (recently-used.xbel). The macDring launch
+            // history (RecentsStore) is UserDefaults-backed and only populated by
+            // launching, so its merge lands with LP-19; honor the recentsSource's system
+            // part now. A macDring-only recents tab (the default) is therefore empty until
+            // LP-19 — correct, since nothing has been launched yet.
+            let source = tab.recentsSource ?? "macDring"
+            let includesSystem = source == "system" || source == "both"
+            return includesSystem ? provider.systemRecents(limit: recentsLimit) : []
+        case "fresh":
+            return provider.fresh(limit: freshLimit)
+        default:
+            return []   // not a recents/fresh tab
+        }
+    }
+
+    /// `{"recents":[{path,name,date}]}` — same stable-envelope + sorted-keys shape as
+    /// `encodeVolumes`. `date` is Unix epoch seconds.
+    static func encodeRecents(_ hits: [RecentFileHit]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        struct Envelope: Encodable { let recents: [RecentEntry] }
+        let entries = hits.map(RecentEntry.init)
+        guard let data = try? encoder.encode(Envelope(recents: entries)) else { return #"{"recents":[]}"# }
         return String(decoding: data, as: UTF8.self)
     }
 }
