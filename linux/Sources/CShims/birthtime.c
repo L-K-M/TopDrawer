@@ -18,7 +18,10 @@ int64_t topdrawer_file_btime(const char *path) {
     if (!(stx.stx_mask & STATX_BTIME)) {
         return -1;
     }
-    return (int64_t)stx.stx_btime.tv_sec;
+    /* Nanoseconds since the epoch, so files created within the same second still rank
+     * correctly (a burst of downloads, an archive extraction). Fits int64_t until 2262;
+     * the -1 sentinel is unambiguous since any real value is >= 0. */
+    return (int64_t)stx.stx_btime.tv_sec * 1000000000LL + (int64_t)stx.stx_btime.tv_nsec;
 }
 
 #else

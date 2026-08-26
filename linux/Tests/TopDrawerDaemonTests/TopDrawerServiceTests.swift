@@ -191,7 +191,7 @@ final class TopDrawerServiceTests: XCTestCase {
             // Trash files repeatedly (each new file bumps the count → a fresh
             // TrashChanged) while waiting, so a single emit that races the bus
             // subscription becoming effective can't make this flaky.
-            let writer = Self.repeatedlyTrashFiles(into: files)
+            let writer = Self.repeatedlyCreateFiles(in: files)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
             writer.cancel()
             XCTAssertNotNil(received, "TrashChanged should fire after the Trash changes")
@@ -219,7 +219,7 @@ final class TopDrawerServiceTests: XCTestCase {
                 interface: TopDrawerService.interfaceName, member: "TrashChanged")
 
             try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
-            let writer = Self.repeatedlyTrashFiles(into: files)
+            let writer = Self.repeatedlyCreateFiles(in: files)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
             writer.cancel()
             XCTAssertNotNil(received, "the poll backstop should deliver TrashChanged on a fresh profile")
@@ -296,7 +296,7 @@ final class TopDrawerServiceTests: XCTestCase {
                 interface: TopDrawerService.interfaceName, member: "RecentsChanged")
 
             // A file arriving in the Fresh scope should fire RecentsChanged for the fresh tab.
-            let writer = Self.repeatedlyTrashFiles(into: scope)
+            let writer = Self.repeatedlyCreateFiles(in: scope)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
             writer.cancel()
             XCTAssertEqual(received?.member, "RecentsChanged")
@@ -304,10 +304,11 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
-    /// Writes a fresh file into `directory` every 300ms until cancelled — each write
-    /// bumps the trashed-item count, so a single `TrashChanged` emit that races the bus
+    /// Creates a fresh file in `directory` every 300ms until cancelled. Used by both the
+    /// Trash tests (each new file bumps the trashed-item count) and the fresh-scope test
+    /// (each new file is a Fresh arrival), so a single signal emit that races the bus
     /// subscription setup can't make the signal tests flaky (the next write emits again).
-    private static func repeatedlyTrashFiles(into directory: URL) -> Task<Void, Never> {
+    private static func repeatedlyCreateFiles(in directory: URL) -> Task<Void, Never> {
         Task {
             for i in 0..<50 {
                 if Task.isCancelled { break }
@@ -354,7 +355,11 @@ final class TopDrawerServiceTests: XCTestCase {
         // Default the recents watches at hermetic temp paths so a test never polls the
         // developer's real recently-used.xbel or watches their real Downloads/Desktop.
         let xbel = xbelLocation ?? tempDir.appendingPathComponent("recently-used.xbel")
-        let scopes = freshScopes ?? [tempDir.appendingPathComponent("fresh-scope", isDirectory: true)]
+        // Create the hermetic default scope so the default watch target always exists
+        // (a caller-supplied freshScopes is left as-is).
+        let defaultScope = tempDir.appendingPathComponent("fresh-scope", isDirectory: true)
+        try? FileManager.default.createDirectory(at: defaultScope, withIntermediateDirectories: true)
+        let scopes = freshScopes ?? [defaultScope]
         serverTask = Task {
             do {
                 try await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in

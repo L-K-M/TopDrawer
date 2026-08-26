@@ -55,6 +55,7 @@ public actor TopDrawerService {
     private var watchTask: Task<Void, Never>?
     private var trashWatcher: INotifyWatcher?
     private var freshWatchers: [INotifyWatcher] = []
+    private var freshSignalTask: Task<Void, Never>?
 
     /// - Parameters:
     ///   - volumeSource: the mounted-volume snapshot source (`/proc` in production).
@@ -143,6 +144,8 @@ public actor TopDrawerService {
         trashWatcher = nil
         freshWatchers.forEach { $0.stop() }
         freshWatchers = []
+        freshSignalTask?.cancel()
+        freshSignalTask = nil
     }
 
     // MARK: - Methods
@@ -348,10 +351,23 @@ public actor TopDrawerService {
         freshWatchers.forEach { $0.stop() }
         freshWatchers = freshScopes.map { scope in
             let watcher = INotifyWatcher(directory: scope) { [weak self] in
-                Task { await self?.emitRecentsChanged(forKind: "fresh") }
+                Task { await self?.scheduleFreshRecentsChanged() }
             }
             watcher.start()
             return watcher
+        }
+    }
+
+    /// Coalesces bursts across the (up to three) Fresh-scope watchers into a single
+    /// `RecentsChanged` round. Each `INotifyWatcher` already debounces its own scope's
+    /// events (0.2s), so this collapses the remaining case — a copy landing in more than
+    /// one scope at once — rather than a within-scope storm.
+    private func scheduleFreshRecentsChanged() {
+        freshSignalTask?.cancel()
+        freshSignalTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await self?.emitRecentsChanged(forKind: "fresh")
         }
     }
 
@@ -369,7 +385,13 @@ public actor TopDrawerService {
     /// Fires `RecentsChanged(tabID)` for every tab of `kind` in the current document, so
     /// the frontend refreshes exactly the affected tabs.
     private func emitRecentsChanged(forKind kind: String) async {
-        let ids = LauncherTabs.all(in: source.rawJSON()).filter { $0.kind == kind }.map(\.id)
+        let ids = LauncherTabs.all(in: source.rawJSON()).filter { tab in
+            guard tab.kind == kind else { return false }
+            // A macDring-only recents tab's contents can't change from an xbel write (its
+            // system source is empty until LP-19), so don't signal it — the same gate
+            // `recentsHits` applies, via `servesSystemRecents`, so the two can't drift.
+            return kind == "recents" ? tab.servesSystemRecents : true
+        }.map(\.id)
         for id in ids {
             await emitSignal("RecentsChanged", body: [.string(id)], signature: "s")
         }
@@ -422,9 +444,7 @@ public actor TopDrawerService {
             // launching, so its merge lands with LP-19; honor the recentsSource's system
             // part now. A macDring-only recents tab (the default) is therefore empty until
             // LP-19 — correct, since nothing has been launched yet.
-            let source = tab.recentsSource ?? "macDring"
-            let includesSystem = source == "system" || source == "both"
-            return includesSystem ? provider.systemRecents(limit: recentsLimit) : []
+            return tab.servesSystemRecents ? provider.systemRecents(limit: recentsLimit) : []
         case "fresh":
             return provider.fresh(limit: freshLimit)
         default:

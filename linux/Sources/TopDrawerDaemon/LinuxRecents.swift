@@ -101,14 +101,14 @@ public enum RecentlyUsedFile {
 /// filesystem doesn't record a birth time — FreshScanner's ladder, minus the macOS
 /// Date-Added attribute Linux doesn't have.
 public func linuxDateAdded(_ url: URL) -> Date? {
-    if let seconds = birthTimeSeconds(ofPath: url.path) {
-        return Date(timeIntervalSince1970: TimeInterval(seconds))
+    if let nanos = birthTimeNanos(ofPath: url.path) {
+        return Date(timeIntervalSince1970: TimeInterval(nanos) / 1e9)
     }
     let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
     return attrs?[.modificationDate] as? Date
 }
 
-private func birthTimeSeconds(ofPath path: String) -> Int64? {
+private func birthTimeNanos(ofPath path: String) -> Int64? {
     let value = path.withCString { topdrawer_file_btime($0) }
     return value >= 0 ? value : nil
 }
@@ -149,7 +149,13 @@ public struct LinuxRecentsProvider: RecentsProviding {
 
     public func systemRecents(limit: Int) -> [RecentFileHit] {
         guard let xml = try? String(contentsOf: xbelURL, encoding: .utf8) else { return [] }
-        return RecentlyUsedFile.hits(xbel: xml, limit: limit)
+        // The xbel keeps entries for files long since moved or trashed; macOS recents
+        // (Spotlight-backed) only ever list live files. Filter here — the impure
+        // boundary — so `RecentlyUsedFile.hits` stays pure/testable; over-fetch so dead
+        // entries don't starve the result below `limit`.
+        return Array(RecentlyUsedFile.hits(xbel: xml, limit: limit * 4)
+            .filter { FileManager.default.fileExists(atPath: $0.url.path) }
+            .prefix(limit))
     }
 
     public func fresh(limit: Int) -> [RecentFileHit] {
@@ -166,6 +172,16 @@ public struct TabInfo: Equatable {
     public let id: String
     public let kind: String
     public let recentsSource: String?   // "macDring" / "system" / "both" for a recents tab
+
+    /// Whether this recents tab draws (in part) from the system source
+    /// (`recently-used.xbel`) — recentsSource `system` or `both`. The single predicate
+    /// both `recentsHits` and the `RecentsChanged` fan-out use, so they can't drift
+    /// (a macDring-only tab neither serves xbel data nor should be signalled on an xbel
+    /// change). The `macDring` launch-history part lands with LP-19.
+    public var servesSystemRecents: Bool {
+        let source = recentsSource ?? "macDring"
+        return source == "system" || source == "both"
+    }
 }
 
 public enum LauncherTabs {

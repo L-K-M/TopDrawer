@@ -1,4 +1,5 @@
 import XCTest
+import MacDring
 @testable import TopDrawerDaemon
 
 /// Pure tests for the xbel parser, the recents window/sort, the file location, and the
@@ -21,7 +22,9 @@ final class LinuxRecentsTests: XCTestCase {
     func testParseExtractsFileBookmarksWithVisitedDate() {
         let hits = XbelParser.parse(xbel)
         XCTAssertEqual(hits.count, 3, "three file:// bookmarks; the http one is skipped")
-        let byName = Dictionary(uniqueKeysWithValues: hits.map { ($0.name, $0) })
+        // reduce(into:) not Dictionary(uniqueKeysWithValues:) — recents routinely hold
+        // the same basename in different folders, and the latter traps on a duplicate key.
+        let byName = hits.reduce(into: [String: RecentFileHit]()) { $0[$1.name] = $1 }
         XCTAssertNotNil(byName["report.pdf"])
         // %20 decodes back to a space in the path.
         XCTAssertEqual(byName["pic one.png"]?.url.path, "/home/alice/Downloads/pic one.png")
@@ -80,6 +83,43 @@ final class LinuxRecentsTests: XCTestCase {
         XCTAssertNil(LauncherTabs.find(id: "B", in: json)?.recentsSource)
         XCTAssertNil(LauncherTabs.find(id: "Z", in: json))
         XCTAssertTrue(LauncherTabs.all(in: "not json").isEmpty)
+    }
+
+    // MARK: - GetRecents resolution
+
+    private struct StubRecents: RecentsProviding {
+        var systemHits: [RecentFileHit] = []
+        var freshHits: [RecentFileHit] = []
+        func systemRecents(limit: Int) -> [RecentFileHit] { Array(systemHits.prefix(limit)) }
+        func fresh(limit: Int) -> [RecentFileHit] { Array(freshHits.prefix(limit)) }
+    }
+
+    func testRecentsHitsFollowsTabKindAndRecentsSource() {
+        let now = ISO8601DateFormatter().date(from: "2026-08-25T10:00:00Z")!
+        let hits = RecentlyUsedFile.hits(xbel: xbel, limit: 10, now: now)   // 2 within-window
+        let stub = StubRecents(systemHits: hits, freshHits: hits)
+        let json = #"{"version":1,"tabs":[{"id":"R","kind":"recents"},{"id":"S","kind":"recents","recentsSource":"system"},{"id":"B","kind":"recents","recentsSource":"both"},{"id":"F","kind":"fresh"},{"id":"I","kind":"items"}]}"#
+        XCTAssertTrue(TopDrawerService.recentsHits(forTab: "R", document: json, provider: stub).isEmpty,
+                      "default macDring source serves nothing until LP-19")
+        XCTAssertEqual(TopDrawerService.recentsHits(forTab: "S", document: json, provider: stub).count, 2)
+        XCTAssertEqual(TopDrawerService.recentsHits(forTab: "B", document: json, provider: stub).count, 2)
+        XCTAssertEqual(TopDrawerService.recentsHits(forTab: "F", document: json, provider: stub).count, 2)
+        XCTAssertTrue(TopDrawerService.recentsHits(forTab: "I", document: json, provider: stub).isEmpty,
+                      "an items tab has no recents")
+        XCTAssertTrue(TopDrawerService.recentsHits(forTab: "Z", document: json, provider: stub).isEmpty,
+                      "an unknown tab id is empty")
+    }
+
+    func testEncodeRecentsShape() {
+        XCTAssertEqual(TopDrawerService.encodeRecents([]), #"{"recents":[]}"#)
+        let hit = RecentFileHit(url: URL(fileURLWithPath: "/a/b.txt"), name: "b.txt",
+                                date: Date(timeIntervalSince1970: 5))
+        let json = TopDrawerService.encodeRecents([hit])
+        let root = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        let list = root?["recents"] as? [[String: Any]]
+        XCTAssertEqual(list?.first?["path"] as? String, "/a/b.txt")
+        XCTAssertEqual(list?.first?["name"] as? String, "b.txt")
+        XCTAssertEqual(list?.first?["date"] as? Double, 5)
     }
 
     #if os(Linux)

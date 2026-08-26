@@ -38,7 +38,11 @@ still stubs; LP-19 fills them in.
 - **Fresh** (`.fresh` tabs) reuse MacDring's `FreshScanner` ranking over the standard
   landing zones (Downloads/Desktop/Documents), with a Linux **birth-time** `dateAdded`
   via `statx(STATX_BTIME)` (a one-function C shim under `linux/Sources/CShims/`),
-  falling back to mtime where the filesystem doesn't record a birth time.
+  falling back to mtime where the filesystem doesn't record a birth time. **Caveat:** a
+  birth time is a *creation* time, not macOS's Date-Added (added-to-folder) time — a
+  file renamed into a landing zone from the same filesystem keeps its original birth
+  time and may never surface as Fresh. Capturing a "first-seen" time from the inotify
+  watch and ranking by `max(btime, firstSeen)` is a recorded follow-up.
 - Change detection: `recently-used.xbel` is a single file in the busy `$XDG_DATA_HOME`,
   so it's **polled** (mtime); the Fresh landing zones are real directories, so each is
   **inotify-watched**. Either fires `RecentsChanged(tabID)` for every affected tab.
