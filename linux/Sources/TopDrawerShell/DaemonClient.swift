@@ -104,8 +104,10 @@ public enum DaemonClient {
     /// What the watch loop reacts to.
     private enum WatchEvent { case documentChanged, ownerGained, ownerLost }
 
-    /// Merges the two subscriptions into one event stream; both child tasks end with
-    /// the merged stream's termination.
+    /// Merges the two subscriptions into one event stream. The supervisor task
+    /// finishes the merged stream once both sources end (our own connection dying) —
+    /// without it the consumer's for-await would hang forever and the retry loop
+    /// would never see "watch streams ended".
     private static func watchEvents(_ changes: AsyncStream<DBusMessage>,
                                      _ owners: AsyncStream<DBusMessage>) -> AsyncStream<WatchEvent> {
         AsyncStream { continuation in
@@ -119,6 +121,10 @@ public enum DaemonClient {
                     let newOwner = message.body.dropFirst(2).first?.string ?? ""
                     continuation.yield(newOwner.isEmpty ? .ownerLost : .ownerGained)
                 }
+            }
+            Task {
+                _ = await (documents.value, ownership.value)
+                continuation.finish()   // no-op if we already threw or were cancelled
             }
             continuation.onTermination = { _ in
                 documents.cancel()

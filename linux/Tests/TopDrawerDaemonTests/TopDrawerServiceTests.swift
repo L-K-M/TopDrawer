@@ -20,7 +20,8 @@ final class TopDrawerServiceTests: XCTestCase {
 
     override func setUpWithError() throws {
         try XCTSkipIf(
-            ProcessInfo.processInfo.environment["TOPDRAWER_PRIVATE_TEST_BUS"] == nil,
+            ProcessInfo.processInfo.environment["TOPDRAWER_PRIVATE_TEST_BUS"] == nil
+                || ProcessInfo.processInfo.environment["DBUS_SESSION_BUS_ADDRESS"] == nil,
             "not a private test bus — run under `dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test --package-path linux`")
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("topdrawerd-svc-\(UUID().uuidString)", isDirectory: true)

@@ -27,7 +27,8 @@ final class DaemonClientTests: XCTestCase {
 
     override func setUpWithError() throws {
         try XCTSkipIf(
-            ProcessInfo.processInfo.environment[Self.privateTestBusFlag] == nil,
+            ProcessInfo.processInfo.environment[Self.privateTestBusFlag] == nil
+                || ProcessInfo.processInfo.environment["DBUS_SESSION_BUS_ADDRESS"] == nil,
             "not a private test bus — run under `dbus-run-session -- env \(Self.privateTestBusFlag)=1 swift test --package-path linux`")
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("topdrawer-shell-\(UUID().uuidString)", isDirectory: true)
