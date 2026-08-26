@@ -55,9 +55,12 @@ public struct GioTrashService: TrashServicing {
     public func trash(_ urls: [URL]) -> Bool {
         guard !urls.isEmpty else { return true }
         // One invocation per file so a single unmovable file doesn't sink the rest, and
-        // the aggregate result reflects whether *all* succeeded (matches macOS).
+        // the aggregate result reflects whether *all* succeeded (matches macOS). A 5s
+        // budget per file matches the eject probes' bounding: a same-volume trash is a
+        // millisecond rename, so this only cuts off a wedged source (a dead FUSE/NFS
+        // mount) rather than blocking the handler 15s × N once drops wire this in.
         return urls.reduce(true) { ok, url in
-            LinuxProcess.succeeds("gio", ["trash", url.path]) && ok
+            LinuxProcess.succeeds("gio", ["trash", url.path], timeout: 5) && ok
         }
     }
 
