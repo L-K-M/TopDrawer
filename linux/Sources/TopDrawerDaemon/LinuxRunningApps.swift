@@ -8,10 +8,11 @@ import Foundation
 /// port targets for the stock-GNOME tier (Shell introspection is allow-listed away).
 public enum RunningAppScope {
 
-    /// Known launcher prefixes systemd inserts before the application id. `glib` and `gnome`
-    /// are systemd's two canonical launcher ids: GLib's `GDesktopAppInfo` (behind `gio
-    /// launch` / `gtk-launch`, and so behind this daemon's own `Launch`/`OpenWith`) tags its
-    /// scopes `app-glib-<id>-<pid>.scope` whenever the app isn't started by GNOME Shell.
+    /// Launcher prefixes that the launching process puts before the application id in the
+    /// scope name it asks systemd to create. The two seen on stock GNOME: GNOME Shell emits
+    /// `gnome-`, and GLib's `GDesktopAppInfo` (behind `gio launch` / `gtk-launch`, and so
+    /// behind this daemon's own `Launch`/`OpenWith`) tags its scopes
+    /// `app-glib-<id>-<pid>.scope` whenever the app isn't started by GNOME Shell.
     private static let launchers = ["gnome-", "glib-", "flatpak-", "kde-", "snap-"]
 
     /// The desktop-file id embedded in a scope unit name, or `nil` if `scope` isn't an
