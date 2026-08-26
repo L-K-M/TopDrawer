@@ -114,6 +114,8 @@ final class DesktopEntryTests: XCTestCase {
                        ["app", "/a"])           // %f = a single local file path
         XCTAssertEqual(DesktopEntry.execArgv("app %F", uris: ["file:///a", "file:///b"]),
                        ["app", "/a", "/b"])     // %F = the file paths as separate args
+        XCTAssertEqual(DesktopEntry.execArgv("app %f", uris: ["file:///tmp/a%20b.txt"]),
+                       ["app", "/tmp/a b.txt"]) // %f percent-decodes the URI into a local path
         XCTAssertEqual(DesktopEntry.execArgv("app --flag %i %c %k", uris: []),
                        ["app", "--flag"])       // dropped deprecated codes
     }
@@ -224,9 +226,12 @@ final class DesktopEntryTests: XCTestCase {
         try "[Desktop Entry]\nType=Application\nName=Foo\nExec=foo"
             .write(to: sysDir.appendingPathComponent("foo.desktop"), atomically: true, encoding: .utf8)
 
-        // The user override must MASK the system copy, not fall through to it.
+        // The user override must MASK the system copy, not fall through to it — in both the
+        // listing (scan) and the resolve/launch path (entry(forID:)).
         XCTAssertTrue(DesktopEntryScanner.scan(dirs: [userDir, sysDir]).isEmpty,
                       "a Hidden user override hides the system app entirely")
+        XCTAssertNil(DesktopEntryScanner.entry(forID: "foo", in: [userDir, sysDir]),
+                     "a Hidden override also masks the id for resolution, so a stale pin can't launch it")
     }
 
     func testEntryForIDFallsThroughWhenUserOverrideIsCorrupt() throws {

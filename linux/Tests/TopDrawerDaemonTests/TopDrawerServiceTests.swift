@@ -441,7 +441,7 @@ final class TopDrawerServiceTests: XCTestCase {
         try writeDocument(#"{"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"both"}]}"#)
         let sys = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "same.txt",
                                 date: Date(timeIntervalSince1970: 1_000))
-        let mac = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "same.txt",
+        let mac = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "mac-same.txt",
                                 date: Date(timeIntervalSince1970: 2_000))
         startServer(recentsProvider: FakeRecentsProvider(system: [sys]),
                     recorder: FakeRecorder(canned: [mac]))
@@ -449,6 +449,8 @@ final class TopDrawerServiceTests: XCTestCase {
             _ = try await self.callReady(client, method: "Ping")
             let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
             XCTAssertEqual(list.count, 1, "a file present in both sources appears once")
+            XCTAssertEqual(list.first?["name"] as? String, "mac-same.txt",
+                           "the newer macDring record wins the URL dedupe (newest-first)")
         }
     }
 

@@ -197,10 +197,15 @@ public enum DesktopEntryScanner {
         for dir in dirs {
             for (candidateID, fileURL) in desktopFiles(in: dir, fileManager: fileManager)
             where candidateID == id {
-                // Only return on a successful parse, so a corrupt higher-precedence override
+                // Only act on a successful parse, so a corrupt higher-precedence override
                 // falls through to a valid system copy rather than failing the lookup.
                 if let text = try? String(contentsOf: fileURL, encoding: .utf8),
                    let entry = DesktopEntry.parse(text, id: id, path: fileURL) {
+                    // A `Hidden=true` override means the user removed the app: mask the id
+                    // here too (consistent with `scan`), so a stale pin can't launch it. A
+                    // `NoDisplay` entry is still resolvable — it's a legitimate (menu-hidden)
+                    // handler — so gate on `hidden` only, not the full `isShown`.
+                    guard !entry.hidden else { return nil }
                     return entry
                 }
             }
