@@ -10,7 +10,10 @@ import Foundation
 ///
 /// Named after the classic "Fresh"-style utilities that surface the file you just
 /// grabbed so you don't have to go hunting for where it landed.
-enum FreshLister {
+///
+/// `public` only so the Linux daemon can read `scopes` (the Fresh landing zones); the
+/// `items`/`merge` helpers stay module-internal.
+public enum FreshLister {
     /// Cap so a busy Downloads folder can't blow up the drawer.
     static let limit = 40
 
@@ -45,8 +48,9 @@ enum FreshLister {
 
     /// The directories a Fresh tab scans: the usual landing zones for new files.
     /// Reading them via Spotlight needs no special permission, and a missing folder
-    /// simply contributes nothing. `home` is injectable for tests.
-    static func scopes(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
+    /// simply contributes nothing. `home` is injectable for tests. `public` so the Linux
+    /// daemon scans the same zones.
+    public static func scopes(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
         ["Downloads", "Desktop", "Documents"].map {
             home.appendingPathComponent($0, isDirectory: true)
         }

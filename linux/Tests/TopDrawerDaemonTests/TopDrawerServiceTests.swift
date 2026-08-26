@@ -80,10 +80,10 @@ final class TopDrawerServiceTests: XCTestCase {
             let xml = try XCTUnwrap(reply?.body.first?.string)
             XCTAssertTrue(xml.contains(#"interface name="ch.lkmc.TopDrawer1""#), xml)
             for method in ["Ping", "GetDocument", "GetVolumes", "Eject", "GetTrashState",
-                           "Launch", "AddDroppedURIs"] {
+                           "GetRecents", "Launch", "AddDroppedURIs"] {
                 XCTAssertTrue(xml.contains(#"method name="\#(method)""#), "missing \(method) in \(xml)")
             }
-            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged"] {
+            for signal in ["DocumentChanged", "VolumesChanged", "TrashChanged", "RecentsChanged"] {
                 XCTAssertTrue(xml.contains(#"signal name="\#(signal)""#), "missing \(signal) in \(xml)")
             }
         }
@@ -191,7 +191,7 @@ final class TopDrawerServiceTests: XCTestCase {
             // Trash files repeatedly (each new file bumps the count → a fresh
             // TrashChanged) while waiting, so a single emit that races the bus
             // subscription becoming effective can't make this flaky.
-            let writer = Self.repeatedlyTrashFiles(into: files)
+            let writer = Self.repeatedlyCreateFiles(in: files)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
             writer.cancel()
             XCTAssertNotNil(received, "TrashChanged should fire after the Trash changes")
@@ -219,17 +219,105 @@ final class TopDrawerServiceTests: XCTestCase {
                 interface: TopDrawerService.interfaceName, member: "TrashChanged")
 
             try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
-            let writer = Self.repeatedlyTrashFiles(into: files)
+            let writer = Self.repeatedlyCreateFiles(in: files)
             let received = await Self.firstElement(of: signals, timeout: .seconds(10))
             writer.cancel()
             XCTAssertNotNil(received, "the poll backstop should deliver TrashChanged on a fresh profile")
         }
     }
 
-    /// Writes a fresh file into `directory` every 300ms until cancelled — each write
-    /// bumps the trashed-item count, so a single `TrashChanged` emit that races the bus
+    // MARK: - LP-18: recents / fresh
+
+    private func writeDocument(_ json: String) throws {
+        try json.write(to: launcherURL, atomically: true, encoding: .utf8)
+    }
+
+    private func recentsList(_ reply: DBusMessage) throws -> [[String: Any]] {
+        let json = try XCTUnwrap(reply.body.first?.string)
+        let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        return try XCTUnwrap(root?["recents"] as? [[String: Any]])
+    }
+
+    func testGetRecentsServesSystemRecentsForARecentsTab() async throws {
+        try writeDocument(#"{"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"system"}]}"#)
+        let hit = RecentFileHit(url: URL(fileURLWithPath: "/home/alice/report.pdf"),
+                                name: "report.pdf", date: Date(timeIntervalSince1970: 1_000_000))
+        startServer(recentsProvider: FakeRecentsProvider(system: [hit]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
+            XCTAssertEqual(list.count, 1)
+            XCTAssertEqual(list.first?["name"] as? String, "report.pdf")
+            XCTAssertEqual(list.first?["path"] as? String, "/home/alice/report.pdf")
+            // Pin the documented wire contract: `date` is Unix epoch seconds, not a
+            // string, not milliseconds. `as? Double` is robust to Int/Double NSNumber
+            // bridging (same cast the encode-shape unit test uses).
+            XCTAssertEqual(list.first?["date"] as? Double, 1_000_000,
+                           "date must be Unix epoch seconds as a JSON number — not a string, not milliseconds")
+        }
+    }
+
+    func testGetRecentsServesFreshForAFreshTab() async throws {
+        try writeDocument(#"{"version":1,"tabs":[{"id":"fr","kind":"fresh"}]}"#)
+        let hit = RecentFileHit(url: URL(fileURLWithPath: "/home/alice/Downloads/new.zip"),
+                                name: "new.zip", date: Date(timeIntervalSince1970: 2_000_000))
+        startServer(recentsProvider: FakeRecentsProvider(freshHits: [hit]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("fr")]))
+            XCTAssertEqual(list.first?["name"] as? String, "new.zip")
+        }
+    }
+
+    func testGetRecentsIsEmptyForNonRecentsAndMacDringOnlyTabs() async throws {
+        try writeDocument(#"""
+        {"version":1,"tabs":[{"id":"items","kind":"items"},{"id":"mac","kind":"recents","recentsSource":"macDring"}]}
+        """#)
+        let hit = RecentFileHit(url: URL(fileURLWithPath: "/x"), name: "x", date: Date(timeIntervalSince1970: 1))
+        startServer(recentsProvider: FakeRecentsProvider(system: [hit], freshHits: [hit]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let itemsList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("items")]))
+            XCTAssertTrue(itemsList.isEmpty, "an items tab has no recents")
+            let macList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("mac")]))
+            XCTAssertTrue(macList.isEmpty, "a macDring-only recents tab is empty until LP-19 (system source excluded)")
+            // A tab id absent from the document hits the lookup-miss path (not a kind
+            // mismatch); it too returns {"recents":[]}, matching the README's "any other tab".
+            let unknownList = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("does-not-exist")]))
+            XCTAssertTrue(unknownList.isEmpty, #"an unknown tab id also returns {"recents":[]}"#)
+        }
+    }
+
+    func testRecentsChangedFiresWhenAFreshScopeChanges() async throws {
+        try writeDocument(#"{"version":1,"tabs":[{"id":"fr","kind":"fresh"}]}"#)
+        let scope = tempDir.appendingPathComponent("Downloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: scope, withIntermediateDirectories: true)
+        startServer(freshScopes: [scope])
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RecentsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RecentsChanged")
+
+            // A file arriving in the Fresh scope should fire RecentsChanged for the fresh tab.
+            let writer = Self.repeatedlyCreateFiles(in: scope)
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            writer.cancel()
+            XCTAssertEqual(received?.member, "RecentsChanged")
+            XCTAssertEqual(received?.body.first?.string, "fr", "the affected fresh tab's id is carried")
+        }
+    }
+
+    /// Creates a fresh file in `directory` every 300ms until cancelled. Used by both the
+    /// Trash tests (each new file bumps the trashed-item count) and the fresh-scope test
+    /// (each new file is a Fresh arrival), so a single signal emit that races the bus
     /// subscription setup can't make the signal tests flaky (the next write emits again).
-    private static func repeatedlyTrashFiles(into directory: URL) -> Task<Void, Never> {
+    private static func repeatedlyCreateFiles(in directory: URL) -> Task<Void, Never> {
         Task {
             for i in 0..<50 {
                 if Task.isCancelled { break }
@@ -267,15 +355,27 @@ final class TopDrawerServiceTests: XCTestCase {
     private func startServer(volumeSource: VolumeSnapshotProviding = ProcMounts(),
                              trashService: TrashServicing = FakeTrashService(count: 0),
                              trashDirectory: URL? = nil,
-                             ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject) {
+                             ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject,
+                             recentsProvider: RecentsProviding = FakeRecentsProvider(),
+                             xbelLocation: URL? = nil,
+                             freshScopes: [URL]? = nil) {
         let source = LauncherDocumentSource(url: launcherURL)
         let trashDir = trashDirectory ?? tempDir.appendingPathComponent("trash", isDirectory: true)
+        // Default the recents watches at hermetic temp paths so a test never polls the
+        // developer's real recently-used.xbel or watches their real Downloads/Desktop.
+        let xbel = xbelLocation ?? tempDir.appendingPathComponent("recently-used.xbel")
+        // Create the hermetic default scope so the default watch target always exists
+        // (a caller-supplied freshScopes is left as-is).
+        let defaultScope = tempDir.appendingPathComponent("fresh-scope", isDirectory: true)
+        try? FileManager.default.createDirectory(at: defaultScope, withIntermediateDirectories: true)
+        let scopes = freshScopes ?? [defaultScope]
         serverTask = Task {
             do {
                 try await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
                     let service = TopDrawerService(
                         source: source, volumeSource: volumeSource, trashService: trashService,
-                        trashDirectory: trashDir, ejector: ejector)
+                        trashDirectory: trashDir, ejector: ejector,
+                        recentsProvider: recentsProvider, xbelLocation: xbel, freshScopes: scopes)
                     try await service.run(on: connection, watchInterval: .milliseconds(200))
                     // Keep the export alive for the duration of the test; tearDown cancels us.
                     try await Task.sleep(for: .seconds(30))
@@ -356,6 +456,15 @@ private struct DirCountingTrashService: TrashServicing {
     func trashIsEmpty() -> Bool { trashCount() == 0 }
     func trash(_ urls: [URL]) -> Bool { true }
     func emptyTrash() -> Bool { true }
+}
+
+/// Fixed recents/fresh snapshots, so `GetRecents` is deterministic without a real
+/// `recently-used.xbel` or filesystem scan.
+private struct FakeRecentsProvider: RecentsProviding {
+    var system: [RecentFileHit] = []
+    var freshHits: [RecentFileHit] = []
+    func systemRecents(limit: Int) -> [RecentFileHit] { Array(system.prefix(limit)) }
+    func fresh(limit: Int) -> [RecentFileHit] { Array(freshHits.prefix(limit)) }
 }
 
 /// Records every volume handed to the ejector, so a test can prove the call happened

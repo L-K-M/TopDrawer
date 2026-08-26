@@ -8,16 +8,26 @@ import Foundation
 // preserved there as typealiases so existing macOS call sites are unchanged.
 
 /// A single indexed or scanned file: where it lives, its display name, and the
-/// ranking date (last-used or date-added, per the query mode).
-struct RecentFileHit: Equatable {
-    let url: URL
-    let name: String
-    let date: Date
+/// ranking date (last-used or date-added, per the query mode). `public` so the Linux
+/// `topdrawerd` package can produce these from `recently-used.xbel` / a fresh scan and
+/// feed them through `FreshScanner`; all members are standard-library types, so this
+/// pulls no other type public.
+public struct RecentFileHit: Equatable, Sendable {
+    public let url: URL
+    public let name: String
+    public let date: Date
+
+    public init(url: URL, name: String, date: Date) {
+        self.url = url
+        self.name = name
+        self.date = date
+    }
 }
 
 /// What a recents/fresh lookup ranks by: most-recently **used** (Recents) or
 /// most-recently **added** (Fresh — downloaded / copied / saved into its folder).
-enum RecentQueryMode {
+/// `public` so the Linux daemon can share the cutoff windows.
+public enum RecentQueryMode {
     case lastUsed
     case dateAdded
 
@@ -27,7 +37,7 @@ enum RecentQueryMode {
 
     /// How far back to look. "Recent" is the whole point, so a window keeps the query
     /// light and the result meaningful (no need to gather the entire index).
-    var window: TimeInterval {
+    public var window: TimeInterval {
         switch self {
         case .lastUsed: return 90 * 24 * 60 * 60
         case .dateAdded: return 30 * 24 * 60 * 60

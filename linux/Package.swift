@@ -51,8 +51,14 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log", condition: .when(platforms: [.linux])),
                 // VolumeListing / TrashServicing seams + INotifyWatcher (LP-17).
                 .product(name: "MacDring", package: "MacDring"),
+                // statx(STATX_BTIME) birth-time shim for the Fresh scan (LP-18).
+                .target(name: "CShims", condition: .when(platforms: [.linux])),
             ]
         ),
+        // A tiny C target: one function (topdrawer_file_btime) over statx, because
+        // Glibc doesn't reliably expose statx/STATX_BTIME to Swift (LP-18). Header-and-
+        // one-.c; the non-Linux stub returns -1 so it still parses off Linux.
+        .target(name: "CShims"),
         .executableTarget(
             name: "topdrawerd",
             dependencies: ["TopDrawerDaemon"]
