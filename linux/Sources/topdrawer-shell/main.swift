@@ -69,19 +69,25 @@ gtk_layer_set_margin(asWindow(window), GTK_LAYER_SHELL_EDGE_RIGHT, edge == .righ
 gtk_layer_set_exclusive_zone(asWindow(window), 0)
 
 // `--monitor <index>` pins the strip to one output; without it the compositor picks.
-if let flag = CommandLine.arguments.firstIndex(of: "--monitor"),
-   CommandLine.arguments.indices.contains(flag + 1),
-   let index = Int(CommandLine.arguments[flag + 1]),
-   let display = gdk_display_get_default() {
-    let monitors = gdk_display_get_monitors(display)
-    let count = g_list_model_get_n_items(monitors)
-    // `index >= 0`: UInt32(negative) traps rather than failing, and a hostile/typo'd
-    // `--monitor -1` shouldn't crash the dock.
-    if index >= 0, UInt32(index) < count, let raw = g_list_model_get_item(monitors, UInt32(index)) {
-        gtk_layer_set_monitor(asWindow(window), OpaquePointer(raw))
-        g_object_unref(raw)
+if let flag = CommandLine.arguments.firstIndex(of: "--monitor") {
+    if CommandLine.arguments.indices.contains(flag + 1),
+       let index = Int(CommandLine.arguments[flag + 1]),
+       index >= 0,
+       let display = gdk_display_get_default() {
+        let monitors = gdk_display_get_monitors(display)
+        let count = g_list_model_get_n_items(monitors)
+        if UInt32(index) < count, let raw = g_list_model_get_item(monitors, UInt32(index)) {
+            gtk_layer_set_monitor(asWindow(window), OpaquePointer(raw))
+            g_object_unref(raw)
+        } else {
+            logger.warning("no monitor #\(index) (have \(count)) — leaving the choice to the compositor")
+        }
     } else {
-        logger.warning("no monitor #\(index) (have \(count)) — leaving the choice to the compositor")
+        // Same contract as --edge: present-but-bad falls back to the default, loudly —
+        // a typo'd index (or a connector name like eDP-1) would otherwise land the
+        // strip on the wrong output with a normal-looking startup log. `index >= 0`
+        // stays in the guard: UInt32(negative) traps rather than failing.
+        logger.warning("--monitor expects a non-negative index — leaving the choice to the compositor")
     }
 }
 
