@@ -141,13 +141,20 @@ public actor TopDrawerService {
             await server.handle(message: message)
         }
 
-        try await claimBusName(on: connection)
-
+        // Baselines BEFORE the name is claimed: once `ch.lkmc.TopDrawer` appears on the
+        // bus a client may act immediately, so every "current state" the first poll
+        // tick diffs against must already be captured — otherwise a change a client
+        // makes right after seeing the name (a test's fake flip; a real frontend's
+        // first query racing startup) can land *between* claim and snapshot and be
+        // silently swallowed by an equal-baseline diff.
         lastModified = source.modificationDate()
         lastVolumes = volumeSource.volumes()
         lastTrashCount = trashService.trashCount()
         lastRunningApps = runningApps.runningAppIDs() ?? []
         lastXbelModified = xbelModificationDate()
+
+        try await claimBusName(on: connection)
+
         startTrashWatcher()
         startFreshWatchers()
         startWatching(interval: watchInterval)
