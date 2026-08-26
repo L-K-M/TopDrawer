@@ -465,7 +465,9 @@ final class TopDrawerServiceTests: XCTestCase {
             let reply = try await self.call(client, method: "GetRunningAppIDs")
             let json = try XCTUnwrap(reply.body.first?.string)
             let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
-            XCTAssertEqual(root?["appIDs"] as? [String], ["com.example.App", "org.gnome.Nautilus"])
+            // A set semantically, so compare order-insensitively.
+            XCTAssertEqual((root?["appIDs"] as? [String])?.sorted(),
+                           ["com.example.App", "org.gnome.Nautilus"])
         }
     }
 
@@ -474,8 +476,11 @@ final class TopDrawerServiceTests: XCTestCase {
         try await withClient { client in
             _ = try await self.callReady(client, method: "Ping")
             let reply = try await self.call(client, method: "GetRunningAppIDs")
-            XCTAssertEqual(reply.body.first?.string, #"{"appIDs":[]}"#,
-                           "the empty set is still valid JSON (not a mis-signed empty D-Bus array)")
+            // Unwrapping `.string` also proves the reply is a JSON *string* (`s`), not a
+            // mis-signed empty native D-Bus array; parse rather than pin exact formatting.
+            let json = try XCTUnwrap(reply.body.first?.string)
+            let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            XCTAssertEqual(root?["appIDs"] as? [String], [], json)
         }
     }
 

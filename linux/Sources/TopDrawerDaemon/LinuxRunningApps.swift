@@ -8,8 +8,11 @@ import Foundation
 /// port targets for the stock-GNOME tier (Shell introspection is allow-listed away).
 public enum RunningAppScope {
 
-    /// Known launcher prefixes systemd inserts before the application id.
-    private static let launchers = ["gnome-", "flatpak-", "kde-", "snap-"]
+    /// Known launcher prefixes systemd inserts before the application id. `glib` and `gnome`
+    /// are systemd's two canonical launcher ids: GLib's `GDesktopAppInfo` (behind `gio
+    /// launch` / `gtk-launch`, and so behind this daemon's own `Launch`/`OpenWith`) tags its
+    /// scopes `app-glib-<id>-<pid>.scope` whenever the app isn't started by GNOME Shell.
+    private static let launchers = ["gnome-", "glib-", "flatpak-", "kde-", "snap-"]
 
     /// The desktop-file id embedded in a scope unit name, or `nil` if `scope` isn't an
     /// `app-*.scope`. E.g. `app-gnome-org.gnome.Nautilus-2468.scope` → `org.gnome.Nautilus`.
@@ -66,8 +69,10 @@ public struct ProcRunningApps: RunningAppsScanning {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: procRoot.path) else { return [] }
         var ids = Set<String>()
-        // Numeric entries are process directories; skip `self`, `sys`, etc.
-        for pid in entries where !pid.isEmpty && pid.allSatisfy(\.isNumber) {
+        // ASCII-numeric entries are process directories; skip `self`, `sys`, etc.
+        // `Character.isNumber` also accepts non-ASCII numerals (e.g. `٣`, `²`), so gate on
+        // ASCII to match what a real `/proc` (and the guard's intent) actually holds.
+        for pid in entries where !pid.isEmpty && pid.allSatisfy({ $0.isASCII && $0.isNumber }) {
             let cgroup = procRoot.appendingPathComponent(pid, isDirectory: true)
                 .appendingPathComponent("cgroup")
             guard let content = try? String(contentsOf: cgroup, encoding: .utf8) else { continue }

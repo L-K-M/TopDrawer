@@ -13,6 +13,14 @@ final class LinuxRunningAppsTests: XCTestCase {
                        "org.gnome.Nautilus")
     }
 
+    func testParsesGlibScopeName() {
+        // GLib's GDesktopAppInfo (behind `gio launch`/`gtk-launch`, so behind the daemon's
+        // own Launch/OpenWith) tags scopes `app-glib-<id>-<pid>.scope` — the most common
+        // launch path on stock GNOME.
+        XCTAssertEqual(RunningAppScope.desktopID(fromScopeName: "app-glib-org.gnome.Calculator-4321.scope"),
+                       "org.gnome.Calculator")
+    }
+
     func testParsesFlatpakScopeName() {
         XCTAssertEqual(RunningAppScope.desktopID(fromScopeName: "app-flatpak-com.example.App-4812.scope"),
                        "com.example.App")
