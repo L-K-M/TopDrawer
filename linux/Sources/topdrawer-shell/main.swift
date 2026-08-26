@@ -108,7 +108,7 @@ gtkConnectClickReleased(click) { x, y in
     logger.info("strip clicked at (\(Int(x)), \(Int(y)))")
 }
 
-gtkConnect(asOpaque(window), signal: "close-request") {
+gtkConnectCloseRequest(window) {
     logger.info("strip closed")
     exit(0)
 }

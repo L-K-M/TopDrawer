@@ -91,6 +91,23 @@ private let noArgTrampoline: @convention(c) (OpaquePointer?, gpointer?) -> Void 
     Unmanaged<GtkCallback>.fromOpaque(data).takeUnretainedValue().action()
 }
 
+/// `close-request` on a GtkWindow: (window, user_data) -> gboolean. Returning FALSE
+/// lets GTK's default close handling run — a void trampoline here would leave the
+/// return register undefined (calling through a mismatched prototype is UB, and a
+/// garbage TRUE would stop the default handler).
+func gtkConnectCloseRequest<P>(_ window: UnsafeMutablePointer<P>?,
+                               _ action: @escaping () -> Void) {
+    gtkConnectRaw(window.map { UnsafeMutableRawPointer($0) }, signal: "close-request",
+                  trampoline: unsafeBitCast(closeRequestTrampoline, to: GCallback.self),
+                  box: Unmanaged.passRetained(GtkCallback(action)).toOpaque(),
+                  destroy: gtkCallbackDestroy)
+}
+
+private let closeRequestTrampoline: @convention(c) (OpaquePointer?, gpointer?) -> gboolean = { _, data in
+    if let data { Unmanaged<GtkCallback>.fromOpaque(data).takeUnretainedValue().action() }
+    return 0
+}
+
 /// `enter` on a GtkEventControllerMotion: (controller, x, y, user_data).
 func gtkConnectEnter(_ controller: OpaquePointer?,
                      _ action: @escaping (Double, Double) -> Void) {
