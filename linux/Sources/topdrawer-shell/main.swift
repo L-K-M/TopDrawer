@@ -103,26 +103,33 @@ gtkConnectClickReleased(click) { x, y in
     logger.info("strip clicked at (\(Int(x)), \(Int(y)))")
 }
 
-gtkConnect(window.map { OpaquePointer($0) }, signal: "close-request") {
+gtkConnect(window, signal: "close-request") {
     logger.info("strip closed")
     exit(0)
 }
 
 // MARK: - Content from the daemon
 
+@Sendable
 func renderTabs(_ tabs: [ShellTab]) {
     let text = tabs.map(\.title).joined(separator: "  ·  ")
     gtk_label_set_text(stripLabel, text.isEmpty ? "Top Drawer — no tabs" : text)
 }
 
 Task.detached(priority: .utility) {
-    await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
-        await DaemonClient.observeTabs(
-            connection,
-            onChange: { tabs in onMainLoop { renderTabs(tabs) } },
-            onError: { error in
-                logger.warning("daemon unavailable: \(String(describing: error)) — retrying")
-            })
+    do {
+        try await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
+            await DaemonClient.observeTabs(
+                connection,
+                onChange: { tabs in onMainLoop { renderTabs(tabs) } },
+                onError: { error in
+                    logger.warning("daemon unavailable: \(String(describing: error)) — retrying")
+                })
+        }
+    } catch {
+        // A session-bus failure ends the watch permanently; the strip keeps its last
+        // content and the message says why (a dock shouldn't crash the session).
+        logger.error("D-Bus session connection failed: \(String(describing: error))")
     }
 }
 
