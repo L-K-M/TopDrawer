@@ -149,9 +149,13 @@ public actor TopDrawerService {
                 let volumeID = context.arguments.first?.string ?? ""
                 // Resolve the id (mount point) to a live volume before ejecting, so a
                 // stale id from an already-unmounted volume just fails rather than
-                // ejecting the wrong device.
-                guard let volume = volumeSource.volumes().first(where: { $0.id == volumeID }) else {
-                    logger.info("Eject(\(volumeID)): no such volume")
+                // ejecting the wrong device. Also enforce `ejectable` server-side:
+                // GetVolumes returns non-ejectable entries (e.g. a Dropbox folder), and
+                // a client mustn't be able to drive one into VolumeEjector — reject it at
+                // the boundary rather than spawning subprocesses doomed against a non-mount.
+                guard let volume = volumeSource.volumes().first(where: { $0.id == volumeID }),
+                      volume.ejectable else {
+                    logger.info("Eject(\(volumeID)): no such ejectable volume")
                     return [.boolean(false)]
                 }
                 return [.boolean(ejector(volume))]

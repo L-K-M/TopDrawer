@@ -149,18 +149,24 @@ final class TopDrawerServiceTests: XCTestCase {
     func testEjectResolvesTheVolumeIDAndInvokesTheEjector() async throws {
         let volume = LinuxVolume(id: "/media/alice/USB", name: "USB", path: "/media/alice/USB",
                                  kind: .disk, device: "/dev/sdb1", ejectable: true)
+        // A non-ejectable entry GetVolumes also returns (a Dropbox folder) — the server
+        // must refuse to hand it to the ejector.
+        let folder = LinuxVolume(id: "/home/alice/Dropbox", name: "Dropbox", path: "/home/alice/Dropbox",
+                                 kind: .cloud, device: "/home/alice/Dropbox", ejectable: false)
         let spy = EjectSpy()
-        startServer(volumeSource: FakeVolumeSource([volume]), ejector: spy.eject)
+        startServer(volumeSource: FakeVolumeSource([volume, folder]), ejector: spy.eject)
         try await withClient { client in
             _ = try await self.callReady(client, method: "Ping")
             let unknown = try await self.call(client, method: "Eject", body: [.string("/no/such")])
             XCTAssertEqual(unknown.body.first?.boolean, false, "an unknown id ejects nothing")
-            XCTAssertTrue(spy.recordedDevices.isEmpty, "an unknown id must not reach the ejector")
+
+            let nonEjectable = try await self.call(client, method: "Eject", body: [.string("/home/alice/Dropbox")])
+            XCTAssertEqual(nonEjectable.body.first?.boolean, false, "a non-ejectable volume is refused")
 
             let known = try await self.call(client, method: "Eject", body: [.string("/media/alice/USB")])
-            XCTAssertEqual(known.body.first?.boolean, true, "a known id is handed to the ejector")
+            XCTAssertEqual(known.body.first?.boolean, true, "a known ejectable id is handed to the ejector")
             XCTAssertEqual(spy.recordedDevices, ["/dev/sdb1"],
-                           "Eject must invoke the ejector with the resolved volume")
+                           "only the ejectable volume reaches the ejector — not the unknown or non-ejectable ids")
         }
     }
 
