@@ -12,14 +12,21 @@ import XCTest
 /// linux`; plain `swift test` skips these, exactly like the daemon's own tests).
 final class DaemonClientTests: XCTestCase {
 
+    /// These tests claim the daemon's well-known name on the bus they're given, so
+    /// they must only run on a throwaway `dbus-run-session` bus — never a desktop's
+    /// live session bus, where `DBUS_SESSION_BUS_ADDRESS` is always set and the mock
+    /// would shadow (or fight) a real topdrawerd. The sentinel is the opt-in marker
+    /// `dbus-run-session` can't provide by itself.
+    static let privateTestBusFlag = "TOPDRAWER_PRIVATE_TEST_BUS"
+
     private var tempDir: URL!
     private var launcherURL: URL!
     private var serverTask: Task<Void, Never>?
 
     override func setUpWithError() throws {
         try XCTSkipIf(
-            ProcessInfo.processInfo.environment["DBUS_SESSION_BUS_ADDRESS"] == nil,
-            "no session bus — run under `dbus-run-session -- swift test --package-path linux`")
+            ProcessInfo.processInfo.environment[Self.privateTestBusFlag] == nil,
+            "not a private test bus — run under `dbus-run-session -- env \(Self.privateTestBusFlag)=1 swift test --package-path linux`")
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("topdrawer-shell-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

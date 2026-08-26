@@ -87,4 +87,4 @@ jobs:
         run: swift build -v --package-path linux --disable-automatic-resolution
 
       - name: Test the Linux daemon package (under a private session bus)
-        run: dbus-run-session -- swift test -v --package-path linux --disable-automatic-resolution
+        run: dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test -v --package-path linux --disable-automatic-resolution

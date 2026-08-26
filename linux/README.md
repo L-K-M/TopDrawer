@@ -216,15 +216,18 @@ busctl --user monitor ch.lkmc.TopDrawer
 ## Tests
 
 The unit tests cover the document source; the end-to-end tests export a real service
-and call it over D-Bus, so they need a session bus:
+and call it over D-Bus, so they need a **throwaway** session bus — never your
+desktop's live one (the tests claim the daemon's well-known name, and on the real
+bus they'd shadow or fight an actual topdrawerd):
 
 ```sh
-dbus-run-session -- swift test --package-path linux
+dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test --package-path linux
 ```
 
-Plain `swift test --package-path linux` still runs the unit tests — the D-Bus tests
-skip themselves when `DBUS_SESSION_BUS_ADDRESS` is unset. Linux CI runs the full set
-under `dbus-run-session`.
+Plain `swift test --package-path linux` always skips the D-Bus tests — they run only
+when the `TOPDRAWER_PRIVATE_TEST_BUS` sentinel marks the bus as private (`DBUS_SESSION_BUS_ADDRESS`
+being set is not enough; it is always set on a desktop). Linux CI runs the full set
+under `dbus-run-session` with the sentinel.
 
 ## Scope / dependencies
 
