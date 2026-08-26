@@ -528,10 +528,11 @@ final class TopDrawerServiceTests: XCTestCase {
             XCTAssertEqual(received?.member, "RunningAppsChanged")   // lastRunningApps is now set
 
             apps.failScan()
-            // Force at least one 200 ms poll tick over the failure (2 s ≫ interval) before
-            // the query, so the no-clobber guard is exercised deterministically — the
-            // assertion can't fail spuriously; at worst it waits out the window.
-            let stray = await Self.firstElement(of: signals, timeout: .seconds(2))
+            // Force at least one poll tick over the failure before the query (a 10×
+            // window ≫ the interval), so the no-clobber guard is exercised
+            // deterministically — the assertion can't fail spuriously; at worst it
+            // waits out the window.
+            let stray = await Self.firstElement(of: signals, timeout: Self.fastPollInterval * 10)
             XCTAssertNil(stray, "a failed scan must not emit RunningAppsChanged")
             let reply = try await self.call(client, method: "GetRunningAppIDs")
             let json = try XCTUnwrap(reply.body.first?.string)
@@ -605,6 +606,11 @@ final class TopDrawerServiceTests: XCTestCase {
     /// cancels it. All backends are injectable; they default to the production ones
     /// except `trashDirectory`, which defaults to a temp subdirectory so a test never
     /// watches (or counts) the developer's real Trash.
+    /// The fast interval `startServer` configures so change-waiting tests don't need
+    /// seconds per signal. Tests that reason "a poll tick passes" derive their wait
+    /// windows from this, so the window/interval coupling can't silently drift.
+    private static let fastPollInterval = Duration.milliseconds(200)
+
     private func startServer(volumeSource: VolumeSnapshotProviding = ProcMounts(),
                              trashService: TrashServicing = FakeTrashService(count: 0),
                              trashDirectory: URL? = nil,
@@ -633,7 +639,7 @@ final class TopDrawerServiceTests: XCTestCase {
                         trashDirectory: trashDir, ejector: ejector,
                         recentsProvider: recentsProvider, launcher: launcher, recorder: recorder,
                         runningApps: runningApps, xbelLocation: xbel, freshScopes: scopes)
-                    try await service.run(on: connection, watchInterval: .milliseconds(200))
+                    try await service.run(on: connection, watchInterval: Self.fastPollInterval)
                     // Keep the export alive for the duration of the test; tearDown cancels us.
                     try await Task.sleep(for: .seconds(30))
                 }

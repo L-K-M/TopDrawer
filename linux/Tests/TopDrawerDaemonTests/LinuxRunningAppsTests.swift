@@ -86,6 +86,13 @@ final class LinuxRunningAppsTests: XCTestCase {
         try writeCgroup(pid: "1004", scope: "session-5.scope")                            // not an app
         // Another logged-in user's app scope — world-readable, but must NOT count as ours.
         try writeCgroup(pid: "1005", scope: "app-gnome-org.example.Other-1005.scope", user: "1001")
+        // A pid dir whose cgroup vanished (process exited between listing and read)
+        // must be skipped, not fail the scan into a nil.
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("1006", isDirectory: true), withIntermediateDirectories: true)
+        // A top-level regular file (like /proc/stat) falls to the numeric filter —
+        // reading `<file>/cgroup` must never even be attempted.
+        try "cpu 0 0 0\n".write(to: root.appendingPathComponent("stat"), atomically: true, encoding: .utf8)
         // A non-numeric entry (like /proc/self) must be skipped, not crash.
         let selfDir = root.appendingPathComponent("self", isDirectory: true)
         try FileManager.default.createDirectory(at: selfDir, withIntermediateDirectories: true)
