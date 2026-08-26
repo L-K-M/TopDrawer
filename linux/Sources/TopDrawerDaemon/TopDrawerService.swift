@@ -56,6 +56,7 @@ public actor TopDrawerService {
     private var trashWatcher: INotifyWatcher?
     private var freshWatchers: [INotifyWatcher] = []
     private var freshSignalTask: Task<Void, Never>?
+    private var freshSignalGeneration = 0
 
     /// - Parameters:
     ///   - volumeSource: the mounted-volume snapshot source (`/proc` in production).
@@ -364,11 +365,23 @@ public actor TopDrawerService {
     /// one scope at once — rather than a within-scope storm.
     private func scheduleFreshRecentsChanged() {
         freshSignalTask?.cancel()
+        freshSignalGeneration &+= 1
+        let generation = freshSignalGeneration
         freshSignalTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            await self?.emitRecentsChanged(forKind: "fresh")
+            await self?.emitFreshRecentsChangedIfCurrent(generation)
         }
+    }
+
+    /// Re-checks the generation *on the actor* before emitting. `Task.cancel()` can't stop
+    /// a task that already passed its `isCancelled` guard and is mid-hop back to the actor,
+    /// so a burst rescheduling in that window would otherwise emit two rounds; this drops
+    /// the stale one because `scheduleFreshRecentsChanged` (also actor-isolated) has already
+    /// bumped the generation.
+    private func emitFreshRecentsChangedIfCurrent(_ generation: Int) async {
+        guard generation == freshSignalGeneration else { return }
+        await emitRecentsChanged(forKind: "fresh")
     }
 
     private func checkForRecentsFileChange() async {
