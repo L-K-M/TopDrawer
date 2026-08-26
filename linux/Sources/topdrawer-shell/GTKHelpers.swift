@@ -37,22 +37,32 @@ final class GtkCoordinateCallback {
 
 private func gtkConnectRaw(_ instance: UnsafeMutableRawPointer?, signal: String,
                            trampoline: GCallback, box: gpointer?,
-                           destroy: GDestroyNotify?) {
+                           destroy: GClosureNotify?) {
     g_signal_connect_data(instance, signal, trampoline, box, destroy,
                           GConnectFlags(rawValue: 0))
 }
 
-private let gtkCallbackDestroy: GDestroyNotify? = { data in
+// g_signal_connect_data's destroy callback is a GClosureNotify — (data, closure) —
+// not a GDestroyNotify; the closure pointer is of no interest here.
+private let gtkCallbackDestroy: GClosureNotify? = { data, _ in
     guard let data else { return }
     Unmanaged<GtkCallback>.fromOpaque(data).release()
 }
 
-private let gtkCoordinateCallbackDestroy: GDestroyNotify? = { data in
+private let gtkCoordinateCallbackDestroy: GClosureNotify? = { data, _ in
     guard let data else { return }
     Unmanaged<GtkCoordinateCallback>.fromOpaque(data).release()
 }
 
-/// Connects an argumentless signal (`leave`, `close-request`, …) to a closure.
+/// A typed pointer viewed as an opaque instance — the signal helpers' input flavor
+/// for widgets reached through typed pointers (the window itself).
+func asOpaque<P>(_ instance: UnsafeMutablePointer<P>?) -> OpaquePointer? {
+    instance.flatMap { OpaquePointer($0) }
+}
+
+/// Connects an argumentless signal (`leave`, `close-request`, …) to a closure —
+/// typed-pointer instance flavor (callers that already hold an opaque controller
+/// pointer use the OpaquePointer overload).
 func gtkConnect<P>(_ instance: UnsafeMutablePointer<P>?, signal: String,
                    _ action: @escaping () -> Void) {
     gtkConnectRaw(instance.map { UnsafeMutableRawPointer($0) }, signal: signal,
