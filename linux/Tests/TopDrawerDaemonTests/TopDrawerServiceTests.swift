@@ -528,6 +528,11 @@ final class TopDrawerServiceTests: XCTestCase {
             XCTAssertEqual(received?.member, "RunningAppsChanged")   // lastRunningApps is now set
 
             apps.failScan()
+            // Force at least one 200 ms poll tick over the failure (2 s ≫ interval) before
+            // the query, so the no-clobber guard is exercised deterministically — the
+            // assertion can't fail spuriously; at worst it waits out the window.
+            let stray = await Self.firstElement(of: signals, timeout: .seconds(2))
+            XCTAssertNil(stray, "a failed scan must not emit RunningAppsChanged")
             let reply = try await self.call(client, method: "GetRunningAppIDs")
             let json = try XCTUnwrap(reply.body.first?.string)
             let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
