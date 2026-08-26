@@ -89,13 +89,16 @@ public enum DaemonClient {
     }
 
     /// Subscribes to `DocumentChanged` (the explicit `AddMatch` mirrors the daemon's
-    /// tests: the subscription alone doesn't guarantee bus-side routing).
+    /// tests: the subscription alone doesn't guarantee bus-side routing). Scoped to
+    /// the daemon's well-known name — the bus resolves it to the current owner's
+    /// unique name, so any local process spoofing the interface can't drive refetch
+    /// churn, and restarts keep working.
     private static func documentChanges(_ connection: DBusClient.Connection) async throws -> AsyncStream<DBusMessage> {
         let reply = try await connection.send(
             .createMethodCall(
                 destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
                 interface: "org.freedesktop.DBus", method: "AddMatch",
-                body: [.string("type='signal',interface='\(interfaceName)',member='DocumentChanged'")]),
+                body: [.string("type='signal',sender='\(busName)',interface='\(interfaceName)',member='DocumentChanged'")]),
             timeoutNanoseconds: callTimeoutNanoseconds)
 
         guard let reply, reply.messageType == .methodReturn else {
