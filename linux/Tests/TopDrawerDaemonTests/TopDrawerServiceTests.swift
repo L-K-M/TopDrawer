@@ -489,12 +489,14 @@ final class TopDrawerServiceTests: XCTestCase {
         startServer(runningApps: apps)
         try await withClient { client in
             _ = try await self.callReady(client, method: "Ping")
-            _ = try await client.send(
+            let addMatch = try await client.send(
                 .createMethodCall(
                     destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
                     interface: "org.freedesktop.DBus", method: "AddMatch",
                     body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RunningAppsChanged'")]),
                 timeoutNanoseconds: 5_000_000_000)
+            // A rejected match rule would otherwise surface only as the 10s timeout below.
+            XCTAssertEqual(addMatch?.messageType, .methodReturn, "the bus rejected the AddMatch rule")
             let signals = await client.subscribeToSignal(
                 interface: TopDrawerService.interfaceName, member: "RunningAppsChanged")
             // A new app appears — the /proc poll should notice and broadcast.

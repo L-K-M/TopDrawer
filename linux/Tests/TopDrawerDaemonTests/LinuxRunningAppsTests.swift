@@ -71,10 +71,11 @@ final class LinuxRunningAppsTests: XCTestCase {
     func testProcScanDedupesAndSorts() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("proc-\(UUID().uuidString)")
-        func writeCgroup(pid: String, scope: String) throws {
+        // Realistic cgroup v2 paths: the app scope sits under the session's user@<uid>.service.
+        func writeCgroup(pid: String, scope: String, user: String = "1000") throws {
             let dir = root.appendingPathComponent(pid, isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try "0::/user.slice/app.slice/\(scope)\n"
+            try "0::/user.slice/user-\(user).slice/user@\(user).service/app.slice/\(scope)\n"
                 .write(to: dir.appendingPathComponent("cgroup"), atomically: true, encoding: .utf8)
         }
         defer { try? FileManager.default.removeItem(at: root) }
@@ -83,13 +84,16 @@ final class LinuxRunningAppsTests: XCTestCase {
         try writeCgroup(pid: "1002", scope: "app-gnome-org.gnome.Nautilus-1002.scope")   // same app, 2nd window
         try writeCgroup(pid: "1003", scope: "app-flatpak-com.example.App-1003.scope")
         try writeCgroup(pid: "1004", scope: "session-5.scope")                            // not an app
+        // Another logged-in user's app scope — world-readable, but must NOT count as ours.
+        try writeCgroup(pid: "1005", scope: "app-gnome-org.example.Other-1005.scope", user: "1001")
         // A non-numeric entry (like /proc/self) must be skipped, not crash.
         let selfDir = root.appendingPathComponent("self", isDirectory: true)
         try FileManager.default.createDirectory(at: selfDir, withIntermediateDirectories: true)
         try "0::/whatever\n".write(to: selfDir.appendingPathComponent("cgroup"), atomically: true, encoding: .utf8)
 
-        let ids = ProcRunningApps(procRoot: root).runningAppIDs()
-        XCTAssertEqual(ids, ["com.example.App", "org.gnome.Nautilus"], "deduped and sorted")
+        let ids = ProcRunningApps(procRoot: root, uid: 1000).runningAppIDs()
+        XCTAssertEqual(ids, ["com.example.App", "org.gnome.Nautilus"],
+                       "deduped, sorted, and scoped to uid 1000 (the other user's app excluded)")
     }
 
     func testProcScanOfMissingRootIsEmpty() {

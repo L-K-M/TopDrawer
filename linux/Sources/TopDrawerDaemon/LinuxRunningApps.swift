@@ -1,5 +1,6 @@
 #if os(Linux)
 import Foundation
+import Glibc
 
 /// Extracts the desktop-file id of a running application from the name of its systemd user
 /// scope. Stock GNOME (and other systemd sessions) launch each app into a transient scope
@@ -62,21 +63,34 @@ public protocol RunningAppsScanning: Sendable {
 /// heuristic the weak-model doctrine prefers over Shell introspection or systemd D-Bus.
 public struct ProcRunningApps: RunningAppsScanning {
     private let procRoot: URL
+    private let uid: uid_t
 
-    /// - Parameter procRoot: the `/proc` mount to scan; injectable so tests use a fixture.
-    public init(procRoot: URL = URL(fileURLWithPath: "/proc")) { self.procRoot = procRoot }
+    /// - Parameters:
+    ///   - procRoot: the `/proc` mount to scan; injectable so tests use a fixture.
+    ///   - uid: the user whose session's apps count. `/proc/<pid>/cgroup` is world-readable,
+    ///     so without this the daemon would report *other* logged-in users' apps on a
+    ///     multi-session machine. Defaults to the daemon's own real uid.
+    public init(procRoot: URL = URL(fileURLWithPath: "/proc"), uid: uid_t = getuid()) {
+        self.procRoot = procRoot
+        self.uid = uid
+    }
 
     public func runningAppIDs() -> [String] {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: procRoot.path) else { return [] }
         var ids = Set<String>()
+        // Only this user's own session: a cgroup v2 path for the user's apps runs through
+        // `…/user@<uid>.service/…`. (The trailing `.service` can't be a prefix of another
+        // uid's marker — `user@1000.service` isn't a substring of `user@10001.service`.)
+        let sessionMarker = "user@\(uid).service"
         // ASCII-numeric entries are process directories; skip `self`, `sys`, etc.
         // `Character.isNumber` also accepts non-ASCII numerals (e.g. `٣`, `²`), so gate on
         // ASCII to match what a real `/proc` (and the guard's intent) actually holds.
         for pid in entries where !pid.isEmpty && pid.allSatisfy({ $0.isASCII && $0.isNumber }) {
             let cgroup = procRoot.appendingPathComponent(pid, isDirectory: true)
                 .appendingPathComponent("cgroup")
-            guard let content = try? String(contentsOf: cgroup, encoding: .utf8) else { continue }
+            guard let content = try? String(contentsOf: cgroup, encoding: .utf8),
+                  content.contains(sessionMarker) else { continue }
             if let id = RunningAppScope.desktopID(inCgroup: content) { ids.insert(id) }
         }
         return ids.sorted()
