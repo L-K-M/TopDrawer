@@ -252,7 +252,8 @@ final class TopDrawerServiceTests: XCTestCase {
             // Pin the documented wire contract: `date` is Unix epoch seconds, not a
             // string, not milliseconds. `as? Double` is robust to Int/Double NSNumber
             // bridging (same cast the encode-shape unit test uses).
-            XCTAssertEqual(list.first?["date"] as? Double, 1_000_000)
+            XCTAssertEqual(list.first?["date"] as? Double, 1_000_000,
+                           "date must be Unix epoch seconds as a JSON number — not a string, not milliseconds")
         }
     }
 
