@@ -146,9 +146,16 @@ final class TopDrawerServiceTests: XCTestCase {
             } catch is CancellationError {
                 // Expected: tearDown cancels us to tear down the export.
             } catch {
-                // A real failure (e.g. RequestName lost the name) should fail the test
-                // loudly here, not surface later as a 10-second `callReady` timeout.
-                XCTFail("server task failed: \(error)")
+                // A real startup failure (e.g. RequestName lost the name) should fail the
+                // test loudly here, not surface later as a 10-second `callReady` timeout.
+                // But once tearDown has cancelled us, the cancellation can unwind through
+                // the dbus/NIO stack as a *wrapped* error (a closed channel, a reset
+                // connection) rather than a clean `CancellationError`, so gate on
+                // `Task.isCancelled`: a genuine failure happens before any cancel (isCancelled
+                // == false); post-cancel noise (isCancelled == true) is expected teardown.
+                if !Task.isCancelled {
+                    XCTFail("server task failed: \(error)")
+                }
             }
         }
     }
