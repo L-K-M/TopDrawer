@@ -506,6 +506,37 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    /// Pins the snapshot-before-claim ordering in `run(on:)`: the flip happens as
+    /// soon as the client can see the name, so under the fixed order the baseline is
+    /// already captured (the slow first scan delays the *claim*, not the client's
+    /// change) and the change must be published. With claim-then-snapshot reverted,
+    /// Ping succeeds immediately and the flip lands before the delayed snapshot —
+    /// the baseline swallows it and no signal ever fires (the historical flake).
+    func testChangeAfterNameAppearsIsPublished() async throws {
+        let apps = SlowFirstScanRunningApps()
+        startServer(runningApps: apps)
+        try await withClient { client in
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RunningAppsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RunningAppsChanged")
+
+            // The name appears only after the (deliberately slow) baseline scan under
+            // the fixed ordering — callReady keeps retrying until then.
+            _ = try await self.callReady(client, method: "Ping")
+
+            // The client acts the instant the name is visible.
+            apps.set(["org.example.One"])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.member, "RunningAppsChanged",
+                           "a change made right after the name appears must be published")
+        }
+    }
+
     func testFailedScanServesTheLastKnownRunningApps() async throws {
         // Start empty (no nil to race the initial snapshot), then establish a known running
         // set via the poll-driven signal — so lastRunningApps is provably ["org.example.One"]
@@ -789,6 +820,35 @@ private struct FakeRunningApps: RunningAppsScanning {
 
 /// A mutable running-apps set the `RunningAppsChanged` test flips after subscribing, to
 /// drive the poll. Thread-safe: the watch loop reads it off the test's thread.
+/// A scanner whose FIRST read is slow (~1s): it models a loaded `/proc` so the
+/// baseline-capture timing is observable. Used by
+/// `testChangeAfterNameAppearsIsPublished` to pin the snapshot-before-claim order —
+/// under the fixed ordering the slow scan delays the name claim (so a client-visible
+/// change can never precede the baseline), under the broken ordering it delays the
+/// snapshot after the claim (so the client's change is swallowed).
+final class SlowFirstScanRunningApps: RunningAppsScanning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var ids: [String] = []
+    private var firstScanDone = false
+
+    func set(_ newIDs: [String]) {
+        lock.lock(); ids = newIDs; lock.unlock()
+    }
+
+    func runningAppIDs() -> [String]? {
+        lock.lock()
+        let slow = !firstScanDone
+        firstScanDone = true
+        lock.unlock()
+        // The slow scan re-reads at RETURN time, not start time — that's the whole
+        // point: a change landing during the scan (the historical race) must be what
+        // the baseline captures under the broken ordering.
+        if slow { Thread.sleep(forTimeInterval: 1) }
+        lock.lock(); defer { lock.unlock() }
+        return ids
+    }
+}
+
 final class MutableRunningApps: RunningAppsScanning, @unchecked Sendable {
     private let lock = NSLock()
     private var _ids: [String]?
