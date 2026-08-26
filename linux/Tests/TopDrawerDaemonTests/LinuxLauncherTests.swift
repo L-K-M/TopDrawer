@@ -63,6 +63,23 @@ final class LinuxLauncherTests: XCTestCase {
         XCTAssertTrue(runner.calls.isEmpty)
     }
 
+    func testLaunchApplicationByBareDesktopIDResolvesViaScanner() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bl-\(UUID().uuidString)")
+        let appsDir = root.appendingPathComponent("applications")
+        try FileManager.default.createDirectory(at: appsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let desktop = appsDir.appendingPathComponent("org.gnome.calc.desktop")
+        try "[Desktop Entry]\nType=Application\nName=Calc\nExec=gnome-calculator"
+            .write(to: desktop, atomically: true, encoding: .utf8)
+
+        let runner = RecordingRunner(succeed: ["gio"])
+        let launcher = LinuxLauncher(runner: runner, applicationDirs: [appsDir])
+        // A bare desktop-file id (has the suffix, no slash) resolves to the installed entry.
+        XCTAssertTrue(launcher.launch(item(kind: "application", url: "org.gnome.calc.desktop")))
+        XCTAssertEqual(runner.calls, [.init(tool: "gio", args: ["launch", desktop.path])])
+    }
+
     // MARK: - openWith
 
     func testOpenWithResolvesDesktopFileAndUsesGioLaunch() throws {
@@ -112,6 +129,15 @@ final class LinuxLauncherTests: XCTestCase {
         XCTAssertEqual(runner.calls.first?.tool, "gdbus")
         // Fallback opens the parent directory.
         XCTAssertEqual(runner.calls.last, .init(tool: "gio", args: ["open", "file:///home/a/"]))
+    }
+
+    func testRevealEscapesQuotesForGVariant() {
+        let runner = RecordingRunner(succeed: ["gdbus"])
+        let launcher = LinuxLauncher(runner: runner, applicationDirs: [])
+        // An apostrophe in the filename must be backslash-escaped, not terminate the string.
+        XCTAssertTrue(launcher.reveal(uri: "file:///tmp/don't.txt"))
+        XCTAssertEqual(runner.calls.first?.args.last(where: { $0.contains("file://") }),
+                       #"['file:///tmp/don\'t.txt']"#)
     }
 }
 #endif

@@ -98,20 +98,24 @@ final class LinuxRecentsTests: XCTestCase {
         let now = ISO8601DateFormatter().date(from: "2026-08-25T10:00:00Z")!
         let sys = RecentlyUsedFile.hits(xbel: xbel, limit: 10, now: now)   // 2 within-window
         let stub = StubRecents(systemHits: sys, freshHits: sys)
-        // A distinct macDring launch-history hit (LP-19), so a `both` merge is visible.
+        // A distinct macDring launch-history hit (LP-19), dated recently like the others so
+        // the test isn't secretly relying on macDring hits bypassing any date window.
         let mac = [RecentFileHit(url: URL(fileURLWithPath: "/home/alice/launched.txt"),
-                                 name: "launched.txt", date: Date(timeIntervalSince1970: 5))]
+                                 name: "launched.txt", date: now.addingTimeInterval(-3600))]
         let json = #"{"version":1,"tabs":[{"id":"R","kind":"recents"},{"id":"S","kind":"recents","recentsSource":"system"},{"id":"B","kind":"recents","recentsSource":"both"},{"id":"F","kind":"fresh"},{"id":"I","kind":"items"}]}"#
-        func hits(_ id: String) -> [RecentFileHit] {
-            TopDrawerService.recentsHits(forTab: id, document: json, provider: stub, macDringHits: mac)
+        func hits(_ id: String, mac macHits: [RecentFileHit]) -> [RecentFileHit] {
+            TopDrawerService.recentsHits(forTab: id, document: json, provider: stub, macDringHits: macHits)
         }
-        XCTAssertEqual(hits("R").map(\.name), ["launched.txt"],
+        XCTAssertEqual(hits("R", mac: mac).map(\.name), ["launched.txt"],
                        "the default macDring source now serves the recorded launch history")
-        XCTAssertEqual(hits("S").count, 2, "system source only")
-        XCTAssertEqual(hits("B").count, 3, "both = system(2) + macDring(1), distinct URLs")
-        XCTAssertEqual(hits("F").count, 2, "fresh source")
-        XCTAssertTrue(hits("I").isEmpty, "an items tab has no recents")
-        XCTAssertTrue(hits("Z").isEmpty, "an unknown tab id is empty")
+        XCTAssertEqual(hits("S", mac: mac).count, 2, "system source only")
+        XCTAssertEqual(hits("B", mac: mac).count, 3, "both = system(2) + macDring(1), distinct URLs")
+        XCTAssertEqual(hits("F", mac: mac).count, 2, "fresh source")
+        XCTAssertTrue(hits("I", mac: mac).isEmpty, "an items tab has no recents")
+        XCTAssertTrue(hits("Z", mac: mac).isEmpty, "an unknown tab id is empty")
+        // Dedupe path: a macDring hit whose URL is already in the system hits appears once.
+        let overlap = [RecentFileHit(url: sys[0].url, name: sys[0].name, date: now)]
+        XCTAssertEqual(hits("B", mac: overlap).count, 2, "a file in both sources isn't double-listed")
     }
 
     func testEncodeRecentsShape() {

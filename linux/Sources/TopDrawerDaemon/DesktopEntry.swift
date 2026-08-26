@@ -109,9 +109,14 @@ public struct DesktopEntry: Sendable, Equatable {
                 let code = chars[i + 1]
                 i += 2
                 switch code {
-                case "f", "u":                   // single file/URL → into the current arg
+                // Per the spec, %f/%F are local file *paths*; %u/%U are URIs.
+                case "f":
+                    if let first = uris.first { current.append(Self.localPath(first)); haveToken = true }
+                case "u":
                     if let first = uris.first { current.append(first); haveToken = true }
-                case "F", "U":                   // the whole list → separate args
+                case "F":                        // the whole list → separate args
+                    flush(); tokens.append(contentsOf: uris.map(Self.localPath))
+                case "U":
                     flush(); tokens.append(contentsOf: uris)
                 case "%":
                     current.append("%"); haveToken = true
@@ -124,6 +129,13 @@ public struct DesktopEntry: Sendable, Equatable {
         }
         flush()
         return tokens
+    }
+
+    /// A `%f`/`%F` argument is a local file *path*, not a URI: convert a `file://` URI to its
+    /// (percent-decoded) filesystem path; leave anything else unchanged.
+    private static func localPath(_ uri: String) -> String {
+        if let url = URL(string: uri), url.isFileURL { return url.path }
+        return uri
     }
 }
 
@@ -159,12 +171,18 @@ public enum DesktopEntryScanner {
     public static func scan(dirs: [URL],
                             fileManager: FileManager = .default) -> [DesktopEntry] {
         var byID: [String: DesktopEntry] = [:]
+        var resolved = Set<String>()
         for dir in dirs {
             for (id, fileURL) in desktopFiles(in: dir, fileManager: fileManager) {
-                guard byID[id] == nil else { continue }   // first dir wins
+                guard !resolved.contains(id) else { continue }   // first *parseable* file wins
                 guard let text = try? String(contentsOf: fileURL, encoding: .utf8),
-                      let entry = DesktopEntry.parse(text, id: id, path: fileURL),
-                      entry.isShown else { continue }
+                      let entry = DesktopEntry.parse(text, id: id, path: fileURL) else { continue }
+                resolved.insert(id)
+                // A Hidden/NoDisplay entry in a higher-precedence dir masks the id entirely
+                // — a user copy with `Hidden=true` hides the system app, per freedesktop
+                // semantics — so record the id but don't surface it (an unreadable/corrupt
+                // file leaves the id unresolved so a lower copy can still win).
+                guard entry.isShown else { continue }
                 byID[id] = entry
             }
         }
@@ -179,8 +197,11 @@ public enum DesktopEntryScanner {
         for dir in dirs {
             for (candidateID, fileURL) in desktopFiles(in: dir, fileManager: fileManager)
             where candidateID == id {
-                if let text = try? String(contentsOf: fileURL, encoding: .utf8) {
-                    return DesktopEntry.parse(text, id: id, path: fileURL)
+                // Only return on a successful parse, so a corrupt higher-precedence override
+                // falls through to a valid system copy rather than failing the lookup.
+                if let text = try? String(contentsOf: fileURL, encoding: .utf8),
+                   let entry = DesktopEntry.parse(text, id: id, path: fileURL) {
+                    return entry
                 }
             }
         }
@@ -199,9 +220,10 @@ public enum DesktopEntryScanner {
             let full = fileURL.standardizedFileURL.path
             guard full.hasPrefix(base + "/") else { continue }
             let relative = String(full.dropFirst(base.count + 1))
-            let id = relative.replacingOccurrences(of: "/", with: "-")
-                .replacingOccurrences(of: ".desktop", with: "")
-            out.append((id, fileURL))
+            // Drop only the trailing `.desktop` (the `pathExtension` filter guarantees it),
+            // not every occurrence — a subdir or basename containing ".desktop" must survive.
+            let id = relative.replacingOccurrences(of: "/", with: "-").dropLast(".desktop".count)
+            out.append((String(id), fileURL))
         }
         return out
     }

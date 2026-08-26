@@ -105,17 +105,22 @@ final class DesktopEntryTests: XCTestCase {
 
     func testExecStripsFieldCodesAndExpandsURIs() {
         XCTAssertEqual(DesktopEntry.execArgv("gedit %U", uris: []), ["gedit"])
+        // %u/%U keep URIs; %f/%F pass local file *paths* (per the spec).
         XCTAssertEqual(DesktopEntry.execArgv("gedit %U", uris: ["file:///a", "file:///b"]),
                        ["gedit", "file:///a", "file:///b"])
+        XCTAssertEqual(DesktopEntry.execArgv("app %u", uris: ["file:///a", "file:///b"]),
+                       ["app", "file:///a"])   // %u = a single URI
         XCTAssertEqual(DesktopEntry.execArgv("app %f", uris: ["file:///a", "file:///b"]),
-                       ["app", "file:///a"])   // %f = a single file
+                       ["app", "/a"])           // %f = a single local file path
+        XCTAssertEqual(DesktopEntry.execArgv("app %F", uris: ["file:///a", "file:///b"]),
+                       ["app", "/a", "/b"])     // %F = the file paths as separate args
         XCTAssertEqual(DesktopEntry.execArgv("app --flag %i %c %k", uris: []),
                        ["app", "--flag"])       // dropped deprecated codes
     }
 
     func testExecHandlesQuotingAndLiteralPercent() {
         XCTAssertEqual(DesktopEntry.execArgv("\"/opt/my app/bin\" %f", uris: ["file:///x"]),
-                       ["/opt/my app/bin", "file:///x"])
+                       ["/opt/my app/bin", "/x"])   // %f = local path
         XCTAssertEqual(DesktopEntry.execArgv("printf 100%%", uris: []), ["printf", "100%"])
     }
 
@@ -202,6 +207,61 @@ final class DesktopEntryTests: XCTestCase {
         let entry = DesktopEntryScanner.entry(forID: "handler", in: [appsDir])
         XCTAssertEqual(entry?.name, "Handler")
         XCTAssertEqual(entry?.path.lastPathComponent, "handler.desktop")
+    }
+
+    func testUserHiddenOverrideMasksTheSystemEntry() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("desk-\(UUID().uuidString)")
+        let userDir = root.appendingPathComponent("user/applications")
+        let sysDir = root.appendingPathComponent("sys/applications")
+        try FileManager.default.createDirectory(at: userDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sysDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // The freedesktop way to hide an app: copy it into the user dir with Hidden=true.
+        try "[Desktop Entry]\nType=Application\nName=Foo\nExec=foo\nHidden=true"
+            .write(to: userDir.appendingPathComponent("foo.desktop"), atomically: true, encoding: .utf8)
+        try "[Desktop Entry]\nType=Application\nName=Foo\nExec=foo"
+            .write(to: sysDir.appendingPathComponent("foo.desktop"), atomically: true, encoding: .utf8)
+
+        // The user override must MASK the system copy, not fall through to it.
+        XCTAssertTrue(DesktopEntryScanner.scan(dirs: [userDir, sysDir]).isEmpty,
+                      "a Hidden user override hides the system app entirely")
+    }
+
+    func testEntryForIDFallsThroughWhenUserOverrideIsCorrupt() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("desk-\(UUID().uuidString)")
+        let userDir = root.appendingPathComponent("user/applications")
+        let sysDir = root.appendingPathComponent("sys/applications")
+        try FileManager.default.createDirectory(at: userDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sysDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // A readable-but-unparseable user file (no [Desktop Entry] group) must not fail the
+        // lookup — the valid system copy should still resolve.
+        try "garbage, not a desktop file"
+            .write(to: userDir.appendingPathComponent("foo.desktop"), atomically: true, encoding: .utf8)
+        try "[Desktop Entry]\nType=Application\nName=System Foo\nExec=foo"
+            .write(to: sysDir.appendingPathComponent("foo.desktop"), atomically: true, encoding: .utf8)
+
+        let entry = DesktopEntryScanner.entry(forID: "foo", in: [userDir, sysDir])
+        XCTAssertEqual(entry?.name, "System Foo")
+    }
+
+    func testDesktopFileIDStripsOnlyTheTrailingSuffix() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("desk-\(UUID().uuidString)")
+        let appsDir = root.appendingPathComponent("applications")
+        try FileManager.default.createDirectory(at: appsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // A basename that itself contains ".desktop" — only the final suffix must be trimmed.
+        try "[Desktop Entry]\nType=Application\nName=Odd\nExec=odd"
+            .write(to: appsDir.appendingPathComponent("com.foo.desktop.desktop"),
+                   atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(DesktopEntryScanner.scan(dirs: [appsDir]).map(\.id), ["com.foo.desktop"])
     }
 }
 #endif

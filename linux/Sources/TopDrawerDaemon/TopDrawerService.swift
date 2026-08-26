@@ -229,10 +229,12 @@ public actor TopDrawerService {
                 outputArgs: [.init(name: "json", type: "s")]
             ) { context in
                 let tabID = context.arguments.first?.string ?? ""
-                // Read the macDring launch-history hits once, off the recorder actor, so the
-                // pure resolver stays synchronous and testable.
-                let macDringHits = await recorder.recents(limit: Self.recentsLimit)
-                let hits = Self.recentsHits(forTab: tabID, document: source.rawJSON(),
+                let json = source.rawJSON()
+                // Only pay the recorder actor hop + store read when the tab actually draws on
+                // macDring history — a fresh/system/unknown tab discards it in `recentsHits`.
+                let needsMacDring = LauncherTabs.find(id: tabID, in: json)?.servesMacDringRecents ?? false
+                let macDringHits = needsMacDring ? await recorder.recents(limit: Self.recentsLimit) : []
+                let hits = Self.recentsHits(forTab: tabID, document: json,
                                             provider: recentsProvider, macDringHits: macDringHits)
                 return [.string(Self.encodeRecents(hits))]
             },
@@ -240,7 +242,7 @@ public actor TopDrawerService {
                 name: "Launch",
                 inputArgs: [.init(name: "itemID", type: "s")],
                 outputArgs: [.init(name: "ok", type: "b")]
-            ) { context in
+            ) { [weak self] context in
                 let itemID = context.arguments.first?.string ?? ""
                 guard let item = LauncherItems.find(id: itemID, in: source.rawJSON()) else {
                     logger.info("Launch(\(itemID)): no such item in the launcher document")
@@ -249,10 +251,12 @@ public actor TopDrawerService {
                 let ok = launcher.launch(item)
                 // Record a successful open into Top Drawer's own recents history (the
                 // macDring source of a `.recents` tab), mirroring the macOS app's
-                // launch → RecentsStore.record path.
+                // launch → RecentsStore.record path, and notify the affected tabs so a live
+                // frontend refreshes (mirrors the Fresh-scope → RecentsChanged wiring).
                 if ok, let url = item.targetURL {
                     let name = item.name.isEmpty ? url.lastPathComponent : item.name
                     await recorder.record(url: url, kind: item.kind, name: name, date: Date())
+                    await self?.emitMacDringRecentsChanged()
                 }
                 return [.boolean(ok)]
             },
@@ -455,6 +459,17 @@ public actor TopDrawerService {
         }
     }
 
+    /// Fires `RecentsChanged(tabID)` for every recents tab that draws on the macDring launch
+    /// history — called after a `Launch` records into the recorder, so subscribers refresh.
+    private func emitMacDringRecentsChanged() async {
+        let ids = LauncherTabs.all(in: source.rawJSON())
+            .filter { $0.kind == "recents" && $0.servesMacDringRecents }
+            .map(\.id)
+        for id in ids {
+            await emitSignal("RecentsChanged", body: [.string(id)], signature: "s")
+        }
+    }
+
     // MARK: - Signals
 
     /// Emits `DocumentChanged` — kept for tests that exercise the signal path directly,
@@ -516,7 +531,11 @@ public actor TopDrawerService {
     /// macDring sources of a `both` tab surfaces once. Mirrors `RecentsStore.deduplicatedByURL`.
     private static func dedupedByURL(_ hits: [RecentFileHit], limit: Int) -> [RecentFileHit] {
         var seen = Set<URL>()
-        let ordered = hits.sorted { $0.date > $1.date }.filter { seen.insert($0.url).inserted }
+        // Newest first, with a URL tie-breaker so equal-timestamp merges are deterministic
+        // (Swift's sort isn't stable) — keeps `encodeRecents` output stable run-to-run.
+        let ordered = hits.sorted {
+            $0.date != $1.date ? $0.date > $1.date : $0.url.absoluteString < $1.url.absoluteString
+        }.filter { seen.insert($0.url).inserted }
         return Array(ordered.prefix(max(0, limit)))
     }
 

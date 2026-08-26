@@ -306,6 +306,9 @@ final class TopDrawerServiceTests: XCTestCase {
             XCTAssertEqual(recorder.recorded.map { $0.url.path }, ["/home/a/doc.txt"])
             XCTAssertEqual(recorder.recorded.first?.kind, "file")
             XCTAssertEqual(recorder.recorded.first?.name, "Doc")
+            // The service stamps a real launch timestamp (not a placeholder).
+            let recordedDate = try XCTUnwrap(recorder.recorded.first?.date)
+            XCTAssertLessThan(abs(recordedDate.timeIntervalSinceNow), 60)
         }
     }
 
@@ -350,6 +353,16 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    func testOpenWithReturnsTheLauncherResultOnFailure() async throws {
+        startServer(launcher: FakeLauncher(openWithResult: false))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "OpenWith",
+                body: [.string("no.such.app"), .array([.string("file:///a")])])
+            XCTAssertEqual(reply.body.first?.boolean, false)
+        }
+    }
+
     func testRevealDispatchesToTheLauncher() async throws {
         let launcher = FakeLauncher()
         startServer(launcher: launcher)
@@ -358,6 +371,38 @@ final class TopDrawerServiceTests: XCTestCase {
             let reply = try await self.call(client, method: "Reveal", body: [.string("file:///home/a/x.pdf")])
             XCTAssertEqual(reply.body.first?.boolean, true)
             XCTAssertEqual(launcher.revealed, ["file:///home/a/x.pdf"])
+        }
+    }
+
+    func testRevealReturnsTheLauncherResultOnFailure() async throws {
+        startServer(launcher: FakeLauncher(revealResult: false))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let reply = try await self.call(client, method: "Reveal", body: [.string("file:///home/a/x.pdf")])
+            XCTAssertEqual(reply.body.first?.boolean, false)
+        }
+    }
+
+    func testLaunchEmitsRecentsChangedForMacDringTabs() async throws {
+        // An items tab holds the launchable item; a macDring recents tab must be notified.
+        try writeDocument(#"""
+        {"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"macDring"},{"id":"t","kind":"items","items":[{"id":"i1","kind":"file","displayName":"Doc","url":"file:///home/a/doc.txt"}]}]}
+        """#)
+        startServer(launcher: FakeLauncher(launchResult: true), recorder: FakeRecorder())
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            _ = try await client.send(
+                .createMethodCall(
+                    destination: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+                    interface: "org.freedesktop.DBus", method: "AddMatch",
+                    body: [.string("type='signal',interface='\(TopDrawerService.interfaceName)',member='RecentsChanged'")]),
+                timeoutNanoseconds: 5_000_000_000)
+            let signals = await client.subscribeToSignal(
+                interface: TopDrawerService.interfaceName, member: "RecentsChanged")
+            _ = try await self.call(client, method: "Launch", body: [.string("i1")])
+            let received = await Self.firstElement(of: signals, timeout: .seconds(10))
+            XCTAssertEqual(received?.body.first?.string, "rec",
+                           "a recorded launch notifies the macDring recents tab")
         }
     }
 
@@ -388,6 +433,22 @@ final class TopDrawerServiceTests: XCTestCase {
             let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
             // Both sources fold in, newest (mac, t=2000) first.
             XCTAssertEqual(list.compactMap { $0["name"] as? String }, ["mac.txt", "sys.txt"])
+        }
+    }
+
+    func testGetRecentsBothSourceDedupesTheSamePath() async throws {
+        // The common case: a launched file (macDring) that's also in the system xbel.
+        try writeDocument(#"{"version":1,"tabs":[{"id":"rec","kind":"recents","recentsSource":"both"}]}"#)
+        let sys = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "same.txt",
+                                date: Date(timeIntervalSince1970: 1_000))
+        let mac = RecentFileHit(url: URL(fileURLWithPath: "/same.txt"), name: "same.txt",
+                                date: Date(timeIntervalSince1970: 2_000))
+        startServer(recentsProvider: FakeRecentsProvider(system: [sys]),
+                    recorder: FakeRecorder(canned: [mac]))
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            let list = try self.recentsList(try await self.call(client, method: "GetRecents", body: [.string("rec")]))
+            XCTAssertEqual(list.count, 1, "a file present in both sources appears once")
         }
     }
 
@@ -581,8 +642,14 @@ final class FakeLauncher: LinuxLaunching, @unchecked Sendable {
     private var _openWith: [(id: String, uris: [String])] = []
     private var _revealed: [String] = []
     private let launchResult: Bool
+    private let openWithResult: Bool
+    private let revealResult: Bool
 
-    init(launchResult: Bool = true) { self.launchResult = launchResult }
+    init(launchResult: Bool = true, openWithResult: Bool = true, revealResult: Bool = true) {
+        self.launchResult = launchResult
+        self.openWithResult = openWithResult
+        self.revealResult = revealResult
+    }
 
     var launched: [LauncherItem] { lock.lock(); defer { lock.unlock() }; return _launched }
     var openWithCalls: [(id: String, uris: [String])] { lock.lock(); defer { lock.unlock() }; return _openWith }
@@ -592,10 +659,10 @@ final class FakeLauncher: LinuxLaunching, @unchecked Sendable {
         lock.lock(); _launched.append(item); lock.unlock(); return launchResult
     }
     func openWith(desktopID: String, uris: [String]) -> Bool {
-        lock.lock(); _openWith.append((desktopID, uris)); lock.unlock(); return true
+        lock.lock(); _openWith.append((desktopID, uris)); lock.unlock(); return openWithResult
     }
     func reveal(uri: String) -> Bool {
-        lock.lock(); _revealed.append(uri); lock.unlock(); return true
+        lock.lock(); _revealed.append(uri); lock.unlock(); return revealResult
     }
 }
 
@@ -603,17 +670,17 @@ final class FakeLauncher: LinuxLaunching, @unchecked Sendable {
 /// testable without touching the global `RecentsStore`/`UserDefaults`.
 final class FakeRecorder: RecentsRecording, @unchecked Sendable {
     private let lock = NSLock()
-    private var _recorded: [(url: URL, kind: String, name: String)] = []
+    private var _recorded: [(url: URL, kind: String, name: String, date: Date)] = []
     private let canned: [RecentFileHit]
 
     init(canned: [RecentFileHit] = []) { self.canned = canned }
 
-    var recorded: [(url: URL, kind: String, name: String)] {
+    var recorded: [(url: URL, kind: String, name: String, date: Date)] {
         lock.lock(); defer { lock.unlock() }; return _recorded
     }
 
     func record(url: URL, kind: String, name: String, date: Date) async {
-        lock.lock(); _recorded.append((url, kind, name)); lock.unlock()
+        lock.lock(); _recorded.append((url, kind, name, date)); lock.unlock()
     }
     func recents(limit: Int) async -> [RecentFileHit] { Array(canned.prefix(limit)) }
 }

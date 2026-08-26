@@ -48,13 +48,23 @@ public struct LinuxLauncher: LinuxLaunching {
 
     public func launch(_ item: LauncherItem) -> Bool {
         guard let target = item.url, !target.isEmpty else { return false }
-        // An application whose target is a .desktop file launches through it; a plain
-        // executable/desktop-id falls through to `gio open` (which resolves default
-        // handlers). Everything else (file/folder/url/disk/cloud) opens in its default app.
-        if item.kind == "application", target.hasSuffix(".desktop") {
-            let path = URL(string: target)?.path ?? target
-            return runner.run("gio", ["launch", path])
+        if item.kind == "application" {
+            // A bare desktop-file id (no path separator; per spec it may carry the
+            // `.desktop` suffix) must be resolved to an installed entry — `gio launch` needs
+            // a real path, not an id. A `.desktop` *path*/URI is launched directly: the
+            // launcher document is the user's own config, so an arbitrary path is allowed by
+            // design, mirroring how the macOS drawer launches whatever the user pinned.
+            let id = target.hasSuffix(".desktop") ? String(target.dropLast(".desktop".count)) : target
+            if !target.contains("/"), let entry = DesktopEntryScanner.entry(forID: id, in: applicationDirs) {
+                return runner.run("gio", ["launch", entry.path.path])
+            }
+            if target.hasSuffix(".desktop") {
+                let path = URL(string: target)?.path ?? target
+                return runner.run("gio", ["launch", path])
+            }
         }
+        // Everything else (file/folder/url/disk/cloud, or an application without a resolvable
+        // .desktop) opens in its default handler.
         return open(uri: target)
     }
 
@@ -70,13 +80,18 @@ public struct LinuxLauncher: LinuxLaunching {
     }
 
     public func reveal(uri: String) -> Bool {
-        // The freedesktop file-manager interface selects the item inside its folder.
+        // The freedesktop file-manager interface selects the item inside its folder. Escape
+        // the uri for GVariant text format (backslash first, then apostrophe) so a filename
+        // containing `'` or `\` can't terminate the single-quoted string early.
+        let escaped = uri
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
         let showItems = runner.run("gdbus", [
             "call", "--session",
             "--dest", "org.freedesktop.FileManager1",
             "--object-path", "/org/freedesktop/FileManager1",
             "--method", "org.freedesktop.FileManager1.ShowItems",
-            "['\(uri)']", "",
+            "['\(escaped)']", "",
         ])
         if showItems { return true }
         // Fallback: just open the parent directory (no selection).
