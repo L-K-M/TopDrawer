@@ -87,7 +87,9 @@ if let flag = CommandLine.arguments.firstIndex(of: "--monitor") {
         // a typo'd index (or a connector name like eDP-1) would otherwise land the
         // strip on the wrong output with a normal-looking startup log. `index >= 0`
         // stays in the guard: UInt32(negative) traps rather than failing.
-        logger.warning("--monitor expects a non-negative index — leaving the choice to the compositor")
+        let got = CommandLine.arguments.indices.contains(flag + 1)
+            ? CommandLine.arguments[flag + 1] : "nothing"
+        logger.warning("--monitor expects a non-negative index, got '\(got)' — leaving the choice to the compositor")
     }
 }
 
