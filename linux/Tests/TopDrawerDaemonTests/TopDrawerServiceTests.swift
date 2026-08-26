@@ -29,7 +29,14 @@ final class TopDrawerServiceTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // Await the cancelled task, don't just drop it: the server holds the well-known
+        // name `ch.lkmc.TopDrawer` until its `withSessionBus` scope closes, and the name is
+        // claimed DO_NOT_QUEUE. If the next test's server raced in before this one's scope
+        // released the name, its RequestName would fail and surface as a flaky
+        // "service never became ready" timeout. Waiting for `value` blocks until the
+        // connection is torn down and the name is free.
         serverTask?.cancel()
+        await serverTask?.value
         serverTask = nil
         if let tempDir, FileManager.default.fileExists(atPath: tempDir.path) {
             try? FileManager.default.removeItem(at: tempDir)
@@ -129,11 +136,19 @@ final class TopDrawerServiceTests: XCTestCase {
     private func startServer() {
         let source = LauncherDocumentSource(url: launcherURL)
         serverTask = Task {
-            try? await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
-                let service = TopDrawerService(source: source)
-                try await service.run(on: connection, watchInterval: .milliseconds(200))
-                // Keep the export alive for the duration of the test; tearDown cancels us.
-                try await Task.sleep(for: .seconds(30))
+            do {
+                try await DBusClient.withSessionBus(auth: .external(userID: String(getuid()))) { connection in
+                    let service = TopDrawerService(source: source)
+                    try await service.run(on: connection, watchInterval: .milliseconds(200))
+                    // Keep the export alive for the duration of the test; tearDown cancels us.
+                    try await Task.sleep(for: .seconds(30))
+                }
+            } catch is CancellationError {
+                // Expected: tearDown cancels us to tear down the export.
+            } catch {
+                // A real failure (e.g. RequestName lost the name) should fail the test
+                // loudly here, not surface later as a 10-second `callReady` timeout.
+                XCTFail("server task failed: \(error)")
             }
         }
     }

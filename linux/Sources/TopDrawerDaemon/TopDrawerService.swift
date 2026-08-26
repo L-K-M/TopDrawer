@@ -148,7 +148,10 @@ public actor TopDrawerService {
         watchTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: interval)
-                await self?.checkForChange()
+                // Stop once the service is gone (e.g. a test's service goes out of scope
+                // without an explicit stop()), rather than polling forever on `nil`.
+                guard let self else { break }
+                await self.checkForChange()
             }
         }
     }

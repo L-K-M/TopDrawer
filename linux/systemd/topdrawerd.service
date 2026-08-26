@@ -7,6 +7,10 @@ Requires=dbus.socket
 
 [Service]
 Type=simple
+# The systemd user manager doesn't reliably inherit DBUS_SESSION_BUS_ADDRESS from the
+# graphical session, so pin it to the standard per-user bus socket (%t is the user's
+# $XDG_RUNTIME_DIR). Without this the daemon can fail to find the bus at login.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
 # Installed per-user (see linux/README.md). %h is the user's home directory.
 ExecStart=%h/.local/bin/topdrawerd
 Restart=on-failure

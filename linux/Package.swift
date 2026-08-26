@@ -26,7 +26,14 @@ let package = Package(
         .library(name: "TopDrawerDaemon", targets: ["TopDrawerDaemon"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/wendylabsinc/dbus.git", from: "0.4.1"),
+        // `.upToNextMinor` rather than `from:`: dbus is pre-1.0, where a minor bump
+        // conventionally carries breaking changes, so don't let a `swift package update`
+        // pull 0.5+ unreviewed. (Package.resolved + --disable-automatic-resolution pins CI
+        // regardless; this guards local/branch updates.)
+        .package(url: "https://github.com/wendylabsinc/dbus.git", .upToNextMinor(from: "0.4.1")),
+        // Declared directly because this package `import`s Logging (Daemon/TopDrawerService)
+        // itself, rather than leaning on it resolving transitively through dbus.
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     ],
     targets: [
         .target(
@@ -35,6 +42,8 @@ let package = Package(
                 // D-Bus is a Linux-only facility; on any other platform the module
                 // compiles to its `#else` stubs so the package still parses there.
                 .product(name: "DBUS", package: "dbus", condition: .when(platforms: [.linux])),
+                // Logging is used only in the Linux-guarded daemon code.
+                .product(name: "Logging", package: "swift-log", condition: .when(platforms: [.linux])),
             ]
         ),
         .executableTarget(

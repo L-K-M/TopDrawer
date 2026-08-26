@@ -36,6 +36,10 @@ public struct LauncherDocumentSource: Sendable {
     /// `GetDocument` always hands the client valid, parseable JSON. (Serving the
     /// bytes verbatim is deliberate at LP-16 — the daemon doesn't yet re-encode a
     /// decoded document.)
+    ///
+    /// A plain read can't observe a half-written file: `TabStore.saveNow` writes with
+    /// `Data.write(options: .atomic)` (temp file + rename), so a reader always sees a
+    /// complete previous or next version, never a truncation.
     public func rawJSON() -> String {
         (try? String(contentsOf: url, encoding: .utf8)) ?? "{}"
     }

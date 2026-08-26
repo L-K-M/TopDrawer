@@ -40,12 +40,14 @@ public enum Daemon {
         }
     }
 
-    /// Exit cleanly on the signals systemd and terminals use to stop us. The daemon
-    /// holds no unflushed state (the app owns the launcher file), so a plain exit is
-    /// enough; systemd escalates to SIGKILL if we ever hang.
+    /// Exit on the signals systemd and terminals use to stop us. `_exit`, not `exit`:
+    /// only `_exit` is async-signal-safe — `exit` runs atexit handlers and stdio cleanup
+    /// on the interrupted thread, which can deadlock on a lock (malloc, Foundation) another
+    /// thread holds. The daemon has no unflushed state (the app owns the launcher file),
+    /// and swift-log writes through `write(2)`, so skipping atexit loses nothing.
     private static func installSignalHandlers() {
-        signal(SIGTERM) { _ in exit(0) }
-        signal(SIGINT) { _ in exit(0) }
+        signal(SIGTERM) { _ in _exit(0) }
+        signal(SIGINT) { _ in _exit(0) }
     }
 
     /// Blocks the connection scope forever; the process leaves via a signal handler
