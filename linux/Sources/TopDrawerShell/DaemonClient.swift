@@ -16,6 +16,12 @@ public enum DaemonClient {
     private static let callTimeoutNanoseconds: UInt64 = 5_000_000_000
 
     public enum ClientError: Error, Equatable {
+        /// The daemon's well-known name lost its owner — it left the bus.
+        /// `observeTabs` keeps retrying, so a UI can key its reconnecting placeholder
+        /// on this case rather than a message string.
+        case daemonLeftTheBus
+        /// Both watch subscriptions ended — this connection itself is gone.
+        case watchStreamsEnded
         /// The reply wasn't the `s` the contract promises (an error return or a peer
         /// answering the name that isn't topdrawerd).
         case badReply(String)
@@ -82,12 +88,12 @@ public enum DaemonClient {
                         // A vanished daemon emits nothing on this connection — without
                         // this watch the stream would sit silent and the strip would be
                         // stale forever. Report and fall into the retry cycle.
-                        throw ClientError.badReply("daemon left the bus")
+                        throw ClientError.daemonLeftTheBus
                     }
                 }
                 if Task.isCancelled { return }   // the streams end on cancel too
                 // Ended without cancellation — our own connection is gone.
-                onError(ClientError.badReply("watch streams ended"))
+                onError(ClientError.watchStreamsEnded)
             } catch is CancellationError {
                 return   // the caller shut the observer down; that's not a daemon problem
             } catch {
@@ -133,15 +139,10 @@ public enum DaemonClient {
         }
     }
 
-    /// Subscribes to `DocumentChanged` (the explicit `AddMatch` mirrors the daemon's
-    /// tests: the subscription alone doesn't guarantee bus-side routing). Scoped to
-    /// the daemon's well-known name — the bus resolves it to the current owner's
-    /// unique name, so any local process spoofing the interface can't drive refetch
-    /// churn, and restarts keep working.
-    /// The watch subscriptions' match rules, hoisted so the bus-side dedup below can
-    /// add and remove exactly these strings. dbus-daemon keeps every AddMatch copy —
-    /// one delivery per rule — so a retry cycle that re-adds without removing would
-    /// multiply refetches per change.
+    /// The watch subscriptions' match rules, hoisted so the bus-side dedup in
+    /// `addMatch` can add and remove exactly these strings. dbus-daemon keeps every
+    /// AddMatch copy — one delivery per rule — so a retry cycle that re-adds without
+    /// removing would multiply refetches per change.
     private static let documentChangedRule =
         "type='signal',sender='\(busName)',interface='\(interfaceName)',member='DocumentChanged'"
     private static let ownerChangedRule =

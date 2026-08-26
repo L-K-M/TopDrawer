@@ -127,7 +127,7 @@ final class DaemonClientTests: XCTestCase {
             let observation = Task {
                 await DaemonClient.observeTabs(client,
                                                onChange: { strips.record($0) },
-                                               onError: { errors.record("\($0)") },
+                                               onError: { errors.record($0) },
                                                retryDelay: .milliseconds(100))
             }
 
@@ -142,8 +142,12 @@ final class DaemonClientTests: XCTestCase {
             self.serverTask = nil
 
             try await Self.waitUntil({ !errors.all.isEmpty }, what: "owner-lost error after daemon left")
-            XCTAssertTrue(errors.all.contains { $0.contains("daemon left the bus") },
-                          "expected the owner-lost error, got: \(errors.all)")
+            XCTAssertTrue(
+                errors.all.contains {
+                    if case DaemonClient.ClientError.daemonLeftTheBus = $0 { return true }
+                    return false
+                },
+                "expected the owner-lost error, got: \(errors.all)")
             observation.cancel()
         }
     }
@@ -223,18 +227,18 @@ final class DaemonClientTests: XCTestCase {
     }
 }
 
-/// Every recorded error message, lock-guarded (delivered from the observer's task).
+/// Every recorded error, lock-guarded (delivered from the observer's task).
 final class ErrorLog: @unchecked Sendable {
     private let lock = NSLock()
-    private var messages: [String] = []
+    private var errors: [Error] = []
 
-    func record(_ message: String) {
-        lock.lock(); messages.append(message); lock.unlock()
+    func record(_ error: Error) {
+        lock.lock(); errors.append(error); lock.unlock()
     }
 
-    var all: [String] {
+    var all: [Error] {
         lock.lock(); defer { lock.unlock() }
-        return messages
+        return errors
     }
 }
 
