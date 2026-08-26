@@ -60,12 +60,6 @@ private let gtkCoordinateCallbackDestroy: GClosureNotify? = { data, _ in
     Unmanaged<GtkCoordinateCallback>.fromOpaque(data).release()
 }
 
-/// A typed pointer viewed as an opaque instance — the signal helpers' input flavor
-/// for widgets reached through typed pointers (the window itself).
-func asOpaque<P>(_ instance: UnsafeMutablePointer<P>?) -> OpaquePointer? {
-    instance.flatMap { OpaquePointer($0) }
-}
-
 /// Connects an argumentless signal (`leave`, `close-request`, …) to a closure —
 /// typed-pointer instance flavor (callers that already hold an opaque controller
 /// pointer use the OpaquePointer overload).
