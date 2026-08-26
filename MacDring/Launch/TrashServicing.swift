@@ -5,8 +5,10 @@ import Foundation
 /// of `TrashInspector` (count / empty check) plus `FileMover.trash` / `.emptyTrash`,
 /// bundled by `SystemTrashService`. `TrashInspector` itself stays macOS-only (it reads
 /// directory metadata via Darwin `getattrlist`), so only this shape is platform-neutral.
-/// See PLAN.md §LP-12.
-protocol TrashServicing {
+/// See PLAN.md §LP-12. `public` so the Linux `topdrawerd` package can provide its own
+/// `gio`-backed conformer; every member is a standard-library type, so widening the
+/// access level pulls no other type public and changes no macOS behavior.
+public protocol TrashServicing {
     /// The total number of items across every Trash that "Empty Trash" would clear.
     func trashCount() -> Int
     /// Whether every such Trash is empty.

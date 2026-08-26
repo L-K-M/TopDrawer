@@ -2,17 +2,23 @@
 import Foundation
 import DBUS
 import Logging
+import MacDring
 
-/// The Top Drawer daemon's D-Bus service (LP-16 skeleton).
+/// The Top Drawer daemon's D-Bus service.
 ///
 /// Exports one object, `/ch/lkmc/TopDrawer`, implementing the `ch.lkmc.TopDrawer1`
 /// interface on the **session** bus and claims the well-known name
 /// `ch.lkmc.TopDrawer`:
 /// - `Ping() -> s` — liveness probe (the LP-16 acceptance smoke test).
 /// - `GetDocument() -> s` — the launcher JSON, served verbatim from disk.
+/// - `GetVolumes() -> s` — the classified mounted volumes as JSON (LP-17).
+/// - `Eject(s volumeID) -> b` — unmount/power-off a volume by its id (LP-17).
+/// - `GetTrashState() -> b u` — whether the Trash is empty, and its item count (LP-17).
 /// - `Launch(s itemID) -> b` — stub; returns `false` (real launching is LP-19).
-/// - `AddDroppedURIs(s tabID, as uris) -> b` — stub; returns `false` (drops are LP-17).
-/// - signal `DocumentChanged()` — emitted when the launcher file changes on disk.
+/// - `AddDroppedURIs(s tabID, as uris) -> b` — stub; returns `false` (drops are LP-19).
+/// - signal `DocumentChanged()` — the launcher file changed on disk.
+/// - signal `VolumesChanged()` — the set of mounted volumes changed (LP-17).
+/// - signal `TrashChanged()` — the Trash contents changed (LP-17).
 ///
 /// `wendylabsinc/dbus` exposes no `RequestName` helper and does not auto-route
 /// inbound calls, so this type does both itself: it registers a message handler that
@@ -24,16 +30,40 @@ public actor TopDrawerService {
     public static let objectPath = "/ch/lkmc/TopDrawer"
     public static let interfaceName = "ch.lkmc.TopDrawer1"
     /// Reported by `Ping`; bump alongside the interface as the daemon grows.
-    public static let version = "0.1.0"
+    public static let version = "0.2.0"
 
     private let source: LauncherDocumentSource
+    private let volumeSource: VolumeSnapshotProviding
+    private let trashService: TrashServicing
+    private let trashDirectory: URL
+    private let ejector: @Sendable (LinuxVolume) -> Bool
     private let logger: Logger
     private var connection: DBusClient.Connection?
     private var lastModified: Date?
+    private var lastVolumes: [LinuxVolume] = []
+    private var lastTrashCount: Int = 0
     private var watchTask: Task<Void, Never>?
+    private var trashWatcher: INotifyWatcher?
 
-    public init(source: LauncherDocumentSource, logger: Logger = Logger(label: "topdrawerd")) {
+    /// - Parameters:
+    ///   - volumeSource: the mounted-volume snapshot source (`/proc` in production).
+    ///   - trashService: backs `GetTrashState` (count + empty).
+    ///   - trashDirectory: the freedesktop Trash directory watched for `TrashChanged`
+    ///     (its `files/` count gates emission). Defaults to the live `$XDG_DATA_HOME`.
+    ///   - ejector: performs an eject; injectable so tests don't shell out.
+    public init(source: LauncherDocumentSource,
+                volumeSource: VolumeSnapshotProviding = ProcMounts(),
+                trashService: TrashServicing = GioTrashService(),
+                trashDirectory: URL = TrashLocation.directory(
+                    environment: ProcessInfo.processInfo.environment,
+                    home: FileManager.default.homeDirectoryForCurrentUser),
+                ejector: @escaping @Sendable (LinuxVolume) -> Bool = VolumeEjector.eject,
+                logger: Logger = Logger(label: "topdrawerd")) {
         self.source = source
+        self.volumeSource = volumeSource
+        self.trashService = trashService
+        self.trashDirectory = trashDirectory
+        self.ejector = ejector
         self.logger = logger
     }
 
@@ -53,7 +83,11 @@ public actor TopDrawerService {
 
         var interface = DBusObjectServer.Interface(name: Self.interfaceName)
         interface.methods = makeMethods()
-        interface.signals = [DBusObjectServer.Signal(name: "DocumentChanged")]
+        interface.signals = [
+            DBusObjectServer.Signal(name: "DocumentChanged"),
+            DBusObjectServer.Signal(name: "VolumesChanged"),
+            DBusObjectServer.Signal(name: "TrashChanged"),
+        ]
         await server.export(DBusObjectServer.ExportedObject(path: Self.objectPath,
                                                             interfaces: [interface]))
 
@@ -65,13 +99,19 @@ public actor TopDrawerService {
         try await claimBusName(on: connection)
 
         lastModified = source.modificationDate()
+        lastVolumes = volumeSource.volumes()
+        lastTrashCount = trashService.trashCount()
+        startTrashWatcher()
         startWatching(interval: watchInterval)
     }
 
-    /// Stops the file watcher (the D-Bus export goes away with the connection).
+    /// Stops the file/volume watcher and the Trash watcher (the D-Bus export goes away
+    /// with the connection).
     public func stop() {
         watchTask?.cancel()
         watchTask = nil
+        trashWatcher?.stop()
+        trashWatcher = nil
     }
 
     // MARK: - Methods
@@ -79,6 +119,9 @@ public actor TopDrawerService {
     private func makeMethods() -> [DBusObjectServer.Method] {
         let source = self.source
         let logger = self.logger
+        let volumeSource = self.volumeSource
+        let trashService = self.trashService
+        let ejector = self.ejector
         return [
             DBusObjectServer.Method(
                 name: "Ping",
@@ -91,6 +134,47 @@ public actor TopDrawerService {
                 outputArgs: [.init(name: "json", type: "s")]
             ) { _ in
                 [.string(source.rawJSON())]
+            },
+            DBusObjectServer.Method(
+                name: "GetVolumes",
+                outputArgs: [.init(name: "json", type: "s")]
+            ) { _ in
+                [.string(Self.encodeVolumes(volumeSource.volumes()))]
+            },
+            DBusObjectServer.Method(
+                name: "Eject",
+                inputArgs: [.init(name: "volumeID", type: "s")],
+                outputArgs: [.init(name: "ok", type: "b")]
+            ) { context in
+                let volumeID = context.arguments.first?.string ?? ""
+                // Resolve the id (mount point) to a live volume, so a stale id from an
+                // already-unmounted volume just fails rather than ejecting the wrong
+                // device. Two guards with distinct logs so an operator auditing a false
+                // reply can tell an unknown id from a policy rejection.
+                guard let volume = volumeSource.volumes().first(where: { $0.id == volumeID }) else {
+                    logger.info("Eject(\(volumeID)): no such volume")
+                    return [.boolean(false)]
+                }
+                // Enforce `ejectable` server-side: GetVolumes returns non-ejectable
+                // entries (e.g. a Dropbox folder), and a client mustn't be able to drive
+                // one into VolumeEjector — reject it here rather than spawn subprocesses
+                // doomed against a non-mount.
+                guard volume.ejectable else {
+                    logger.info("Eject(\(volumeID)): volume is not ejectable")
+                    return [.boolean(false)]
+                }
+                return [.boolean(ejector(volume))]
+            },
+            DBusObjectServer.Method(
+                name: "GetTrashState",
+                outputArgs: [.init(name: "empty", type: "b"), .init(name: "count", type: "u")]
+            ) { _ in
+                // One observation, so `empty` and `count` can't contradict each other
+                // (a file trashed between two calls). `clamping:` rather than a trapping
+                // conversion — a negative error sentinel or an absurd count must not take
+                // the daemon down.
+                let count = trashService.trashCount()
+                return [.boolean(count == 0), .uint32(UInt32(clamping: count))]
             },
             DBusObjectServer.Method(
                 name: "Launch",
@@ -108,7 +192,7 @@ public actor TopDrawerService {
             ) { context in
                 let tabID = context.arguments.first?.string ?? ""
                 let uris = context.arguments.dropFirst().first?.array?.compactMap(\.string) ?? []
-                logger.info("AddDroppedURIs(\(tabID), \(uris.count) uris): not implemented in the LP-16 skeleton (lands in LP-17)")
+                logger.info("AddDroppedURIs(\(tabID), \(uris.count) uris): not implemented yet (drops land in LP-19)")
                 return [.boolean(false)]
             },
         ]
@@ -141,8 +225,13 @@ public actor TopDrawerService {
         logger.info("Owns D-Bus name \(Self.busName)")
     }
 
-    // MARK: - Document change watch
+    // MARK: - Change watches
 
+    /// Polls the launcher document's mtime and the mounted-volume set on the same
+    /// interval. inotify can't watch `/proc`, so volumes are polled (a mount/unmount is
+    /// rare and not latency-critical); the launcher file is polled for the same reason
+    /// LP-16 chose to (a plain descriptor source misses the atomic-rename write). The
+    /// Trash has its own inotify watch (`startTrashWatcher`).
     private func startWatching(interval: Duration) {
         watchTask?.cancel()
         watchTask = Task { [weak self] in
@@ -151,32 +240,90 @@ public actor TopDrawerService {
                 // Stop once the service is gone (e.g. a test's service goes out of scope
                 // without an explicit stop()), rather than polling forever on `nil`.
                 guard let self else { break }
-                await self.checkForChange()
+                await self.checkForDocumentChange()
+                await self.checkForVolumeChange()
+                // Poll the Trash count too, as a guaranteed-delivery backstop to the
+                // inotify watch: the watch lowers latency, but a poll can't be defeated
+                // by an inotify edge case (the files/ dir not existing yet, the dir being
+                // deleted and recreated). The count gate keeps it idempotent, so the two
+                // sources never double-fire.
+                await self.checkForTrashChange()
             }
         }
     }
 
-    private func checkForChange() async {
+    private func checkForDocumentChange() async {
         let current = source.modificationDate()
         guard current != lastModified else { return }
         lastModified = current
-        await emitDocumentChanged()
+        await emitSignal("DocumentChanged")
     }
 
-    /// Emits the `DocumentChanged` signal. Also callable directly (the tests use it
-    /// to exercise the signal without waiting on the file-watch interval).
-    public func emitDocumentChanged() async {
+    private func checkForVolumeChange() async {
+        let current = volumeSource.volumes()
+        guard current != lastVolumes else { return }
+        lastVolumes = current
+        await emitSignal("VolumesChanged")
+    }
+
+    // MARK: - Trash watch
+
+    /// The freedesktop Trash count changes without touching `/proc`, so it *can* be
+    /// inotify-watched: an `INotifyWatcher` on the Trash directory (its `files/` appears
+    /// on first use) fires `TrashChanged` when the count actually moves. Gating on the
+    /// count avoids re-emitting for metadata-only churn.
+    private func startTrashWatcher() {
+        trashWatcher?.stop()   // a second start() (reconnect, tests) must not leak the fd
+        let watched = trashDirectory.appendingPathComponent("files", isDirectory: true)
+        let watcher = INotifyWatcher(directory: watched) { [weak self] in
+            Task { await self?.checkForTrashChange() }
+        }
+        watcher.start()
+        trashWatcher = watcher
+    }
+
+    private func checkForTrashChange() async {
+        // Gate on the same count `GetTrashState` serves (`trashService`), so the signal
+        // can never diverge from the reported state. In production the injected
+        // `trashDirectory` the watch fires on and the service's own directory are the
+        // same freedesktop Trash, so a file event maps to a count change here.
+        let current = trashService.trashCount()
+        guard current != lastTrashCount else { return }
+        lastTrashCount = current
+        await emitSignal("TrashChanged")
+    }
+
+    // MARK: - Signals
+
+    /// Emits `DocumentChanged` — kept for tests that exercise the signal path directly,
+    /// without waiting on the file-watch interval.
+    public func emitDocumentChanged() async { await emitSignal("DocumentChanged") }
+
+    /// A parameterless `ch.lkmc.TopDrawer1` signal. Fired through the `Send` actor
+    /// (a signal expects no reply, unlike `connection.send(_:)` which would wait for one).
+    private func emitSignal(_ name: String) async {
         guard let connection else { return }
         let signal = DBusRequest.createSignal(
-            path: Self.objectPath, interface: Self.interfaceName, name: "DocumentChanged")
-        // A signal expects no reply, so fire it through the `Send` actor rather than
-        // `connection.send(_:)`, which would wait for a reply that never comes.
+            path: Self.objectPath, interface: Self.interfaceName, name: name)
         let sender: DBusClient.Send = await connection.send
         do {
             _ = try await sender.send(signal)
         } catch {
-            logger.debug("Couldn't emit DocumentChanged: \(error)")
+            logger.debug("Couldn't emit \(name): \(error)")
         }
+    }
+
+    // MARK: - JSON
+
+    /// `{"volumes":[…]}` — a stable envelope so the field can gain siblings later without
+    /// the frontend re-parsing a bare array. Deterministic key order (sorted) keeps the
+    /// output diffable in tests.
+    static func encodeVolumes(_ volumes: [LinuxVolume]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        struct Envelope: Encodable { let volumes: [LinuxVolume] }
+        guard let data = try? encoder.encode(Envelope(volumes: volumes)) else { return #"{"volumes":[]}"# }
+        return String(decoding: data, as: UTF8.self)
     }
 }
 

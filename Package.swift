@@ -89,6 +89,11 @@ let macDringSources: [String] = [
     // macOS-only; the protocols and the Linux no-op login item compile here.
     "Model/LoginItemManaging.swift",
     "Screens/DisplayIdentity.swift",
+    // LP-17: the generic inotify directory watcher (Linux-only; a whole-file
+    // #if os(Linux) guard, so Xcode's synchronized MacDring/ group compiles it to
+    // nothing on macOS). Feeds the daemon's Trash / folder-tab watches. See the CInotify
+    // systemLibrary target below.
+    "Common/INotifyWatcher.swift",
     // LP-13 part 3: the global-hotkey seam. The protocol + opaque HotkeyToken compile
     // here; the macOS CarbonHotkeyRegistrar (and CarbonHotkey it wraps) stay macOS-only
     // behind #if canImport(Carbon), so Linux registers no hotkey until its backend lands.
@@ -166,12 +171,22 @@ let package = Package(
             dependencies: [
                 .product(name: "Crypto", package: "swift-crypto",
                          condition: .when(platforms: [.linux])),
+                // The inotify(7) syscalls for INotifyWatcher (LP-17). Linux-only, so the
+                // macOS build never sees it — and MacDring.xcodeproj never resolves this
+                // manifest anyway.
+                .target(name: "MacDringCInotify", condition: .when(platforms: [.linux])),
             ],
             path: "MacDring",
             // macOS-bundle artifacts that have no place in a Linux library build.
             exclude: ["Resources", "MacDring.entitlements"],
             sources: macDringSources
         ),
+        // A header-only system-library shim exposing the inotify(7) syscalls (LP-17),
+        // mirroring PictKit's CInotify. The IN_* masks are hard-coded in INotifyWatcher,
+        // not imported from here (see CInotify/shim.h). Named MacDringCInotify (not the
+        // dir's `CInotify`) so it can't collide with PictKit's identically-named module
+        // once both packages land in the daemon's graph.
+        .systemLibrary(name: "MacDringCInotify", path: "CInotify"),
         .testTarget(
             name: "MacDringTests",
             dependencies: ["MacDring"],

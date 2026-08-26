@@ -1,0 +1,8 @@
+// Namespaced `MacDringCInotify`, not `CInotify`: PictKit ships an identically-purposed
+// CInotify shim, and once the daemon links both packages (PictKit lands in a later LP)
+// two Clang modules named `CInotify` in one graph would fail to build. The distinct
+// name keeps them co-linkable. (The systemLibrary target name must match this.)
+module MacDringCInotify [system] {
+    header "shim.h"
+    export *
+}
