@@ -1,0 +1,5 @@
+module CGtkLayerShell [system] {
+    header "shim.h"
+    link "gtk4-layer-shell"
+    export *
+}

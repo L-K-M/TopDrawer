@@ -63,8 +63,28 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends dbus dbus-bin
 
+      # LP-20: the topdrawer-shell frontend links GTK4 + gtk4-layer-shell. Noble has
+      # libgtk-4-dev but does NOT package the GTK4 layer-shell binding (only the
+      # GTK3-era libgtk-layer-shell; do not confuse them), so build it from source,
+      # pinned to the upstream tag (v1.3.0 == 1c963c51 — also what Ubuntu 26.04 ships).
+      # Introspection/vapi are off: nothing in this package uses them, and dropping
+      # them trims the gobject-introspection dev packages from the apt set.
+      - name: Install GTK4 and build gtk4-layer-shell (for the shell frontend)
+        run: |
+          apt-get install -y --no-install-recommends \
+            pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
+          git clone --depth 1 --branch v1.3.0 https://github.com/wmww/gtk4-layer-shell /tmp/gtk4-layer-shell
+          # The tag is the pin, the commit hash the verification — same discipline as
+          # the pinned actions/container above (a moved tag fails the build loudly).
+          test "$(git -C /tmp/gtk4-layer-shell rev-parse HEAD)" = 1c963c51514581c41b9bdae08cdf69171265cdda
+          meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
+            --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false \
+            -Dsmoke-tests=false -Dintrospection=false -Dvapi=false
+          ninja -C /tmp/gtk4-layer-shell/build install
+          ldconfig
+
       - name: Build the Linux daemon package
         run: swift build -v --package-path linux --disable-automatic-resolution
 
       - name: Test the Linux daemon package (under a private session bus)
-        run: dbus-run-session -- swift test -v --package-path linux --disable-automatic-resolution
+        run: dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test -v --package-path linux --disable-automatic-resolution

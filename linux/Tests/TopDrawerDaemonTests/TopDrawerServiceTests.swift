@@ -8,7 +8,7 @@ import MacDring
 
 /// End-to-end tests: a real `TopDrawerService` exported on the session bus, driven
 /// by a separate client connection. They need a bus, so run them under
-/// `dbus-run-session -- swift test --package-path linux` (plain `swift test` skips
+/// `dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test --package-path linux` (plain `swift test` skips
 /// them). This is the LP-16 acceptance: `Ping` (and the rest of the interface) over
 /// a real D-Bus round trip.
 final class TopDrawerServiceTests: XCTestCase {
@@ -20,8 +20,9 @@ final class TopDrawerServiceTests: XCTestCase {
 
     override func setUpWithError() throws {
         try XCTSkipIf(
-            ProcessInfo.processInfo.environment["DBUS_SESSION_BUS_ADDRESS"] == nil,
-            "no session bus — run under `dbus-run-session -- swift test --package-path linux`")
+            ProcessInfo.processInfo.environment["TOPDRAWER_PRIVATE_TEST_BUS"] == nil
+                || ProcessInfo.processInfo.environment["DBUS_SESSION_BUS_ADDRESS"] == nil,
+            "not a private test bus — run under `dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test --package-path linux`")
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("topdrawerd-svc-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

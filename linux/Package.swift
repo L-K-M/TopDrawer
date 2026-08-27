@@ -69,3 +69,59 @@ let package = Package(
         ),
     ]
 )
+
+// The GTK/layer-shell frontend only exists on Linux; the `#if` keeps the manifest
+// parseable on macOS, where `gtk4`/`gtk4-layer-shell-0` have no pkg-config entries
+// (same pattern as the dexbar Linux package).
+#if os(Linux)
+// The LP-20 layer-shell frontend: the GTK code needs pkg-config `gtk4` +
+// `gtk4-layer-shell-0` at build time (see linux-ci.yml — the noble container builds
+// gtk4-layer-shell from source, as Ubuntu doesn't package it until 25.10). Its
+// client logic lives in `TopDrawerShell`, a GTK-free library so the D-Bus client is
+// bus-testable with no display. The `#if` keeps the manifest parseable on macOS,
+// where those pkg-config entries don't exist (same pattern as dexbar's package).
+package.products.append(.executable(name: "topdrawer-shell", targets: ["topdrawer-shell"]))
+package.products.append(.library(name: "TopDrawerShell", targets: ["TopDrawerShell"]))
+package.targets.append(contentsOf: [
+    .systemLibrary(
+        name: "CGtk4",
+        path: "Sources/CLibraries/CGtk4",
+        pkgConfig: "gtk4",
+        providers: [.apt(["libgtk-4-dev"])]
+    ),
+    .systemLibrary(
+        name: "CGtkLayerShell",
+        path: "Sources/CLibraries/CGtkLayerShell",
+        pkgConfig: "gtk4-layer-shell-0",
+        // No noble package exists (Ubuntu ships it from 25.10) — the apt provider is a
+        // hint for distros that do package it; CI builds v1.3.0 from source instead.
+        providers: [.apt(["libgtk4-layer-shell-dev"])]
+    ),
+    // The shell's daemon-facing client + tab model: no GTK import, so the tests drive
+    // it under dbus-run-session with no display or GTK toolchain needed.
+    .target(
+        name: "TopDrawerShell",
+        dependencies: [
+            .product(name: "DBUS", package: "dbus", condition: .when(platforms: [.linux])),
+        ]
+    ),
+    .executableTarget(
+        name: "topdrawer-shell",
+        dependencies: [
+            "TopDrawerShell",
+            .target(name: "CGtk4", condition: .when(platforms: [.linux])),
+            .target(name: "CGtkLayerShell", condition: .when(platforms: [.linux])),
+        ]
+    ),
+    .testTarget(
+        name: "TopDrawerShellTests",
+        dependencies: [
+            "TopDrawerShell",
+            // The client tests run against a real TopDrawerService (backends injected),
+            // which lives in the daemon target.
+            "TopDrawerDaemon",
+            .product(name: "DBUS", package: "dbus", condition: .when(platforms: [.linux])),
+        ]
+    ),
+])
+#endif
