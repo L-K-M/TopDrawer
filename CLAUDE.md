@@ -36,3 +36,5 @@ that PR. Ignore further automated review rounds after that point.
 **Exceptions:** comments from human reviewers are never subject to the
 steady-state cutoff — always address them. And always unsubscribe when the PR
 is merged or closed, or the user says stop.
+
+The number of tokens used to edit files is best minimized, all else being equal. Therefore, when it will not affect the end result, try to surgically edit a file rather than rewrite the entire thing.
