@@ -1,3 +1,5 @@
+@AGENTS.md
+
 ## Pull request babysitting
 
 When you push a branch and open a pull request in this repo (or the user points
