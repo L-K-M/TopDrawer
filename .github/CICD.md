@@ -1,7 +1,7 @@
 # CI/CD — building, testing & releasing Top Drawer
 
 Top Drawer (and its sibling app **Zap**) ship via **GitHub Actions** on macOS runners.
-Two workflows do the work, and **neither needs any secrets or API keys**:
+Three workflows do the work, and **none of them needs any secrets or API keys**:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
@@ -12,7 +12,9 @@ Two workflows do the work, and **neither needs any secrets or API keys**:
 The macOS jobs run on `macos-14` (Apple Silicon) with a **pinned Xcode** (`16.2`). There
 are no third-party dependencies, so there's nothing to cache or install beyond the build
 tools. The Linux jobs run in a digest-pinned Swift container; see
-[Linux `.deb`](#linux-deb) below.
+[Linux `.deb`](#linux-deb) below. The two toolchains differ on purpose — Xcode 16.2's
+Swift on macOS, Swift 6.3 on Linux — and the shared core must keep compiling under both,
+which each platform's CI enforces.
 
 > **Signing/notarization is intentionally off.** Releases are **not** signed with a Developer
 > ID and **not** notarized — no certificates, no App Store Connect API key, no secrets. See
@@ -75,11 +77,15 @@ path (a Linux failure never blocks or alters the macOS release; the `.deb` is si
    tree (`/usr/bin`, the systemd *user* unit, a private `/usr/lib/topdrawer/` copy of
    gtk4-layer-shell reached through an rpath, DEP-5 copyright, changelog), computes
    `Depends` with `dpkg-shlibdeps`, and runs `lintian` (errors fail the job; warnings
-   are in the log). A pre-release version maps to Debian's `~` form (`2.2.0~beta.1`).
+   are in the log). A pre-release version maps to Debian's `~` form inside the package
+   (`Version: 2.2.0~beta.1`, which sorts before `2.2.0`); the release asset keeps the
+   tag's hyphenated spelling (`TopDrawer-2.2.0-beta.1-amd64.deb`), since `~` is unsafe in
+   GitHub asset names.
 3. **`linux-smoke`** installs the artifact with `apt` into a pristine, digest-pinned
-   `ubuntu:24.04` container — so `Depends` must resolve on their own — then runs
-   `topdrawerd --version` and `topdrawer-shell --version` (the latter proves the vendored
-   library loads), and drives `Ping` over a throwaway `dbus-run-session` bus.
+   `ubuntu:24.04` container — so `Depends` must resolve on their own — then checks that
+   `topdrawerd --version` and `topdrawer-shell --version` print exactly the tag's version
+   (the latter also proves the vendored library loads), and that `Ping` over a throwaway
+   `dbus-run-session` bus answers with it.
 4. **`publish-linux`** waits for the macOS `release` job, uploads the `.deb` with
    `gh release upload`, appends a Linux section to the release notes, and downloads and
    byte-compares the published asset, removing it on mismatch — the macOS verify rule.
@@ -162,6 +168,10 @@ Until then, none are needed.
   ad-hoc sign* step handles this. A truly unsigned arm64 binary is killed by the kernel.
 - **Wrong Xcode** — bump `xcode-version` in both workflows together; keep Top Drawer and Zap on
   the same version.
+- **Wrong Swift container on a Linux job** — the `swift:6.3-noble` digest is pinned in two
+  places (`linux-ci.yml` and `release.yml`'s `linux-deb` job); bump both together so the
+  toolchain CI tests is the toolchain that packages, and bump the `ubuntu:24.04` digest of
+  `linux-smoke` alongside.
 - **`linux-deb` fails in lintian** — the log lists the tags; `build-deb.sh` fails only on
   errors (`E:`). Fix the package layout rather than suppressing, unless the tag is a known
   false positive, in which case add it to the script's `--suppress-tags` list with a reason.

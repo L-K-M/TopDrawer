@@ -10,7 +10,10 @@ Requires=dbus.socket
 # reach the user manager only when the desktop imports them, just before
 # graphical-session.target. A service started earlier keeps its stale environment
 # for good and would launch apps that can't find the display. PartOf also stops
-# the daemon at logout, with the session.
+# the daemon at logout, with the session. GNOME and KDE Plasma reach this target
+# themselves; a bare sway/hyprland session does so only through a session manager
+# (uwsm) or an explicit `systemctl --user start graphical-session.target` in its
+# config — see linux/README.md.
 After=graphical-session.target
 PartOf=graphical-session.target
 

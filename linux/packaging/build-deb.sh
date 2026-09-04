@@ -34,8 +34,9 @@
 #                                  Default: /usr/share/doc/gtk4-layer-shell/LICENSE (where
 #                                  .github/actions/setup-gtk4-layer-shell puts it), then the
 #                                  distro package's /usr/share/doc/libgtk4-layer-shell0/copyright.
-#   TOPDRAWER_NO_VENDOR_LAYER_SHELL=1  depend on the distro's libgtk4-layer-shell0 instead
-#                                  (Ubuntu 25.10+ only — the package then won't install on 24.04).
+#   TOPDRAWER_NO_VENDOR_LAYER_SHELL=1  don't vendor; dpkg-shlibdeps then makes the package
+#                                  depend on the distro's libgtk4-layer-shell0 (Ubuntu 25.10+
+#                                  only — such a package won't install on 24.04).
 #   SOURCE_DATE_EPOCH              changelog timestamp (default: now).
 set -euo pipefail
 umask 022
@@ -67,13 +68,13 @@ deb_version="${version//-/\~}"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 pkg="$root/linux"
+
+for tool in swift dpkg dpkg-deb dpkg-shlibdeps strip objdump gzip install; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "error: $tool not found (need swift, dpkg-dev, binutils)" >&2; exit 1; }
+done
 arch="$(dpkg --print-architecture)"
 [ -n "$output" ] || output="$pkg/.build/deb/topdrawer_${deb_version}_${arch}.deb"
 case "$output" in /*) ;; *) output="$PWD/$output" ;; esac
-
-for tool in swift dpkg-deb dpkg-shlibdeps strip gzip install; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "error: $tool not found (need swift, dpkg-dev, binutils)" >&2; exit 1; }
-done
 
 vendor_layer_shell=1
 [ "${TOPDRAWER_NO_VENDOR_LAYER_SHELL:-0}" = 1 ] && vendor_layer_shell=0
@@ -83,6 +84,7 @@ if [ "$vendor_layer_shell" = 1 ]; then
   # Resolve the SONAME link to the real file; the package recreates the link itself.
   layer_shell_lib="${TOPDRAWER_LAYER_SHELL_LIB:-}"
   if [ -z "$layer_shell_lib" ]; then
+    command -v pkg-config >/dev/null 2>&1 || { echo "error: pkg-config not found (needed to locate gtk4-layer-shell; or set TOPDRAWER_LAYER_SHELL_LIB)" >&2; exit 1; }
     libdir="$(pkg-config --variable=libdir gtk4-layer-shell-0 2>/dev/null || true)"
     [ -n "$libdir" ] || { echo "error: pkg-config can't find gtk4-layer-shell-0; build it from source first (see linux/README.md) or set TOPDRAWER_LAYER_SHELL_LIB" >&2; exit 1; }
     layer_shell_lib="$libdir/libgtk4-layer-shell.so.0"
@@ -130,7 +132,8 @@ done
 
 stage="$(mktemp -d)"
 chmod 755 "$stage"   # mktemp makes it 0700; it becomes the package's `./` entry
-cleanup() { restore_version; rm -rf "$stage"; }
+shlibdeps_dir=""     # created later; cleaned here so a failing dpkg-shlibdeps leaks nothing
+cleanup() { restore_version; rm -rf "$stage"; [ -z "$shlibdeps_dir" ] || rm -rf "$shlibdeps_dir"; }
 trap cleanup EXIT
 
 install -Dm755 "$bin_path/topdrawerd" "$stage/usr/bin/topdrawerd"
@@ -234,15 +237,18 @@ if [ "$vendor_layer_shell" = 1 ]; then
   shlib_args+=(-l"$stage/usr/lib/topdrawer" -e"$stage/usr/lib/topdrawer/$real_name")
 fi
 shlibs="$(cd "$shlibdeps_dir" && dpkg-shlibdeps -O "${shlib_args[@]}")"
-rm -rf "$shlibdeps_dir"
 shlibs="${shlibs#shlibs:Depends=}"
 [ -n "$shlibs" ] || { echo "error: dpkg-shlibdeps produced no dependencies" >&2; exit 1; }
 
 # Beyond the shared libraries: the daemon shells out to `gio` (launch / open / trash /
-# mount) from libglib2.0-bin, and needs a session bus to claim its name on. udisksctl
-# (eject) and xdg-open (launch fallback) are nice-to-have, so Recommends.
-depends="$shlibs, libglib2.0-bin, default-dbus-session-bus | dbus-session-bus"
-[ "$vendor_layer_shell" = 1 ] || depends="$depends, libgtk4-layer-shell0"
+# mount) from libglib2.0-bin. The bus dependency is dbus-user-session specifically, not
+# the generic `dbus-session-bus` virtual: the unit `Requires=dbus.socket` (the systemd
+# *user* socket unit, shipped only by dbus-user-session) and pins the bus to `%t/bus`,
+# so a dbus-launch-style provider (dbus-x11) would satisfy the virtual and leave the
+# service unable to start. udisksctl (eject) and xdg-open (launch fallback) are
+# nice-to-have, so Recommends. (Without vendoring, dpkg-shlibdeps already adds the
+# distro's libgtk4-layer-shell0 from the shell's DT_NEEDED.)
+depends="$shlibs, libglib2.0-bin, dbus-user-session"
 
 installed_size="$(du -sk --apparent-size "$stage" | cut -f1)"
 cat > "$stage/DEBIAN/control" <<CTRL

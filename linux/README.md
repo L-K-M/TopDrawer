@@ -45,7 +45,7 @@ swift run --package-path linux topdrawer-shell -- --edge bottom [--monitor 0]
 
 | Member | Signature | Behavior |
 | --- | --- | --- |
-| `Ping` | `() → s` | Returns `topdrawerd <version> alive` — the liveness smoke test. |
+| `Ping` | `() → s` | Returns `topdrawerd <version> alive` — the liveness smoke test; `<version>` is the package version (`TopDrawerVersion.current`), not an interface version. |
 | `GetDocument` | `() → s` | The launcher JSON (`$XDG_DATA_HOME/MacDring/launcher.json`), served verbatim; `{}` if absent. |
 | `GetVolumes` | `() → s` | The classified mounted volumes as JSON: `{"volumes":[{"id","name","path","kind","device","ejectable"}]}`, `kind` ∈ `disk`/`network`/`cloud` (LP-17). |
 | `Eject` | `(s volumeID) → b` | Unmounts/powers off the volume with that `id` (its mount point); `false` if unknown or it failed (LP-17). |
@@ -272,7 +272,12 @@ Check it: `systemctl --user status topdrawerd`. Stop/disable with
 `graphical-session.target` (started with the desktop, after it has exported
 `DISPLAY`/`WAYLAND_DISPLAY` and friends to the user manager — the environment the
 daemon's launches inherit — and stopped at logout), so `enable` takes effect at the
-next graphical login; `--now` starts it in the current one.
+next graphical login; `--now` starts it in the current one. GNOME and KDE Plasma
+activate that target themselves. A bare **sway/hyprland** session does not: launch it
+through a session manager such as `uwsm`, or add `exec systemctl --user start
+graphical-session.target` (after importing `WAYLAND_DISPLAY` and friends with
+`systemctl --user import-environment`) to the compositor config — otherwise the
+enabled unit never starts and you'd run `systemctl --user start topdrawerd` by hand.
 
 ## Smoke test with `busctl`
 

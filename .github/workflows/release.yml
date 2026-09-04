@@ -300,6 +300,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [release, linux-smoke]
+    # The workflow-level grant already covers this job; stated here too because it is
+    # the one Linux job that writes (the others narrow to contents: read).
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -309,9 +313,6 @@ jobs:
           name: linux-deb
           path: deb
 
-      - name: Version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
       - name: Upload the .deb to the GitHub Release
         run: |
           DEB=$(find "$GITHUB_WORKSPACE/deb" -maxdepth 1 -name '*.deb' -print -quit)
@@ -319,9 +320,15 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" "$DEB" --clobber
           echo "DEB=$DEB" >> "$GITHUB_ENV"
 
+      # Idempotent: a re-run of this job (after a later step failed) must not append
+      # the section a second time.
       - name: Add the Linux section to the release notes
         run: |
           gh release view "$GITHUB_REF_NAME" --json body -q .body > "$RUNNER_TEMP/notes.md"
+          if grep -q '^### Linux (experimental)' "$RUNNER_TEMP/notes.md"; then
+            echo "release notes already carry the Linux section"
+            exit 0
+          fi
           cat >> "$RUNNER_TEMP/notes.md" <<EOF
 
           ### Linux (experimental)
