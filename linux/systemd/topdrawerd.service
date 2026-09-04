@@ -4,6 +4,15 @@ Documentation=https://github.com/L-K-M/TopDrawer
 # The session bus is where we claim ch.lkmc.TopDrawer, so wait for it.
 After=dbus.socket
 Requires=dbus.socket
+# Start with the graphical session, not when the user manager comes up at login:
+# the daemon spawns applications (`gio launch` / `gio open`) with its own
+# environment, and DISPLAY / WAYLAND_DISPLAY / XDG_CURRENT_DESKTOP / XDG_DATA_DIRS
+# reach the user manager only when the desktop imports them, just before
+# graphical-session.target. A service started earlier keeps its stale environment
+# for good and would launch apps that can't find the display. PartOf also stops
+# the daemon at logout, with the session.
+After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
@@ -11,10 +20,11 @@ Type=simple
 # graphical session, so pin it to the standard per-user bus socket (%t is the user's
 # $XDG_RUNTIME_DIR). Without this the daemon can fail to find the bus at login.
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
-# Installed per-user (see linux/README.md). %h is the user's home directory.
+# Installed per-user (see linux/README.md); the .deb rewrites this to /usr/bin.
+# %h is the user's home directory.
 ExecStart=%h/.local/bin/topdrawerd
 Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

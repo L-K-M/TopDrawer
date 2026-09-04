@@ -205,7 +205,60 @@ license come from). The release workflow runs the same script, then installs the
 result into a pristine `ubuntu:24.04` container and checks `--version` and a D-Bus
 `Ping` before attaching it to the release.
 
+## Seed a launcher document
+
+Nothing on Linux creates the launcher document yet (the macOS app writes it; the
+Linux write path arrives with drag & drop, LP-23), so a fresh install serves `{}` —
+an empty dock with nothing to launch. Seed one by hand to have something to test.
+The format is the macOS app's (`LauncherDocument`): every tab needs an `id` (a UUID)
+and an `anchor`; items carry a `kind` and a `url`. Pick an application entry that
+exists on your desktop (`ls /usr/share/applications`):
+
+```sh
+mkdir -p ~/.local/share/MacDring
+cat > ~/.local/share/MacDring/launcher.json <<EOF
+{
+  "version": 1,
+  "tabs": [
+    {
+      "id": "7B1E1B4A-0F7C-4D2E-9C3B-5A6D7E8F9A01",
+      "title": "Apps",
+      "kind": "items",
+      "colorHex": "#0A84FF",
+      "anchor": { "displayUUID": "00000000-0000-0000-0000-000000000000", "edge": "right", "position": 0.3, "order": 0 },
+      "items": [
+        { "id": "C0A1F2E3-1111-4222-8333-444455556661", "kind": "application", "displayName": "Text Editor",
+          "url": "file:///usr/share/applications/org.gnome.TextEditor.desktop" },
+        { "id": "C0A1F2E3-1111-4222-8333-444455556662", "kind": "folder", "displayName": "Downloads",
+          "url": "file://$HOME/Downloads/" },
+        { "id": "C0A1F2E3-1111-4222-8333-444455556663", "kind": "url", "displayName": "Top Drawer on GitHub",
+          "url": "https://github.com/L-K-M/TopDrawer" }
+      ]
+    },
+    {
+      "id": "7B1E1B4A-0F7C-4D2E-9C3B-5A6D7E8F9A02",
+      "title": "Fresh",
+      "kind": "fresh",
+      "colorHex": "#34C759",
+      "anchor": { "displayUUID": "00000000-0000-0000-0000-000000000000", "edge": "right", "position": 0.5, "order": 1 },
+      "items": []
+    }
+  ]
+}
+EOF
+```
+
+The daemon notices the file (`DocumentChanged`), `GetDocument` returns it verbatim,
+the shell's strip shows `Apps · Fresh`, `Launch s C0A1F2E3-1111-4222-8333-444455556662`
+opens Downloads in the file manager, and `GetRecents s 7B1E1B4A-0F7C-4D2E-9C3B-5A6D7E8F9A02`
+lists the newest files in Downloads/Desktop/Documents. The `displayUUID` is a
+placeholder: the Linux frontends don't place tabs yet (LP-21), and the macOS app
+falls back to its main display for a UUID it doesn't know.
+
 ## Install (per user, from a local build)
+
+Not if the `.deb` is installed: a unit in `~/.config/systemd/user/` overrides the
+packaged one and would point at a binary the package doesn't install.
 
 ```sh
 install -Dm755 linux/.build/release/topdrawerd ~/.local/bin/topdrawerd
@@ -215,7 +268,11 @@ systemctl --user enable --now topdrawerd
 ```
 
 Check it: `systemctl --user status topdrawerd`. Stop/disable with
-`systemctl --user disable --now topdrawerd`.
+`systemctl --user disable --now topdrawerd`. The unit is tied to
+`graphical-session.target` (started with the desktop, after it has exported
+`DISPLAY`/`WAYLAND_DISPLAY` and friends to the user manager — the environment the
+daemon's launches inherit — and stopped at logout), so `enable` takes effect at the
+next graphical login; `--now` starts it in the current one.
 
 ## Smoke test with `busctl`
 
