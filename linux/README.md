@@ -11,7 +11,9 @@ and Fresh tab contents (`GetRecents` + `RecentsChanged`); **LP-19** implemented 
 (`Launch` / `OpenWith` / `Reveal`) and records launches into the recents history;
 **LP-19b** adds running-apps detection (`GetRunningAppIDs` + `RunningAppsChanged`);
 **LP-20** adds the first frontend, **`topdrawer-shell`** — a GTK4 + layer-shell
-"hello dock". Drop-to-tab (`AddDroppedURIs`) remains a follow-up.
+"hello dock"; **LP-30** packages both as a **`.deb`** (see [Install from the
+package](#install-from-the-deb-package)). Drop-to-tab (`AddDroppedURIs`) remains a
+follow-up.
 
 ## `topdrawer-shell` — the layer-shell frontend (LP-20)
 
@@ -43,7 +45,7 @@ swift run --package-path linux topdrawer-shell -- --edge bottom [--monitor 0]
 
 | Member | Signature | Behavior |
 | --- | --- | --- |
-| `Ping` | `() → s` | Returns `topdrawerd <version> alive` — the liveness smoke test. |
+| `Ping` | `() → s` | Returns `topdrawerd <version> alive` — the liveness smoke test; `<version>` is the package version (`TopDrawerVersion.current`), not an interface version. |
 | `GetDocument` | `() → s` | The launcher JSON (`$XDG_DATA_HOME/MacDring/launcher.json`), served verbatim; `{}` if absent. |
 | `GetVolumes` | `() → s` | The classified mounted volumes as JSON: `{"volumes":[{"id","name","path","kind","device","ejectable"}]}`, `kind` ∈ `disk`/`network`/`cloud` (LP-17). |
 | `Eject` | `(s volumeID) → b` | Unmounts/powers off the volume with that `id` (its mount point); `false` if unknown or it failed (LP-17). |
@@ -160,7 +162,103 @@ The daemon uses [`wendylabsinc/dbus`](https://github.com/wendylabsinc/dbus) (a p
 Swift D-Bus implementation on SwiftNIO). It has no `RequestName` helper, so the
 daemon calls `org.freedesktop.DBus.RequestName` itself to claim the name.
 
-## Install (per user)
+Both executables answer `--version` and `--help` without touching the bus or a
+display. Local builds report `0.0.0-dev`; the packaging below stamps the release
+version (from the git tag) into `Sources/TopDrawerVersion/TopDrawerVersion.swift`
+at build time, so the tag is the single source of truth — as it is for the macOS
+`MARKETING_VERSION`.
+
+## Install from the .deb package
+
+Every [release](https://github.com/L-K-M/TopDrawer/releases) since 2.2.0 attaches
+`TopDrawer-<version>-amd64.deb`, built on Ubuntu 24.04 (so it installs on 24.04 and
+newer; `Depends` name the exact runtime libraries). It carries `/usr/bin/topdrawerd`,
+`/usr/bin/topdrawer-shell`, the daemon's systemd **user** unit
+(`/usr/lib/systemd/user/topdrawerd.service`), and a private copy of gtk4-layer-shell
+under `/usr/lib/topdrawer/` — Ubuntu packages the GTK4 binding only from 25.10, so
+the shell would otherwise not run on 24.04. Nothing is enabled automatically:
+
+```sh
+sudo apt install ./TopDrawer-<version>-amd64.deb
+systemctl --user enable --now topdrawerd
+topdrawerd --version
+busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
+topdrawer-shell --edge bottom       # on a layer-shell compositor (see above)
+```
+
+Remove with `sudo apt remove topdrawer` (after `systemctl --user disable --now
+topdrawerd`). The Swift runtime is linked statically, so the package depends on no
+Swift installation.
+
+To build the package yourself — `dpkg-dev`, `binutils` and (optionally) `lintian`
+installed, gtk4-layer-shell built from source per the CI recipe in
+`.github/actions/setup-gtk4-layer-shell/action.yml`:
+
+```sh
+linux/packaging/build-deb.sh 2.2.0               # → linux/.build/deb/topdrawer_2.2.0_amd64.deb
+linux/packaging/build-deb.sh 2.2.0-beta.1 --output /tmp/TopDrawer-2.2.0-beta.1-amd64.deb
+```
+
+The script's header documents what it stages, how `Depends` are computed
+(`dpkg-shlibdeps`), and the environment knobs (where the vendored library and its
+license come from). The release workflow runs the same script, then installs the
+result into a pristine `ubuntu:24.04` container and checks `--version` and a D-Bus
+`Ping` before attaching it to the release.
+
+## Seed a launcher document
+
+Nothing on Linux creates the launcher document yet (the macOS app writes it; the
+Linux write path arrives with drag & drop, LP-23), so a fresh install serves `{}` —
+an empty dock with nothing to launch. Seed one by hand to have something to test.
+The format is the macOS app's (`LauncherDocument`): every tab needs an `id` (a UUID)
+and an `anchor`; items carry a `kind` and a `url`. Pick an application entry that
+exists on your desktop (`ls /usr/share/applications`):
+
+```sh
+mkdir -p ~/.local/share/MacDring
+cat > ~/.local/share/MacDring/launcher.json <<EOF
+{
+  "version": 1,
+  "tabs": [
+    {
+      "id": "7B1E1B4A-0F7C-4D2E-9C3B-5A6D7E8F9A01",
+      "title": "Apps",
+      "kind": "items",
+      "colorHex": "#0A84FF",
+      "anchor": { "displayUUID": "00000000-0000-0000-0000-000000000000", "edge": "right", "position": 0.3, "order": 0 },
+      "items": [
+        { "id": "C0A1F2E3-1111-4222-8333-444455556661", "kind": "application", "displayName": "Text Editor",
+          "url": "file:///usr/share/applications/org.gnome.TextEditor.desktop" },
+        { "id": "C0A1F2E3-1111-4222-8333-444455556662", "kind": "folder", "displayName": "Downloads",
+          "url": "file://$HOME/Downloads/" },
+        { "id": "C0A1F2E3-1111-4222-8333-444455556663", "kind": "url", "displayName": "Top Drawer on GitHub",
+          "url": "https://github.com/L-K-M/TopDrawer" }
+      ]
+    },
+    {
+      "id": "7B1E1B4A-0F7C-4D2E-9C3B-5A6D7E8F9A02",
+      "title": "Fresh",
+      "kind": "fresh",
+      "colorHex": "#34C759",
+      "anchor": { "displayUUID": "00000000-0000-0000-0000-000000000000", "edge": "right", "position": 0.5, "order": 1 },
+      "items": []
+    }
+  ]
+}
+EOF
+```
+
+The daemon notices the file (`DocumentChanged`), `GetDocument` returns it verbatim,
+the shell's strip shows `Apps · Fresh`, `Launch s C0A1F2E3-1111-4222-8333-444455556662`
+opens Downloads in the file manager, and `GetRecents s 7B1E1B4A-0F7C-4D2E-9C3B-5A6D7E8F9A02`
+lists the newest files in Downloads/Desktop/Documents. The `displayUUID` is a
+placeholder: the Linux frontends don't place tabs yet (LP-21), and the macOS app
+falls back to its main display for a UUID it doesn't know.
+
+## Install (per user, from a local build)
+
+Not if the `.deb` is installed: a unit in `~/.config/systemd/user/` overrides the
+packaged one and would point at a binary the package doesn't install.
 
 ```sh
 install -Dm755 linux/.build/release/topdrawerd ~/.local/bin/topdrawerd
@@ -170,7 +268,16 @@ systemctl --user enable --now topdrawerd
 ```
 
 Check it: `systemctl --user status topdrawerd`. Stop/disable with
-`systemctl --user disable --now topdrawerd`.
+`systemctl --user disable --now topdrawerd`. The unit is tied to
+`graphical-session.target` (started with the desktop, after it has exported
+`DISPLAY`/`WAYLAND_DISPLAY` and friends to the user manager — the environment the
+daemon's launches inherit — and stopped at logout), so `enable` takes effect at the
+next graphical login; `--now` starts it in the current one. GNOME and KDE Plasma
+activate that target themselves. A bare **sway/hyprland** session does not: launch it
+through a session manager such as `uwsm`, or add `exec systemctl --user start
+graphical-session.target` (after importing `WAYLAND_DISPLAY` and friends with
+`systemctl --user import-environment`) to the compositor config — otherwise the
+enabled unit never starts and you'd run `systemctl --user start topdrawerd` by hand.
 
 ## Smoke test with `busctl`
 
@@ -178,9 +285,10 @@ With the daemon running (or `swift run --package-path linux topdrawerd` in anoth
 terminal):
 
 ```sh
-# Liveness:
+# Liveness (the version is the package's — `0.0.0-dev` for a local build, the release
+# version for one installed from the .deb; `topdrawerd --version` says the same):
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
-#   s "topdrawerd 0.5.0 alive"
+#   s "topdrawerd 2.2.0 alive"
 
 # The launcher document:
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetDocument

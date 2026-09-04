@@ -92,6 +92,25 @@ wedged Xcode build daemons and rebuilds from scratch.
 
 For day-to-day development, open `MacDring.xcodeproj` in Xcode and run.
 
+### Linux (experimental)
+
+A Linux port is in progress under [`linux/`](linux/README.md): a D-Bus daemon
+(`topdrawerd`) that serves the same launcher document, volumes, Trash, recents,
+launching and running-app state, and a GTK4 + layer-shell frontend
+(`topdrawer-shell`) that today draws a first dock strip on compositors implementing
+wlr-layer-shell (KDE Plasma 6, sway, hyprland, COSMIC); on GNOME the daemon runs but
+the frontend exits by design (a Shell extension is planned). Releases attach a
+`TopDrawer-<version>-amd64.deb` for Ubuntu 24.04 and newer:
+
+```sh
+sudo apt install ./TopDrawer-<version>-amd64.deb
+systemctl --user enable --now topdrawerd
+```
+
+See [`linux/README.md`](linux/README.md) for what's implemented, the D-Bus interface,
+and how the package is built, and [`docs/linux-port/`](docs/linux-port/README.md) for
+the research and plan behind it.
+
 ## Usage
 
 1. Launch Top Drawer — it appears as a sidebar icon in the menu bar, and a starter

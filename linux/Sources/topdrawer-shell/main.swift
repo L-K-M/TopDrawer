@@ -15,6 +15,21 @@ import DBUS
 import Foundation
 import Logging
 import TopDrawerShell
+import TopDrawerVersion
+
+// `--version` / `--help` answer before gtk_init: the Debian package's install smoke test
+// runs `topdrawer-shell --version` headless (no display, no compositor, no bus) — which
+// also proves the vendored gtk4-layer-shell library resolves, since the loader maps every
+// linked library before `main` runs.
+CommandLineFlags.exitOnVersionOrHelp(
+    program: "topdrawer-shell",
+    usage: """
+        usage: topdrawer-shell [--edge top|bottom|left|right] [--monitor N] [--version] [--help]
+
+        Top Drawer's layer-shell frontend: a dock strip anchored to one screen edge.
+        Needs a compositor implementing wlr-layer-shell (KDE Plasma 6, sway, hyprland,
+        COSMIC, …) and a running topdrawerd. On GNOME or X11 it exits with an error.
+        """)
 
 /// The screen edge the strip anchors to. An enum, not a bool — the CLI maps straight
 /// onto it and LP-21's per-tab placement reuses it.

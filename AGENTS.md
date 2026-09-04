@@ -43,6 +43,12 @@ xcodebuild -project MacDring.xcodeproj -scheme MacDring -destination 'platform=m
 Prefer building/running from Xcode during development so window behavior and the
 menu-bar item appear in a real GUI session.
 
+The Linux port builds with SwiftPM only: `swift build` at the root (the shared core,
+target `MacDring`) and `swift build --package-path linux` (daemon + shell). Its tests,
+the `.deb` packaging (`linux/packaging/build-deb.sh`), and the D-Bus interface are
+documented in `linux/README.md`; the release workflow attaches the `.deb` to each
+GitHub Release.
+
 The app icon is derived from the master artwork `Tools/AppIcon-source.png`
 (an open wooden drawer of glowing app tiles). `Tools/README.md` documents how
 the `AppIcon.appiconset` slots are regenerated from it.

@@ -8,6 +8,9 @@ on:
   # starts a run when webhook delivery is throttled, and re-running needs no
   # empty commit.
   workflow_dispatch:
+  # Reused by release.yml as the Linux test gate before it builds the .deb: a v*
+  # tag can land on any commit, so the release runs this exact job on it first.
+  workflow_call:
 
 # Least privilege: this job only reads the repo to build and test the pure core.
 permissions:
@@ -65,23 +68,11 @@ jobs:
 
       # LP-20: the topdrawer-shell frontend links GTK4 + gtk4-layer-shell. Noble has
       # libgtk-4-dev but does NOT package the GTK4 layer-shell binding (only the
-      # GTK3-era libgtk-layer-shell; do not confuse them), so build it from source,
-      # pinned to the upstream tag (v1.3.0 == 1c963c51 — also what Ubuntu 26.04 ships).
-      # Introspection/vapi are off: nothing in this package uses them, and dropping
-      # them trims the gobject-introspection dev packages from the apt set.
+      # GTK3-era libgtk-layer-shell; do not confuse them), so the composite action
+      # builds it from source, pinned to upstream v1.3.0 — the same recipe the release
+      # workflow's .deb job uses (LP-30), kept in one place so the two can't drift.
       - name: Install GTK4 and build gtk4-layer-shell (for the shell frontend)
-        run: |
-          apt-get install -y --no-install-recommends \
-            pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
-          git clone --depth 1 --branch v1.3.0 https://github.com/wmww/gtk4-layer-shell /tmp/gtk4-layer-shell
-          # The tag is the pin, the commit hash the verification — same discipline as
-          # the pinned actions/container above (a moved tag fails the build loudly).
-          test "$(git -C /tmp/gtk4-layer-shell rev-parse HEAD)" = 1c963c51514581c41b9bdae08cdf69171265cdda
-          meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
-            --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false \
-            -Dsmoke-tests=false -Dintrospection=false -Dvapi=false
-          ninja -C /tmp/gtk4-layer-shell/build install
-          ldconfig
+        uses: ./.github/actions/setup-gtk4-layer-shell
 
       - name: Build the Linux daemon package
         run: swift build -v --package-path linux --disable-automatic-resolution

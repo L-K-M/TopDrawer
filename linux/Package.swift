@@ -53,15 +53,22 @@ let package = Package(
                 .product(name: "MacDring", package: "MacDring"),
                 // statx(STATX_BTIME) birth-time shim for the Fresh scan (LP-18).
                 .target(name: "CShims", condition: .when(platforms: [.linux])),
+                // The stamped package version `Ping` reports (LP-30).
+                "TopDrawerVersion",
             ]
         ),
+        // One constant, `TopDrawerVersion.current`, shared by both executables and the
+        // daemon's `Ping`. Its own target (no dependencies) so the GTK shell — which
+        // never links the daemon — can report the same version, and so the Debian
+        // packaging script has exactly one line to stamp (LP-30).
+        .target(name: "TopDrawerVersion"),
         // A tiny C target: one function (topdrawer_file_btime) over statx, because
         // Glibc doesn't reliably expose statx/STATX_BTIME to Swift (LP-18). Header-and-
         // one-.c; the non-Linux stub returns -1 so it still parses off Linux.
         .target(name: "CShims"),
         .executableTarget(
             name: "topdrawerd",
-            dependencies: ["TopDrawerDaemon"]
+            dependencies: ["TopDrawerDaemon", "TopDrawerVersion"]
         ),
         .testTarget(
             name: "TopDrawerDaemonTests",
@@ -109,6 +116,7 @@ package.targets.append(contentsOf: [
         name: "topdrawer-shell",
         dependencies: [
             "TopDrawerShell",
+            "TopDrawerVersion",
             .target(name: "CGtk4", condition: .when(platforms: [.linux])),
             .target(name: "CGtkLayerShell", condition: .when(platforms: [.linux])),
         ]
