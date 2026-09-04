@@ -1,0 +1,35 @@
+name: Set up GTK4 + gtk4-layer-shell
+description: >-
+  Installs the GTK4 development packages and builds gtk4-layer-shell from source into
+  /usr, pinned to upstream v1.3.0. Ubuntu 24.04 (noble — the swift:6.3-noble CI
+  container) packages only the GTK3-era libgtk-layer-shell; the GTK4 binding arrives in
+  25.10. Meant for the noble container jobs (apt as root). Shared by linux-ci.yml and the
+  release workflow's .deb job so both pin the same recipe. Also drops the library's MIT
+  license at /usr/share/doc/gtk4-layer-shell/LICENSE, where linux/packaging/build-deb.sh
+  looks for it when vendoring the library into the package.
+runs:
+  using: composite
+  steps:
+    # Introspection/vapi are off: nothing in this package uses them, and dropping them
+    # trims the gobject-introspection dev packages from the apt set.
+    - name: Install GTK4 and the build tools
+      shell: bash
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          git ca-certificates pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
+
+    - name: Build and install gtk4-layer-shell v1.3.0
+      shell: bash
+      run: |
+        git clone --depth 1 --branch v1.3.0 https://github.com/wmww/gtk4-layer-shell /tmp/gtk4-layer-shell
+        # The tag is the pin, the commit hash the verification — same discipline as the
+        # pinned actions/container (a moved tag fails the build loudly). v1.3.0 is also
+        # what Ubuntu 26.04 ships.
+        test "$(git -C /tmp/gtk4-layer-shell rev-parse HEAD)" = 1c963c51514581c41b9bdae08cdf69171265cdda
+        meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
+          --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false \
+          -Dsmoke-tests=false -Dintrospection=false -Dvapi=false
+        ninja -C /tmp/gtk4-layer-shell/build install
+        ldconfig
+        install -Dm644 /tmp/gtk4-layer-shell/LICENSE /usr/share/doc/gtk4-layer-shell/LICENSE

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Cuts a release: bumps the version, commits, tags "v<version>", and with --push
 # pushes branch + tag — which triggers .github/workflows/release.yml to build,
-# package (.zip + .dmg), and publish the GitHub Release. CI derives the released
+# package (.zip + .dmg, plus the Linux .deb), and publish the GitHub Release. A
+# version with a pre-release suffix (2.2.0-beta.1) publishes a GitHub pre-release,
+# which the in-app updater ignores. CI derives the released
 # version from the tag, so the tag is the source of truth — this just keeps the
 # committed MARKETING_VERSION and the README version line in step so *local/dev*
 # builds (and the in-app updater) report the same number. The updater normalises
@@ -20,7 +22,7 @@ export RELEASE_APP_NAME="Top Drawer"
 export RELEASE_KIND="xcode"
 export RELEASE_XCODE_PROJECT="MacDring.xcodeproj"
 export RELEASE_XCODE_SCHEME="MacDring"
-export RELEASE_CI_NOTE="CI (release.yml) will now build, package (.zip + .dmg), and publish the GitHub Release for the tag."
+export RELEASE_CI_NOTE="CI (release.yml) will now build, package (.zip + .dmg + Linux .deb), and publish the GitHub Release for the tag."
 export RELEASE_INVOKED_AS="scripts/release.sh"
 
 BIN="${LKM_RELEASE_BIN:-lkm-release}"

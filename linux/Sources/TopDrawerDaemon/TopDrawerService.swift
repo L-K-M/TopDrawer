@@ -3,6 +3,7 @@ import Foundation
 import DBUS
 import Logging
 import MacDring
+import TopDrawerVersion
 
 /// The Top Drawer daemon's D-Bus service.
 ///
@@ -36,8 +37,9 @@ public actor TopDrawerService {
     public static let busName = "ch.lkmc.TopDrawer"
     public static let objectPath = "/ch/lkmc/TopDrawer"
     public static let interfaceName = "ch.lkmc.TopDrawer1"
-    /// Reported by `Ping`; bump alongside the interface as the daemon grows.
-    public static let version = "0.5.0"
+    /// Reported by `Ping`: the package version (`0.0.0-dev` outside a stamped release
+    /// build — see `TopDrawerVersion`).
+    public static let version = TopDrawerVersion.current
 
     /// How many entries `GetRecents` returns per tab kind.
     private static let recentsLimit = 50

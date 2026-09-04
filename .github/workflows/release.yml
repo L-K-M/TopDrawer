@@ -1,8 +1,18 @@
 name: Release
 
+# One tag, two platforms. The macOS jobs (test → release) are the original path and
+# publish the GitHub Release; the Linux jobs (linux-test → linux-deb → linux-smoke →
+# publish-linux) build the Debian package and attach it to that same release
+# afterwards. They are deliberately decoupled: a Linux failure never blocks or alters
+# the macOS release — the .deb is simply absent (see CICD.md).
+#
+# A tag with a semver pre-release suffix (v2.2.0-beta.1) is published as a GitHub
+# *pre-release*: the in-app updater reads releases/latest, which skips pre-releases,
+# so users aren't offered it — the vehicle for a Linux test build.
+
 on:
   push:
-    tags: ['v*']        # e.g. v1.2.0
+    tags: ['v*']        # e.g. v1.2.0, or v1.2.0-beta.1 for a pre-release
 
 concurrency:
   group: release-${{ github.ref }}
@@ -123,6 +133,10 @@ jobs:
           files: |
             ${{ env.DMG }}
             ${{ env.ZIP }}
+          # A hyphen in the tag (v2.2.0-beta.1) marks a semver pre-release: published
+          # as a GitHub pre-release, which releases/latest — and so the in-app
+          # updater — ignores. Plain vX.Y.Z tags are unaffected.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           body: |
             ### Unsigned build
@@ -158,3 +172,186 @@ jobs:
             fi
           done
           [ "$failed" -eq 0 ] || exit 1
+
+  # ---------------------------------------------------------------------------
+  # Linux (LP-30): the Debian package. Built in the same pinned swift:6.3-noble
+  # container Linux CI uses, installed into a pristine Ubuntu 24.04 container as a
+  # smoke test, then attached to the release the macOS job published.
+  # ---------------------------------------------------------------------------
+
+  # The Linux tests, exactly as Linux CI runs them (one job definition, reused): a
+  # v* tag can land on any commit, so never package a build whose tests didn't pass.
+  linux-test:
+    name: Linux tests before packaging
+    uses: ./.github/workflows/linux-ci.yml
+    permissions:
+      contents: read
+
+  linux-deb:
+    name: Build .deb (Ubuntu 24.04+, amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: linux-test
+    permissions:
+      contents: read
+    # The same digest linux-ci.yml pins (swift:6.3-noble, Swift 6.3.3 on Ubuntu
+    # 24.04): the package is built against noble's glibc/GTK, so it installs on
+    # 24.04 and newer. Bump both together.
+    container: swift:6.3-noble@sha256:56ef1be2c1ca36f4c52440357dc1fcdfdb5e113587134fcadeef57c225c71b54
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # GTK4 + gtk4-layer-shell v1.3.0 from source (noble doesn't package the GTK4
+      # binding); the library is vendored into the package so it runs on 24.04.
+      - name: Install GTK4 and build gtk4-layer-shell
+        uses: ./.github/actions/setup-gtk4-layer-shell
+
+      - name: Install the packaging tools
+        run: apt-get install -y --no-install-recommends dpkg-dev lintian binutils
+
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Stamps the version, builds release binaries with the Swift runtime linked
+      # statically, computes Depends with dpkg-shlibdeps, and runs lintian
+      # (errors fail the job; warnings are in the log). See the script's header.
+      # Output under the workspace (dist/ is git-ignored), not $RUNNER_TEMP: in a
+      # container job the `runner.temp` context is the host's path, while
+      # workspace-relative paths are translated for the container.
+      - name: Build the package
+        run: |
+          linux/packaging/build-deb.sh "$VERSION" \
+            --output "dist/$ASSET_BASE-$VERSION-$(dpkg --print-architecture).deb"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-deb
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  # Install it where a tester would: a pristine Ubuntu 24.04 image with nothing
+  # pre-installed, so Depends must pull every runtime library on their own. Then
+  # run both executables headless and drive the daemon over a private session bus.
+  linux-smoke:
+    name: Install smoke test (pristine Ubuntu 24.04)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: linux-deb
+    permissions:
+      contents: read
+    # ubuntu:24.04 as of 2026-09-04, pinned by digest like every other image here.
+    container: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+    steps:
+      # Workspace-relative (see the linux-deb job): the runner translates it for
+      # the container, unlike the `runner.temp` context.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-deb
+          path: deb
+
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Install the package with apt (Depends must resolve on their own)
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$GITHUB_WORKSPACE"/deb/*.deb
+          dpkg -s topdrawer
+
+      - name: Both executables run headless and report the tag's version
+        run: |
+          topdrawerd --version
+          topdrawer-shell --version
+          test "$(topdrawerd --version)" = "topdrawerd $VERSION"
+          test "$(topdrawer-shell --version)" = "topdrawer-shell $VERSION"
+          # The shell must have loaded the package's private gtk4-layer-shell copy —
+          # there is no distro one on 24.04 — through its rpath.
+          ldd /usr/bin/topdrawer-shell | tee /dev/stderr | grep 'libgtk4-layer-shell' | grep -q '/usr/lib/topdrawer/'
+
+      - name: The daemon claims its name and answers Ping on a private session bus
+        run: |
+          # dbus-run-session (a throwaway bus) and dbus-send are test harness, not
+          # package dependencies: a desktop provides the user bus (Depends covers it).
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends dbus-daemon dbus-bin
+          dbus-run-session -- bash -euo pipefail -c '
+            topdrawerd & pid=$!
+            reply=""
+            for _ in $(seq 1 100); do
+              reply=$(dbus-send --session --print-reply --dest=ch.lkmc.TopDrawer \
+                /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1.Ping 2>/dev/null) && break
+              sleep 0.2
+            done
+            echo "$reply"
+            grep -q "topdrawerd $VERSION alive" <<<"$reply"
+            kill "$pid"
+          '
+
+  # Attach the .deb to the release the macOS job created, add the Linux section to
+  # its notes, and verify the published bytes — the same download-and-compare the
+  # macOS job does. Runs on the plain runner (gh is preinstalled there).
+  publish-linux:
+    name: Attach the .deb to the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [release, linux-smoke]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-deb
+          path: deb
+
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Upload the .deb to the GitHub Release
+        run: |
+          DEB=$(find "$GITHUB_WORKSPACE/deb" -maxdepth 1 -name '*.deb' -print -quit)
+          [ -n "$DEB" ] || { echo "::error::no .deb in the linux-deb artifact"; exit 1; }
+          gh release upload "$GITHUB_REF_NAME" "$DEB" --clobber
+          echo "DEB=$DEB" >> "$GITHUB_ENV"
+
+      - name: Add the Linux section to the release notes
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json body -q .body > "$RUNNER_TEMP/notes.md"
+          cat >> "$RUNNER_TEMP/notes.md" <<EOF
+
+          ### Linux (experimental)
+
+          \`$(basename "$DEB")\` installs the Linux port on Ubuntu 24.04 or newer (amd64): the
+          daemon \`topdrawerd\` and the layer-shell frontend \`topdrawer-shell\`.
+
+          \`\`\`sh
+          sudo apt install ./$(basename "$DEB")
+          systemctl --user enable --now topdrawerd
+          busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
+          \`\`\`
+
+          The frontend needs a compositor implementing wlr-layer-shell (KDE Plasma 6, sway,
+          hyprland, COSMIC): \`topdrawer-shell --edge bottom\`. On GNOME it exits by design
+          (its frontend is a planned Shell extension) — the daemon still runs and answers
+          on D-Bus. Details, the D-Bus interface, and what's implemented so far:
+          [\`linux/README.md\`](https://github.com/${GH_REPO}/blob/${GITHUB_REF_NAME}/linux/README.md).
+          EOF
+          gh release edit "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+
+      # Same rule as the macOS assets: never trust an upload — compare what GitHub
+      # serves against what was built, and take a mismatch down before failing.
+      - name: Verify the published asset
+        run: |
+          mkdir "$RUNNER_TEMP/published"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published" --pattern "$(basename "$DEB")"
+          if ! cmp -- "$DEB" "$RUNNER_TEMP/published/$(basename "$DEB")"; then
+            gh release delete-asset "$GITHUB_REF_NAME" "$(basename "$DEB")" -y \
+              || echo "::warning::failed to remove mismatched asset $(basename "$DEB") — take it down manually"
+            echo "::error::published $(basename "$DEB") differed from the built artifact and was removed"
+            exit 1
+          fi

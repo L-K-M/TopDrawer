@@ -11,7 +11,9 @@ and Fresh tab contents (`GetRecents` + `RecentsChanged`); **LP-19** implemented 
 (`Launch` / `OpenWith` / `Reveal`) and records launches into the recents history;
 **LP-19b** adds running-apps detection (`GetRunningAppIDs` + `RunningAppsChanged`);
 **LP-20** adds the first frontend, **`topdrawer-shell`** — a GTK4 + layer-shell
-"hello dock". Drop-to-tab (`AddDroppedURIs`) remains a follow-up.
+"hello dock"; **LP-30** packages both as a **`.deb`** (see [Install from the
+package](#install-from-the-deb-package)). Drop-to-tab (`AddDroppedURIs`) remains a
+follow-up.
 
 ## `topdrawer-shell` — the layer-shell frontend (LP-20)
 
@@ -160,7 +162,50 @@ The daemon uses [`wendylabsinc/dbus`](https://github.com/wendylabsinc/dbus) (a p
 Swift D-Bus implementation on SwiftNIO). It has no `RequestName` helper, so the
 daemon calls `org.freedesktop.DBus.RequestName` itself to claim the name.
 
-## Install (per user)
+Both executables answer `--version` and `--help` without touching the bus or a
+display. Local builds report `0.0.0-dev`; the packaging below stamps the release
+version (from the git tag) into `Sources/TopDrawerVersion/TopDrawerVersion.swift`
+at build time, so the tag is the single source of truth — as it is for the macOS
+`MARKETING_VERSION`.
+
+## Install from the .deb package
+
+Every [release](https://github.com/L-K-M/TopDrawer/releases) since 2.2.0 attaches
+`TopDrawer-<version>-amd64.deb`, built on Ubuntu 24.04 (so it installs on 24.04 and
+newer; `Depends` name the exact runtime libraries). It carries `/usr/bin/topdrawerd`,
+`/usr/bin/topdrawer-shell`, the daemon's systemd **user** unit
+(`/usr/lib/systemd/user/topdrawerd.service`), and a private copy of gtk4-layer-shell
+under `/usr/lib/topdrawer/` — Ubuntu packages the GTK4 binding only from 25.10, so
+the shell would otherwise not run on 24.04. Nothing is enabled automatically:
+
+```sh
+sudo apt install ./TopDrawer-<version>-amd64.deb
+systemctl --user enable --now topdrawerd
+topdrawerd --version
+busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
+topdrawer-shell --edge bottom       # on a layer-shell compositor (see above)
+```
+
+Remove with `sudo apt remove topdrawer` (after `systemctl --user disable --now
+topdrawerd`). The Swift runtime is linked statically, so the package depends on no
+Swift installation.
+
+To build the package yourself — `dpkg-dev`, `binutils` and (optionally) `lintian`
+installed, gtk4-layer-shell built from source per the CI recipe in
+`.github/actions/setup-gtk4-layer-shell/action.yml`:
+
+```sh
+linux/packaging/build-deb.sh 2.2.0               # → linux/.build/deb/topdrawer_2.2.0_amd64.deb
+linux/packaging/build-deb.sh 2.2.0-beta.1 --output /tmp/TopDrawer-2.2.0-beta.1-amd64.deb
+```
+
+The script's header documents what it stages, how `Depends` are computed
+(`dpkg-shlibdeps`), and the environment knobs (where the vendored library and its
+license come from). The release workflow runs the same script, then installs the
+result into a pristine `ubuntu:24.04` container and checks `--version` and a D-Bus
+`Ping` before attaching it to the release.
+
+## Install (per user, from a local build)
 
 ```sh
 install -Dm755 linux/.build/release/topdrawerd ~/.local/bin/topdrawerd
@@ -178,9 +223,10 @@ With the daemon running (or `swift run --package-path linux topdrawerd` in anoth
 terminal):
 
 ```sh
-# Liveness:
+# Liveness (the version is the package's — `0.0.0-dev` for a local build, the release
+# version for one installed from the .deb; `topdrawerd --version` says the same):
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 Ping
-#   s "topdrawerd 0.5.0 alive"
+#   s "topdrawerd 2.2.0 alive"
 
 # The launcher document:
 busctl --user call ch.lkmc.TopDrawer /ch/lkmc/TopDrawer ch.lkmc.TopDrawer1 GetDocument

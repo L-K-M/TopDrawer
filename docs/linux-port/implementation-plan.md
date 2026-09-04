@@ -763,6 +763,18 @@ wm_class, positions via `move_frame`. Study
 ### LP-30 · TopDrawer · Debian packaging
 **Branch** `claude/lp-30-deb` · **Size** M
 
+> **Status (2026-09-04): landed early, out of LP order, in reduced form** — the user asked
+> for a Linux release to test, so the package ships what exists at LP-20: `topdrawerd`,
+> `topdrawer-shell`, the systemd user unit, a vendored gtk4-layer-shell (so it runs on
+> Ubuntu 24.04), DEP-5 copyright/changelog; `Depends` via `dpkg-shlibdeps`; release
+> job + pristine-container smoke test + attach-to-release, decoupled from the macOS
+> path; a hyphenated tag publishes a GitHub pre-release the in-app updater ignores.
+> **Still open, folded into the LPs that create them:** `topdrawer-cli`, the extension
+> zip (LP-29), icons + `.desktop` entry and the XDG autostart entry (once the frontend
+> is a real dock, LP-21+ — autostarting the LP-20 probe would just fail on GNOME).
+> Build script: `linux/packaging/build-deb.sh`; recipe shared with CI via
+> `.github/actions/setup-gtk4-layer-shell`.
+
 - `linux/packaging/build-deb.sh` (plain `dpkg-deb` layout is fine): installs
   `topdrawerd`, `topdrawer-shell`, `topdrawer-cli`, the systemd user unit, XDG
   autostart entry for the shell, the extension zip under
