@@ -345,7 +345,11 @@ jobs:
           The frontend needs a compositor implementing wlr-layer-shell (KDE Plasma 6, sway,
           hyprland, COSMIC): \`topdrawer-shell --edge bottom\`. On GNOME it exits by design
           (its frontend is a planned Shell extension) — the daemon still runs and answers
-          on D-Bus. Details, the D-Bus interface, and what's implemented so far:
+          on D-Bus. The daemon's unit starts with \`graphical-session.target\`; a bare
+          sway/hyprland session never reaches that target unless launched through a session
+          manager (uwsm) or told to (\`systemctl --user start graphical-session.target\`), so
+          there start it by hand with \`systemctl --user start topdrawerd\`.
+          Details, the D-Bus interface, and what's implemented so far:
           [\`linux/README.md\`](https://github.com/${GH_REPO}/blob/${GITHUB_REF_NAME}/linux/README.md).
           EOF
           gh release edit "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
