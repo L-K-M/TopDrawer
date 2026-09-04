@@ -324,14 +324,15 @@ jobs:
       # the section a second time.
       - name: Add the Linux section to the release notes
         run: |
+          header='### Linux (experimental)'   # the guard and the heredoc share one literal
           gh release view "$GITHUB_REF_NAME" --json body -q .body > "$RUNNER_TEMP/notes.md"
-          if grep -q '^### Linux (experimental)' "$RUNNER_TEMP/notes.md"; then
+          if grep -qF "$header" "$RUNNER_TEMP/notes.md"; then
             echo "release notes already carry the Linux section"
             exit 0
           fi
           cat >> "$RUNNER_TEMP/notes.md" <<EOF
 
-          ### Linux (experimental)
+          $header
 
           \`$(basename "$DEB")\` installs the Linux port on Ubuntu 24.04 or newer (amd64): the
           daemon \`topdrawerd\` and the layer-shell frontend \`topdrawer-shell\`.

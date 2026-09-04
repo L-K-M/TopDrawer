@@ -21,21 +21,15 @@ import TopDrawerVersion
 // runs `topdrawer-shell --version` headless (no display, no compositor, no bus) — which
 // also proves the vendored gtk4-layer-shell library resolves, since the loader maps every
 // linked library before `main` runs.
-let arguments = CommandLine.arguments.dropFirst()
-if arguments.contains("--version") {
-    print("topdrawer-shell \(TopDrawerVersion.current)")
-    exit(0)
-}
-if arguments.contains("--help") || arguments.contains("-h") {
-    print("""
+CommandLineFlags.exitOnVersionOrHelp(
+    program: "topdrawer-shell",
+    usage: """
         usage: topdrawer-shell [--edge top|bottom|left|right] [--monitor N] [--version] [--help]
 
         Top Drawer's layer-shell frontend: a dock strip anchored to one screen edge.
         Needs a compositor implementing wlr-layer-shell (KDE Plasma 6, sway, hyprland,
         COSMIC, …) and a running topdrawerd. On GNOME or X11 it exits with an error.
         """)
-    exit(0)
-}
 
 /// The screen edge the strip anchors to. An enum, not a bool — the CLI maps straight
 /// onto it and LP-21's per-tab placement reuses it.

@@ -1,5 +1,5 @@
-/// The one version string both Linux executables report (`--version`) and that
-/// `topdrawerd` embeds in its `Ping` reply.
+/// The one version string both Linux executables report (`--version`, via
+/// `CommandLineFlags`) and that `topdrawerd` embeds in its `Ping` reply.
 ///
 /// Development builds carry the `0.0.0-dev` placeholder. The Debian packaging script
 /// (`linux/packaging/build-deb.sh`) stamps the release version — taken from the git
