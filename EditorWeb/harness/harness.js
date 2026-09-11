@@ -11,6 +11,7 @@ const CORPUS = {
     '# Welcome\n\n- [ ] Try a task\n- [x] Done task\n\nSome **bold** and *italic* and `code`.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n',
   nested: '- a\n  - b\n    - c\n\n1. one\n2. two\n   - sub\n',
   edge: '> quote with **bold**\n\n---\n\n```js\nconst x = 1;\n```\n\nAutolink https://example.com and [a link](https://example.com "title").\n',
+  links: 'A [labelled link](https://example.com/page) and a bare https://example.com URL.\n',
   // `<\/script>` is escaped so the HTML parser does not end the surrounding
   // script element mid-string. The payload must render inertly.
   hostile:
