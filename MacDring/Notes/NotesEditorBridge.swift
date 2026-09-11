@@ -18,8 +18,11 @@ enum NotesEditorProtocol {
     /// WebKitGTK exposes to JavaScript.
     static let messageHandlerName = "topdrawer"
 
-    /// The global the page installs to receive host messages.
-    static let editorGlobalName = "topdrawerEditor"
+    /// The global the page installs to receive host messages. Fully qualified: the
+    /// host evaluates statements in the page's context, where a bare `topdrawerEditor`
+    /// happens to resolve as a global property today, but that is an accident of
+    /// classic scripts rather than something to rely on.
+    static let editorGlobalName = "window.topdrawerEditor"
 
     /// Custom scheme the app serves the editor from. A real origin is what makes
     /// `script-src 'self'` meaningful in the page's CSP and keeps the web view

@@ -49,13 +49,25 @@ jobs:
       - name: Build & test
         run: |
           set -o pipefail
+          # Tee the raw output as well: xcbeautify summarizes, and a summary of a
+          # compiler error often omits the file and line it came from.
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination 'platform=macOS' \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            clean test | xcbeautify
+            clean test 2>&1 | tee /tmp/xcodebuild.log | xcbeautify
+
+      # The summarized output can hide which file failed to compile (it reports the
+      # message, not always the location), so the raw log is what makes a red build
+      # actionable from the run page alone.
+      - name: Show compiler errors from the raw log
+        if: failure()
+        run: |
+          grep -nE "error:" /tmp/xcodebuild.log | head -40 || true
+          echo '--- last 40 lines ---'
+          tail -40 /tmp/xcodebuild.log
 
       - name: Upload test results on failure
         if: failure()
