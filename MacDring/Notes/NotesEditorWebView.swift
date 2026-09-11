@@ -50,6 +50,10 @@ struct NotesEditorWebView: NSViewRepresentable {
 /// Owns the web view and translates between it and the host-side reconciler.
 final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
+    /// How long teardown keeps the web view reachable, so a flush reply can land.
+    /// Outlasts the editor's change coalescing window.
+    private static let teardownDelay: TimeInterval = 0.25
+
     private let session = NotesEditorHostSession()
     private let onChanged: (String, UUID) -> Void
     private let onOpenLink: (URL) -> Void
@@ -131,19 +135,26 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
     /// Tears the editor down. Called from `dismantleNSView`, i.e. when the drawer
     /// stops showing a notes tab or the app goes away.
     ///
-    /// No flush is requested here: the reply could not be delivered, because the
-    /// message handler is removed (and the web view released) as part of this call.
-    /// The paths that can still save an edit are the drawer hiding (which flushes
-    /// while the editor is alive) and quitting (which waits for the reply); a switch
-    /// from one note to another is covered by the editor flushing the edit it had in
-    /// flight when it is handed the next document.
+    /// A flush is requested first, and the web view is released one debounce window
+    /// later: the reply to that request travels back through the page's message
+    /// channel, so removing the handler (or dropping the web view) in the same call
+    /// would discard the last edit of a note the user just left. The coordinator holds
+    /// itself for that window, since the message proxy only holds it weakly.
     func tearDown() {
+        flushPendingEdit()
         registerFlush?(nil)   // never hold the web view (or this coordinator) past teardown
-        webView?.configuration.userContentController
-            .removeScriptMessageHandler(forName: NotesEditorProtocol.messageHandlerName)
-        webView?.stopLoading()
-        webView?.navigationDelegate = nil
-        webView = nil
+        guard let webView else { return }
+        self.webView = nil
+        webView.navigationDelegate = nil
+
+        // `self` is captured deliberately, not weakly: the message proxy holds this
+        // coordinator weakly, so without it a reply arriving now would have no delegate
+        // to reach. The block is short-lived and releases both when it runs.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.teardownDelay) { [self, webView] in
+            webView.configuration.userContentController
+                .removeScriptMessageHandler(forName: NotesEditorProtocol.messageHandlerName)
+            webView.stopLoading()
+        }
     }
 
     // MARK: Sending
