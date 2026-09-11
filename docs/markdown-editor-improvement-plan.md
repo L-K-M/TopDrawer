@@ -230,7 +230,8 @@ workflow that rebuilds it and fails on any diff against the committed bundle).
 See `EditorWeb/README.md` for the protocol and measurements and
 `EditorWeb/SUPPORT.md` for the generated normalization table.
 
-Verified by the spike (unit tests plus headless Chromium):
+Verified by the spike (unit tests plus headless Chromium, 21 gates in
+`EditorWeb CI`):
 
 - One bundle, two modes (Crepe rich, CodeMirror source); browser harness with a
   strict CSP; deterministic 1.48 MB bundle (493 KB gzip).
@@ -247,6 +248,17 @@ Verified by the spike (unit tests plus headless Chromium):
 Still to verify on real hardware before Phase 2 (all need a GUI session):
 WKWebView focus from a non-activating panel, WebKitGTK embedding, IME and
 spell-check, VoiceOver/Orca, and cold/warm open timings in-app.
+
+The browser-side half of the timing and memory gates is now measured rather than
+guessed (page load 114 ms, mount 83 ms, warm reopen 131 ms, flat heap across ten
+document swaps) and recorded in `EditorWeb/README.md`; the in-app budget on the
+drawer's own panel still needs a real session.
+
+The shipped payload is three files (`dist/editor.html`, `editor.js`,
+`editor.css`) with its own strict CSP, so the host adapter is expected to stay
+thin: load the page with read access scoped to `dist/`, send messages through
+`window.topdrawerEditor.handleMessage`, receive them on the `topdrawer` message
+handler, and wait for `ready` before `initialize`.
 
 Known compatibility item for Phase 2: Crepe's stylesheets rely on `color-mix()`
 (WebKit 16.2+), and macOS 13.0 shipped WebKit 16.1 (later 13.x releases ship
