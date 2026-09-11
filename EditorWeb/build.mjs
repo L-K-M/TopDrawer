@@ -95,10 +95,19 @@ if (unlicensed.length > 0) {
 }
 
 // Codepoint order, not locale order: localeCompare depends on the host locale
-// and would break the byte-identical rebuild guarantee. Version breaks ties so
-// two copies of one package always print in the same order.
+// and would break the byte-identical rebuild guarantee. Rows are
+// [name, version, license]; version breaks ties so two copies of one package
+// always print in the same order.
 const byName = (a, b) =>
-  a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0;
+  a[0] < b[0]
+    ? -1
+    : a[0] > b[0]
+      ? 1
+      : a[1] < b[1]
+        ? -1
+        : a[1] > b[1]
+          ? 1
+          : 0;
 const rows = [...packages.values()].sort(byName);
 writeFileSync(
   'LICENSES.md',

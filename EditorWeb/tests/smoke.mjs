@@ -34,7 +34,8 @@ const server = createServer(async (req, res) => {
     res.writeHead(404).end('not found');
   }
 });
-await new Promise((r) => server.listen(0, r));
+// Loopback only: this dev server must not be reachable from the network.
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch();

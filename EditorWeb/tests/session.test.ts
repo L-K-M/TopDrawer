@@ -127,6 +127,11 @@ describe('EditorSession', () => {
     expect(container.querySelector('.ProseMirror')).toBe(editorBefore);
     expect(container.textContent).toContain('x');
     expect(transport.ofType('diagnostic')).toEqual([]);
+
+    // A later revision is still honoured: the guard drops duplicates, not
+    // everything after one.
+    handleMessage(JSON.stringify({ type: 'replaceDocument', markdown: 'z\n', revision: 4 }));
+    await settled(container, 'z');
   });
 
   it('rejects malformed host JSON with a diagnostic instead of throwing', async () => {

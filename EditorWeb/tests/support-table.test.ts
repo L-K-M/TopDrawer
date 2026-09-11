@@ -2,7 +2,7 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { RichEditor } from '../src/editor';
 import { CORPUS } from './corpus';
 
@@ -10,9 +10,17 @@ import { CORPUS } from './corpus';
  * Generates SUPPORT.md: the measured normalization table the improvement plan
  * demands before implementation acceptance. Re-run whenever the editor
  * dependencies change; commit the diff, it IS the support table.
+ *
+ * The generator also asserts the gate it documents. Crepe applies its parsed
+ * document in a transaction after mount, so the wait must outlast that (a 20 ms
+ * window reports a false "no").
  */
+const SETTLE_MS = 400;
+
 describe('support table generation', () => {
-  it('writes SUPPORT.md', async () => {
+  it(
+    'writes SUPPORT.md and reports no load-time change',
+    async () => {
     const lines: string[] = [
       '# Rich-mode normalization support table',
       '',
@@ -35,7 +43,7 @@ describe('support table generation', () => {
         onChange: () => changes++,
         onOpenLink: () => {},
       });
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
       const out = editor.getMarkdown();
       const roundTrip =
         out === fixture.input ? 'exact' : `normalized (expect: ${fixture.expect})`;
@@ -45,6 +53,13 @@ describe('support table generation', () => {
     }
     lines.push('');
 
+    // Fail loudly rather than writing a bug into the table: the corpus test
+    // covers the same gate, but a generator that cannot fail is a trap.
+    expect(lines.filter((line) => line.includes('YES — BUG'))).toEqual([]);
+
     writeFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'SUPPORT.md'), lines.join('\n'));
-  });
+  },
+    // 16 fixtures x SETTLE_MS exceeds the 5 s default test timeout.
+    30_000,
+  );
 });

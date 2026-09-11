@@ -19,6 +19,9 @@
   --default-cell-min-width: 2em;
 }
 
+/* Light is the default so the editor is legible before the host sends its
+   theme; dark overrides it. */
+:root,
 :root[data-td-theme='light'] {
   --crepe-color-background: transparent;
   --crepe-color-on-background: #1b1a17;

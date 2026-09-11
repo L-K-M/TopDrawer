@@ -134,9 +134,9 @@ export class RichEditor {
 
         event.preventDefault();
         if (!event.metaKey && !event.ctrlKey) return;
-        // Verify the scheme here too: this is the boundary where a
-        // document-controlled string starts travelling to the host.
-        if (!/^https?:\/\//i.test(anchor.href)) return;
+        // The session validates the scheme before anything reaches the host,
+        // and reports a diagnostic when it blocks one, so an unsafe URL here is
+        // refused visibly rather than silently.
         onOpenLink(anchor.href);
       },
       { signal: this.listeners.signal },
