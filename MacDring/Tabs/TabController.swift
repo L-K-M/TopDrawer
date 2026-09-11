@@ -1625,7 +1625,8 @@ final class TabController {
 
     /// Persists immediately and tears down all windows/hotkeys (called on quit).
     func saveAndTeardown() {
-        store.saveNow()        stopMonitoring()
+        store.saveNow()
+        stopMonitoring()
         stopRevealMonitoring()
         stopVolumeMonitoring()
         stopFolderWatch()
