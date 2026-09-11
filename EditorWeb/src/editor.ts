@@ -39,8 +39,8 @@ export interface RichEditorOptions {
  * Rich WYSIWYG mode: a deliberately slim Milkdown/Crepe assembly built with
  * CrepeBuilder so unused features (image upload, LaTeX, AI, slash menu / block
  * handle) are tree-shaken out of the bundle entirely. Markdown in, Markdown
- * out. Serialization only ever happens in response to a local change reported
- * by the listener, so a view-only open/close cycle cannot normalize the source.
+ * out. Serialization only happens in response to a local change after a real
+ * user interaction, so a view-only open/close cannot normalize the source.
  *
  * Raw HTML and images never reach the DOM: both become literal text (see
  * `sanitize.ts`). Notes are deliberately NOT rewritten on load, because that
