@@ -112,12 +112,20 @@ describe('EditorSession', () => {
     expect(container.querySelectorAll('.ProseMirror')).toHaveLength(1);
   });
 
-  it('treats an equal revision with different text as news', async () => {
+  it('ignores a repeated revision even when its text differs', async () => {
     const { transport, container, session } = newSession();
     initialize(session, 'x\n', 3);
     await settled(container, 'x');
+    const editorBefore = container.querySelector('.ProseMirror');
+
+    // The host bumps the revision for every document it sends, so a repeated
+    // revision carries no new information. Content comparison would rebuild
+    // the editor and discard a local edit whose text has moved on.
     handleMessage(JSON.stringify({ type: 'replaceDocument', markdown: 'y\n', revision: 3 }));
-    await settled(container, 'y');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(container.querySelector('.ProseMirror')).toBe(editorBefore);
+    expect(container.textContent).toContain('x');
     expect(transport.ofType('diagnostic')).toEqual([]);
   });
 

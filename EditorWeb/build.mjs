@@ -83,18 +83,22 @@ for (const input of Object.keys(result.metafile.inputs)) {
   }
 }
 
-const unlicensed = [...packages.values()].filter(
-  ([, , license]) => !ALLOWED_LICENSES.has(normalizeLicense(license)),
+const unlicensed = [...packages.entries()].filter(
+  ([, [, , license]]) => !ALLOWED_LICENSES.has(normalizeLicense(license)),
 );
 if (unlicensed.length > 0) {
   throw new Error(
-    `unreviewed license(s) in the bundle: ${unlicensed.map(([n, , l]) => `${n} (${l})`).join(', ')}`,
+    `unreviewed license(s) in the bundle: ${unlicensed
+      .map(([dir, [name, , license]]) => `${name} (${license}) at ${dir}`)
+      .join(', ')}`,
   );
 }
 
 // Codepoint order, not locale order: localeCompare depends on the host locale
-// and would break the byte-identical rebuild guarantee.
-const byName = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+// and would break the byte-identical rebuild guarantee. Version breaks ties so
+// two copies of one package always print in the same order.
+const byName = (a, b) =>
+  a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0;
 const rows = [...packages.values()].sort(byName);
 writeFileSync(
   'LICENSES.md',

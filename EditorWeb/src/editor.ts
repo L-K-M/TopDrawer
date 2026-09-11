@@ -134,6 +134,9 @@ export class RichEditor {
 
         event.preventDefault();
         if (!event.metaKey && !event.ctrlKey) return;
+        // Verify the scheme here too: this is the boundary where a
+        // document-controlled string starts travelling to the host.
+        if (!/^https?:\/\//i.test(anchor.href)) return;
         onOpenLink(anchor.href);
       },
       { signal: this.listeners.signal },

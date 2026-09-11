@@ -83,23 +83,35 @@ describe('rich mode corpus', () => {
   });
 
   it('renders hostile markdown inertly', async () => {
-    const hostile = CORPUS.find((f) => f.name === 'malicious-payloads');
-    expect(hostile, 'corpus needs the malicious-payloads fixture').toBeTruthy();
-    const { root, editor } = await mount(hostile!.input);
-    await new Promise((r) => setTimeout(r, SETTLE_MS));
+    // Every fixture whose text must never become an element, and the text that
+    // proves it actually loaded (a gate that cannot see a missing document is
+    // worthless).
+    const cases: Array<[string, string[]]> = [
+      ['malicious-payloads', ['alert(1)', 'evil.example']],
+      // A resolved reference becomes inline image text; a dangling one stays a
+      // literal '![alt][label]'. Both keep their words, and neither is an <img>.
+      ['reference-image', ['alt', 'evil.example', 'dangling', 'nope']],
+    ];
 
-    expect(root.querySelector('script')).toBeNull();
-    expect(root.querySelector('img')).toBeNull();
-    expect(root.querySelector('[onerror]')).toBeNull();
-    expect(root.querySelector('iframe')).toBeNull();
+    for (const [name, expectedText] of cases) {
+      const fixture = CORPUS.find((f) => f.name === name);
+      expect(fixture, `corpus needs the ${name} fixture`).toBeTruthy();
 
-    // Not vacuous: the payload must actually be present as inert text, so a
-    // document that failed to load cannot pass this test.
-    const text = root.textContent ?? '';
-    expect(text).toContain('alert(1)');
-    expect(text).toContain('evil.example');
+      const { root, editor } = await mount(fixture!.input);
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
 
-    await editor.destroy();
-    root.remove();
+      expect(root.querySelector('script'), name).toBeNull();
+      expect(root.querySelector('img'), name).toBeNull();
+      expect(root.querySelector('[onerror]'), name).toBeNull();
+      expect(root.querySelector('iframe'), name).toBeNull();
+
+      const text = root.textContent ?? '';
+      for (const fragment of expectedText) {
+        expect(text, `${name} should contain ${fragment}`).toContain(fragment);
+      }
+
+      await editor.destroy();
+      root.remove();
+    }
   });
 });

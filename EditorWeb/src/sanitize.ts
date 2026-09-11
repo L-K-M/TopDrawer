@@ -25,7 +25,15 @@ interface MarkdownNode {
   children?: MarkdownNode[];
 }
 
-/** Node kinds rich mode must not turn into DOM. */
+/**
+ * Node kinds rich mode must not turn into DOM.
+ *
+ * Reference-style images (`![alt][ref]`) need no entry here: measured output is
+ * identical whether or not `imageReference` is listed, because remark's
+ * inline-links pass resolves them into `image` nodes (and leaves a dangling
+ * reference as literal text). The corpus fixture `reference-image` locks that
+ * behaviour in.
+ */
 const UNRENDERED_NODES = new Set(['html', 'image']);
 
 /**

@@ -97,8 +97,8 @@ body {
 .milkdown .top-bar-item:focus-visible,
 .milkdown .top-bar-heading-button:focus-visible,
 .milkdown .top-bar-heading-option:focus-visible,
-.milkdown .language-list-item:focus-visible,
 .milkdown .milkdown-link-edit .input-area:focus-visible,
+.milkdown .milkdown-code-block .language-list-item:focus-visible,
 .milkdown button:focus-visible,
 .milkdown input:focus-visible {
   outline: 2px solid var(--crepe-color-primary, #b45309);

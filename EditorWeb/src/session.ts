@@ -29,7 +29,10 @@ type Mode = 'rich' | 'source';
  *   while one is in flight (a late `replaceDocument` used to mount a second
  *   editor into the same container).
  * - `replaceDocument` messages at or below the last applied revision are
- *   dropped: an equal revision with identical text is a host retry, not news.
+ *   dropped: the host assigns a fresh revision to every document it sends, so
+ *   a repeated revision is a retry, never a new document. Comparing content
+ *   instead would clobber a local edit, because `loadedMarkdown` moves on with
+ *   every flush while the host's copy stays at the old revision.
  * - Only one mode is alive at a time; switching destroys the other editor.
  */
 export class EditorSession {
@@ -116,13 +119,15 @@ export class EditorSession {
   }
 
   private async loadDocument(markdown: string, revision: number): Promise<void> {
-    if (revision < this.hostRevision) {
-      this.diagnostic('stale-replace', `dropped revision ${revision}`);
-      return;
-    }
-    // Same revision and same content is a host retry, not new information:
-    // rebuilding would drop focus, undo history, and any edit in flight.
-    if (revision === this.hostRevision && markdown === this.loadedMarkdown) {
+    // The host assigns a fresh revision to each document it pushes, so a
+    // revision we have already applied is a duplicate or a late arrival. It is
+    // dropped on the revision alone: comparing text would let a retry of the
+    // pre-edit document rebuild the editor and discard what the user typed
+    // (our copy of the text advances with every flush).
+    if (revision <= this.hostRevision) {
+      if (revision < this.hostRevision) {
+        this.diagnostic('stale-replace', `dropped revision ${revision}`);
+      }
       return;
     }
     this.hostRevision = revision;

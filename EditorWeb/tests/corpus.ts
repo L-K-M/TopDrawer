@@ -98,6 +98,14 @@ export const CORPUS: CorpusFixture[] = [
     expect: 'normalized',
   },
   {
+    // Reference-style images are `imageReference` nodes, not `image`, and a
+    // missing definition leaves them unresolved: both forms must still be kept
+    // out of the DOM.
+    name: 'reference-image',
+    input: '![alt][pic]\n\n[pic]: https://evil.example/y.png\n\n![dangling][nope]\n',
+    expect: 'normalized',
+  },
+  {
     // Payloads that must render inertly: no DOM element, no attribute handler,
     // no javascript: navigation, no image fetch. Covered by the hostile test.
     name: 'malicious-payloads',
