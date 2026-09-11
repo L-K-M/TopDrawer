@@ -415,7 +415,12 @@ try {
 
   check(
     'production: file:// load mounts with the strict CSP',
-    fileMountMs !== null && filePage.ofType('ready').length === 1 && filePage.cspViolations.length === 0,
+    fileMountMs !== null &&
+      filePage.ofType('ready').length === 1 &&
+      filePage.cspViolations.length === 0 &&
+      // A console or page error would otherwise pass while the detail above
+      // reported it.
+      filePage.problems.length === 0,
     fileDetail,
   );
 

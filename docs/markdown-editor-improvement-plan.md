@@ -251,7 +251,7 @@ spell-check, VoiceOver/Orca, and cold/warm open timings in-app.
 
 The browser-side half of the timing and memory gates is now measured rather than
 guessed (page load 108-111 ms, mount after initialize 52-53 ms, warm reopen
-15-16 ms, both figures on the page's own clock, and heap growth of about
+15-16 ms, all three on the page's own clock, and heap growth of about
 175 KiB per mount/destroy cycle after a forced GC, so ten swaps add 1.7 MiB).
 Recorded in `EditorWeb/README.md`; the in-app budget on the drawer's own panel
 still needs a real session, which is also where WKWebView's `'self'` handling for
