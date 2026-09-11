@@ -33,15 +33,24 @@ Host → editor travels through `window.topdrawerEditor.handleMessage(json)`;
 editor → host through `window.webkit.messageHandlers.topdrawer.postMessage(...)`,
 the same JS API on WKWebView and WebKitGTK.
 
-Data-safety invariants (enforced in `src/session.ts`, covered by tests):
+Data-safety invariants (enforced in `src/session.ts` and `src/editor.ts`,
+covered by tests):
 
-1. `changed` fires only after a local user edit — a view-only open/close never
-   serializes, so it cannot normalize the source.
+1. `changed` fires only after a local user edit. Rich mode additionally gates
+   on a real interaction (key, IME, paste, drop, toolbar click) because Crepe
+   applies its parsed document in a transaction *after* mount: reporting that
+   would rewrite an untouched note with remark's normalization (`-`→`*`,
+   `---`→`***`) just because it was opened.
 2. Host replacements with an older revision than the last applied one are
-   dropped (a late flush from a previously open tab) and reported.
-3. Edits coalesce over a 200 ms window and flush immediately on blur, drawer
-   close (`visibilitychange`), or explicit `flush()`.
-4. Only `http(s)` links reach the host; other schemes are blocked inert.
+   dropped (a late flush from a previously open tab) and reported; an
+   identical retry at the same revision is ignored rather than forcing a
+   remount.
+3. Edits coalesce over a 200 ms window (`src/coalescer.ts`) and flush
+   immediately on blur, drawer close (`visibilitychange`), `pagehide`, or
+   explicit `flush()`.
+4. Only `http(s)` links reach the host; other schemes are blocked inert. Anchors
+   inside the document are intercepted so a click can never navigate the web
+   view away from the editor.
 
 ## Build & test
 

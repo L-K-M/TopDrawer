@@ -49,6 +49,19 @@ export interface RichEditorOptions {
 export class RichEditor {
   private state = { destroyed: false };
 
+  /**
+   * Set by the first real user interaction inside the editor.
+   *
+   * Crepe applies its parsed `defaultValue` in a transaction *after* create()
+   * resolves, so `markdownUpdated` fires shortly after mount with remark's
+   * normalized serialization ('-' bullets become '*', '---' becomes '***').
+   * Reporting that would rewrite an untouched note purely because it was
+   * opened. Plugin-driven normalization never accompanies these DOM events,
+   * and they all precede the transaction they cause, so a user's first edit is
+   * never dropped.
+   */
+  private userInteracted = false;
+
   private constructor(
     private root: HTMLElement,
     private builder: CrepeBuilder,
@@ -69,15 +82,30 @@ export class RichEditor {
 
     builder.on((api) => {
       api.markdownUpdated((_ctx, markdown, prevMarkdown) => {
-        if (editor.state.destroyed || markdown === prevMarkdown) return;
+        if (editor.state.destroyed || !editor.userInteracted) return;
+        if (markdown === prevMarkdown) return;
         options.onChange(markdown);
       });
     });
 
     await builder.create();
+    editor.wireUserInteraction();
     editor.wireLinks(options.onOpenLink);
     editor.wireFocus(options.onFocusChanged);
     return editor;
+  }
+
+  /**
+   * Records genuine user intent: typing, IME composition, paste/drop, or a
+   * toolbar button (which mutates the document without any key event).
+   */
+  private wireUserInteraction(): void {
+    const mark = () => {
+      this.userInteracted = true;
+    };
+    for (const event of ['keydown', 'beforeinput', 'paste', 'drop', 'cut', 'click']) {
+      this.root.addEventListener(event, mark, { capture: true });
+    }
   }
 
   /**

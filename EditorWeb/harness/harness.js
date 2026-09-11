@@ -41,11 +41,13 @@ new PerformanceObserver((list) => list.getEntries().forEach(countResource)).obse
 const bridgeLog = document.getElementById('bridge-log');
 let booted = false;
 
-function logOut(message) {
-  window.topdrawerHarness.log('out', message);
+/**
+ * The editor is only ready to accept `initialize` once it says so: a fixed
+ * timeout races its asynchronous mount. Called from `log`, so it must never
+ * call back into it.
+ */
+function bootWhenReady(message) {
   if (booted || message?.type !== 'ready') return;
-  // The editor is only ready to accept `initialize` once it says so; a fixed
-  // timeout races its asynchronous mount.
   booted = true;
   document.getElementById('load').click();
 }
@@ -57,7 +59,7 @@ window.topdrawerHarness = {
     line.textContent = `${direction === 'in' ? '→' : '←'} ${JSON.stringify(message)}`;
     bridgeLog.appendChild(line);
     bridgeLog.scrollTop = bridgeLog.scrollHeight;
-    if (direction === 'out') logOut(message);
+    if (direction === 'out') bootWhenReady(message);
   },
 };
 

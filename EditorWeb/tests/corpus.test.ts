@@ -6,13 +6,18 @@ import { CORPUS } from './corpus';
 /**
  * Round-trip gates against the real Crepe build running in happy-dom:
  *
- * 1. Loading a document never fires onChange (no silent normalization).
+ * 1. Loading a document never fires onChange, even though Crepe applies its
+ *    parsed default value in a later transaction (remark normalizes '-'
+ *    bullets to '*' and '---' to '***'). The wait below must therefore be
+ *    generous: a 50 ms window missed exactly this bug.
  * 2. getMarkdown() round-trips the supported corpus per the expectation table.
  * 3. Hostile markup renders inertly (no script/img elements reach the DOM).
  *
- * End-to-end typing coverage (one debounced `changed` per edit) lives in
- * tests/smoke.mjs, which drives a real browser engine.
+ * The positive path (a real edit emits exactly one debounced `changed`) needs a
+ * real browser engine and lives in tests/smoke.mjs.
  */
+const SETTLE_MS = 400;
+
 async function mount(input: string, onChange: () => void = () => {}) {
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -31,8 +36,7 @@ describe('rich mode corpus', () => {
       const onChange = vi.fn();
       const { root, editor } = await mount(fixture.input, onChange);
 
-      // Give listener plugins a tick to (wrongly) fire on load.
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
       expect(onChange, 'load must not emit a local change').not.toHaveBeenCalled();
 
       await editor.destroy();
