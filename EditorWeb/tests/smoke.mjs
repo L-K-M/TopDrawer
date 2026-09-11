@@ -40,9 +40,14 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const page = await browser.newPage();
 const crossOrigin = [];
+const pageProblems = [];
 page.on('request', (req) => {
   if (!req.url().startsWith(base) && !req.url().startsWith('data:')) crossOrigin.push(req.url());
 });
+page.on('console', (msg) => {
+  if (msg.type() === 'error' || msg.type() === 'warning') pageProblems.push(`console.${msg.type()}: ${msg.text()}`);
+});
+page.on('pageerror', (error) => pageProblems.push(`pageerror: ${error.message}`));
 
 const failures = [];
 const check = (name, ok, detail = '') => {
@@ -50,53 +55,93 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures.push(name);
 };
 
-await page.goto(`${base}/harness/index.html`);
-await page.waitForSelector('.ProseMirror', { timeout: 10000 });
-check('editor boots to rich mode', true);
+/** Bridge log lines, newest last. The harness renders each message as a div. */
+const bridgeLines = () =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('#bridge-log > div')].map((el) => el.textContent),
+  );
 
-// ready handshake happened (harness logged it).
-await page.waitForFunction(() => document.querySelector('#bridge-log')?.textContent.includes('"ready"'));
-check('ready handshake sent', true);
+async function dumpDiagnostics() {
+  console.error('\n--- bridge log ---');
+  for (const line of await bridgeLines()) console.error(line.slice(0, 200));
+  console.error('--- page problems ---');
+  for (const problem of pageProblems) console.error(problem);
+  console.error('--- cross-origin requests ---');
+  for (const url of crossOrigin) console.error(url);
+}
 
-// Boot harness loaded the welcome corpus.
-const initial = await page.locator('.ProseMirror').innerText();
-check('corpus document rendered', initial.includes('Welcome'), initial.slice(0, 40));
+try {
+  await page.goto(`${base}/harness/index.html`);
+  await page.waitForSelector('.ProseMirror', { timeout: 15000 });
+  check('editor boots to rich mode', true);
 
-// Type into the surface: exactly one debounced changed message.
-await page.locator('.ProseMirror').click();
-await page.keyboard.press('End');
-await page.keyboard.type(' typed');
-await page.waitForFunction(
-  () => (document.querySelector('#bridge-log')?.textContent.match(/"changed"/g) ?? []).length >= 1,
-  { timeout: 5000 },
-);
-await page.waitForTimeout(500);
-const changedCount = await page.evaluate(
-  () => (document.querySelector('#bridge-log')?.textContent.match(/"changed"/g) ?? []).length,
-);
-check('typing emits debounced changed', changedCount === 1, `${changedCount} message(s)`);
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('#bridge-log > div')].some((el) =>
+      el.textContent.includes('"ready"'),
+    ),
+  );
+  check('ready handshake sent', true);
 
-// Toggle to source mode and back; document must survive.
-await page.click('#mode');
-await page.waitForSelector('.cm-content', { timeout: 5000 });
-const sourceText = await page.locator('.cm-content').innerText();
-check('source mode shows markdown', sourceText.includes('# Welcome'), sourceText.slice(0, 30));
-await page.click('#mode');
-await page.waitForSelector('.ProseMirror', { timeout: 5000 });
-check('mode round-trip back to rich', (await page.locator('.ProseMirror').innerText()).includes('Welcome'));
+  const initial = await page.locator('.ProseMirror').innerText();
+  check('corpus document rendered', initial.includes('Welcome'), initial.slice(0, 40));
 
-// Theme command flips the root attribute.
-await page.click('#theme');
-const theme = await page.evaluate(() => document.documentElement.dataset.tdTheme);
-check('setTheme dark applied', theme === 'dark');
+  const changedCount = async () =>
+    (await bridgeLines()).filter((line) => line.includes('"changed"')).length;
 
-// Offline gate.
-check('zero cross-origin requests', crossOrigin.length === 0, crossOrigin.join(', '));
+  check('load emits no changed', (await changedCount()) === 0, `${await changedCount()} message(s)`);
 
-await browser.close();
-server.close();
+  // Type into the surface: exactly one debounced changed message.
+  await page.locator('.ProseMirror').click();
+  // Click alone is not guaranteed to leave the contenteditable focused.
+  await page.evaluate(() => document.querySelector('.ProseMirror')?.focus());
+  await page.keyboard.press('End');
+  await page.keyboard.type(' typed');
+  await page.waitForTimeout(800);
+  const afterTyping = await changedCount();
+  check('typing emits debounced changed', afterTyping === 1, `${afterTyping} message(s)`);
+
+  // Toggle to source mode and back; document must survive.
+  await page.click('#mode');
+  await page.waitForSelector('.cm-content', { timeout: 5000 });
+  const sourceText = await page.locator('.cm-content').innerText();
+  check('source mode shows markdown', sourceText.includes('# Welcome'), sourceText.slice(0, 30));
+  await page.click('#mode');
+  await page.waitForSelector('.ProseMirror', { timeout: 5000 });
+  check('mode round-trip back to rich', (await page.locator('.ProseMirror').innerText()).includes('Welcome'));
+
+  // Theme command flips the root attribute.
+  await page.click('#theme');
+  const theme = await page.evaluate(() => document.documentElement.dataset.tdTheme);
+  check('setTheme dark applied', theme === 'dark');
+
+  // Hostile corpus must render inertly under the strict CSP.
+  await page.selectOption('#corpus', 'hostile');
+  await page.click('#replace');
+  await page.waitForTimeout(500);
+  const injected = await page.evaluate(() => ({
+    script: document.querySelectorAll('#editor script, #editor iframe').length,
+    img: document.querySelectorAll('#editor img').length,
+  }));
+  check('hostile markup renders inertly', injected.script === 0 && injected.img === 0, JSON.stringify(injected));
+
+  // Offline gate.
+  check('zero cross-origin requests', crossOrigin.length === 0, crossOrigin.join(', '));
+} catch (error) {
+  console.error(`\nSmoke test threw: ${error}`);
+  await dumpDiagnostics();
+  await browser.close();
+  server.close();
+  process.exit(1);
+}
+
 if (failures.length) {
+  await dumpDiagnostics();
+  await browser.close();
+  server.close();
   console.error(`\n${failures.length} gate(s) failed`);
   process.exit(1);
 }
+
+await browser.close();
+server.close();
 console.log('\nAll smoke gates passed');
