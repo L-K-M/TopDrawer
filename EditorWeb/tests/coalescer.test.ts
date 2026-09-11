@@ -107,4 +107,42 @@ describe('timer wiring', () => {
       vi.useRealTimers();
     }
   });
+
+  /**
+   * Browsers throw "Illegal invocation" when a native timer is called with the
+   * wrong `this`; happy-dom and Node do not, so this asserts the call shape the
+   * browser requires. Without the wrapper this test fails and so does the
+   * editor in Chromium (the change only went out on blur).
+   */
+  it('calls the platform timers as free functions', () => {
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    const seen: unknown[] = [];
+
+    globalThis.setTimeout = function (this: unknown, callback: () => void, ms: number) {
+      seen.push(this);
+      return realSetTimeout(callback, ms);
+    } as unknown as typeof setTimeout;
+    globalThis.clearTimeout = function (this: unknown, handle: ReturnType<typeof setTimeout>) {
+      seen.push(this);
+      return realClearTimeout(handle);
+    } as unknown as typeof clearTimeout;
+
+    try {
+      const emitted: string[] = [];
+      const coalescer = new ChangeCoalescer(10, (markdown) => emitted.push(markdown));
+      coalescer.note('typed');
+      coalescer.flush();
+
+      expect(emitted).toEqual(['typed']);
+      expect(seen.length).toBeGreaterThan(0);
+      for (const receiver of seen) {
+        const freeCall = receiver === undefined || receiver === globalThis || receiver === window;
+        expect(freeCall, `timer called with receiver ${String(receiver)}`).toBe(true);
+      }
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+    }
+  });
 });

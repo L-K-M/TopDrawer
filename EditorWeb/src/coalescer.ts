@@ -1,8 +1,16 @@
+type Schedule = (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+type Cancel = (handle: ReturnType<typeof setTimeout>) => void;
+
 /**
  * Change coalescing for the editor -> host `changed` stream.
  *
  * Pure and timer-injected so the debounce/flush contract is unit-testable
  * without a DOM or a real editor. `EditorSession` owns one instance.
+ *
+ * The default timers are wrapped in arrow functions rather than passed as bare
+ * `setTimeout`/`clearTimeout`: a bare reference is invoked as a method of this
+ * object, and browsers reject that with "Illegal invocation" (happy-dom does
+ * not, so only a real browser catches it).
  *
  * Invariants:
  * - `note()` marks the session dirty; `flush()` clears it.
@@ -16,8 +24,8 @@ export class ChangeCoalescer {
   constructor(
     private readonly delayMs: number,
     private readonly emit: (markdown: string) => void,
-    private readonly schedule: typeof setTimeout = setTimeout,
-    private readonly cancel: typeof clearTimeout = clearTimeout,
+    private readonly schedule: Schedule = (callback, delayMs) => setTimeout(callback, delayMs),
+    private readonly cancel: Cancel = (handle) => clearTimeout(handle),
   ) {}
 
   get isDirty(): boolean {
