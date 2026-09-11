@@ -163,11 +163,15 @@ extension NotesEditorEvent {
         case "ready":
             self = .ready(protocolVersion: Self.int(object["protocolVersion"]) ?? 0)
         case "changed":
+            // Every field is required: defaulting the revision would let a malformed
+            // message through as revision 0, which the monotonic gate would accept on
+            // the first edit and then silently drop forever.
             guard let markdown = object["markdown"] as? String,
                   let documentID = object["documentID"] as? String,
-                  !documentID.isEmpty else { return nil }
+                  !documentID.isEmpty,
+                  let editorRevision = Self.int(object["editorRevision"]) else { return nil }
             self = .changed(markdown: markdown,
-                            editorRevision: Self.int(object["editorRevision"]) ?? 0,
+                            editorRevision: editorRevision,
                             documentID: documentID)
         case "openLink":
             guard let url = object["url"] as? String else { return nil }

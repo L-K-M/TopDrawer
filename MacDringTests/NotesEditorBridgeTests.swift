@@ -99,6 +99,10 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertNil(NotesEditorEvent(scriptMessageBody: ["type": "futureThing"]))
         XCTAssertNil(NotesEditorEvent(scriptMessageBody: ["type": "changed"]), "missing markdown")
         XCTAssertNil(
+            NotesEditorEvent(scriptMessageBody: ["type": "changed", "markdown": "x", "documentID": "a"]),
+            "a missing revision must not be defaulted"
+        )
+        XCTAssertNil(
             NotesEditorEvent(scriptMessageBody: ["type": "changed", "markdown": "x", "documentID": ""]),
             "an edit with no document identity cannot be attributed"
         )
