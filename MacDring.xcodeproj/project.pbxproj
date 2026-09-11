@@ -77,6 +77,7 @@
 				AA000000000000000000000A /* Sources */,
 				AA000000000000000000000B /* Frameworks */,
 				AA000000000000000000000C /* Resources */,
+				AA0000000000000000000033 /* Copy EditorWeb assets */,
 			);
 			buildRules = (
 			);
@@ -171,6 +172,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AA0000000000000000000033 /* Copy EditorWeb assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 0;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/EditorWeb/dist/editor.html",
+				"$(SRCROOT)/EditorWeb/dist/editor.js",
+				"$(SRCROOT)/EditorWeb/dist/editor.css",
+			);
+			name = "Copy EditorWeb assets";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.html",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.js",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.css",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n# The editor is built and reviewed outside Xcode (EditorWeb/README.md); Xcode only\n# copies the three reviewed files, so the repository holds one copy of them and the\n# app cannot ship a stale bundle. Flat, by name: the page and the scheme handler\n# look them up in the resource directory.\nsrc=\"$SRCROOT/EditorWeb/dist\"\ndst=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$dst\"\nfor asset in editor.html editor.js editor.css; do\n  if [ ! -f \"$src/$asset\" ]; then\n    echo \"error: $src/$asset is missing; run 'cd EditorWeb && npm run build'\"\n    exit 1\n  fi\n  cp -f \"$src/$asset\" \"$dst/$asset\"\ndone\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA000000000000000000000A /* Sources */ = {

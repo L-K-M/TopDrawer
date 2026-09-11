@@ -35,7 +35,7 @@ proven the shared core. Every phase leaves the Mac apps strictly better factored
   handoff, watch keying) into a `TopDrawerCore` SwiftPM package with the existing
   tests moved over; migrate `ObservableObject`/`@Published` in shared types to
   Observation ([03](03-swift-on-linux.md)); split the few pure cores out of UI files
-  (`MarkdownText`, `ColorHex` math, `ForeignFullScreen.covers` geometry).
+  (`ColorHex` math, `ForeignFullScreen.covers` geometry).
 - Introduce the `IconName` abstraction over SF Symbol names on macOS + start the
   ~300-symbol mapping table ([04](04-ui-frameworks.md)).
 - Ship this as a normal macOS release to prove no regressions.

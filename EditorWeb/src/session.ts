@@ -46,6 +46,13 @@ export class EditorSession {
   private hostRevision = -1;
   /** Revision of the editor's own change stream; echoed to the host. */
   private editorRevision = 0;
+  /**
+   * Identity of the document the editor is showing, as the host named it. Echoed
+   * on every `changed` so the host can attribute an edit to the note it came from:
+   * an edit can arrive after the drawer has already moved to another tab, or after
+   * it has closed the drawer and cleared its notion of "the open tab".
+   */
+  private documentID: string | null = null;
   /** Markdown as loaded by the host — the source of truth while clean. */
   private loadedMarkdown = '';
   private changes: ChangeCoalescer;
@@ -61,7 +68,12 @@ export class EditorSession {
     this.changes = new ChangeCoalescer(CHANGE_DEBOUNCE_MS, (markdown) => {
       this.editorRevision += 1;
       this.loadedMarkdown = markdown;
-      this.send({ type: 'changed', markdown, editorRevision: this.editorRevision });
+      this.send({
+        type: 'changed',
+        markdown,
+        editorRevision: this.editorRevision,
+        documentID: this.documentID ?? '',
+      });
     });
   }
 
@@ -97,8 +109,17 @@ export class EditorSession {
   private async handleHostMessage(message: HostMessage): Promise<void> {
     switch (message.type) {
       case 'initialize':
+        // A pending edit belongs to the document being replaced, so report it before
+        // adopting the new one: the host attributes it by documentID and saves it
+        // against the right note. Dropping it here would silently lose the last
+        // keystrokes of the note the user just left.
+        this.flush();
         this.theme = message.theme;
+        this.documentID = message.documentID;
         this.applyTheme();
+        // Note on the revision floor: `hostRevision` is a *global* counter in the
+        // host, not a per-document one, so a new document's revision is always
+        // greater than the previous one's and this guard admits it.
         await this.loadDocument(message.markdown, message.revision);
         break;
       case 'replaceDocument':
@@ -106,6 +127,11 @@ export class EditorSession {
         break;
       case 'focus':
         this.activeEditorFocus();
+        break;
+      case 'flush':
+        // The host asks explicitly because a web view can be hidden or torn down
+        // without a visibility change, and a host may be about to terminate.
+        this.flush();
         break;
       case 'command':
         await this.handleCommand(message.name);

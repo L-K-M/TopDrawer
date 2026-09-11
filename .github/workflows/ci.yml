@@ -49,13 +49,29 @@ jobs:
       - name: Build & test
         run: |
           set -o pipefail
+          # Tee the raw output as well: xcbeautify summarizes, and a summary of a
+          # compiler error often omits the file and line it came from.
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination 'platform=macOS' \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            clean test | xcbeautify
+            clean test 2>&1 | tee /tmp/xcodebuild.log | xcbeautify
+
+      # The summarized output can hide which file failed to compile (it reports the
+      # message, not always the location), so the raw log is what makes a red build
+      # actionable from the run page alone.
+      - name: Show compiler errors from the raw log
+        if: failure()
+        run: |
+          if [ -f /tmp/xcodebuild.log ]; then
+            grep -nE "error:" /tmp/xcodebuild.log | head -40 || true
+            echo '--- last 40 lines ---'
+            tail -40 /tmp/xcodebuild.log
+          else
+            echo 'no xcodebuild log was produced'
+          fi
 
       - name: Upload test results on failure
         if: failure()
@@ -64,3 +80,21 @@ jobs:
           name: TestResults
           path: TestResults.xcresult
           if-no-files-found: ignore
+
+      # The notes tab loads a web editor out of the app bundle. Xcode copies it in
+      # with a build phase, and a silent failure there (a sandboxing change, a renamed
+      # file, a phase dropped in a merge) would leave users with a blank notes drawer
+      # that no unit test can see, so check the built product itself.
+      - name: Verify the notes editor shipped in the app bundle
+        run: |
+          set -euo pipefail
+          # -print -quit rather than piping to head: a pipe would let find die of
+          # SIGPIPE, which `set -o pipefail` turns into a failed step.
+          app=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 6 -name 'Top Drawer.app' -path '*Build/Products*' -print -quit)
+          test -n "$app" || { echo 'error: built app not found'; exit 1; }
+          echo "app: $app"
+          for asset in editor.html editor.js editor.css; do
+            path="$app/Contents/Resources/$asset"
+            test -s "$path" || { echo "error: missing or empty $path"; exit 1; }
+            echo "ok: $asset ($(wc -c < "$path") bytes)"
+          done

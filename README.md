@@ -24,8 +24,9 @@ Jetty all draw it.
 - **Edge tabs → drawers.** Colored tabs anchored to any screen edge; click (or
   hover) to open a drawer.
 - **Eight tab types** — an **items** tab (apps, files, folders, links arranged freely
-  in a grid with gaps), a **notes** tab (a quick text scratchpad), a **folder** tab
-  (a live, read-only view of a directory's contents), a **disks** tab (your mounted
+  in a grid with gaps), a **notes** tab (a live Markdown scratchpad: type formatted
+  text, tick off task items, switch to raw Markdown when you want it), a **folder**
+  tab (a live, read-only view of a directory's contents), a **disks** tab (your mounted
   ejectable volumes), a **network** tab (your mounted network shares), a **cloud** tab
   (your cloud drives — iCloud, Dropbox, …), a **recents** tab (what you've recently
   opened — from Top Drawer, the whole Mac via Spotlight, or both), and a **fresh** tab
@@ -91,6 +92,26 @@ and reveals the app in Finder on success; `scripts/build.sh --clean` resets any
 wedged Xcode build daemons and rebuilds from scratch.
 
 For day-to-day development, open `MacDring.xcodeproj` in Xcode and run.
+
+### The notes editor is a bundled web asset
+
+The notes tab is the web editor in `EditorWeb/`, loaded by a `WKWebView` from the
+app bundle. Xcode copies the reviewed bundle (`EditorWeb/dist/editor.html`,
+`editor.js`, `editor.css`) into the app with a "Copy EditorWeb assets" build
+phase, so a normal build needs no extra steps and the repository holds one copy of
+those files.
+
+After changing anything under `EditorWeb/src/`, rebuild the bundle and commit the
+result along with the source change:
+
+```bash
+cd EditorWeb && npm ci && npm run build && npm test
+```
+
+EditorWeb has its own CI job that reruns those tests, a headless-browser smoke
+test of the editor and its bridge, and a check that the committed bundle matches
+the sources. See `EditorWeb/README.md` for the bridge protocol and
+`docs/markdown-editor-improvement-plan.md` for why the editor is built this way.
 
 ### Linux (experimental)
 

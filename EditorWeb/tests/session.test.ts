@@ -18,8 +18,10 @@ function handleMessage(json: string) {
   window.topdrawerEditor?.handleMessage(json);
 }
 
-function initialize(session: EditorSession, markdown: string, revision: number) {
-  handleMessage(JSON.stringify({ type: 'initialize', markdown, theme: 'light', platform: 'harness', revision }));
+function initialize(session: EditorSession, markdown: string, revision: number, documentID = 'doc-1') {
+  handleMessage(
+    JSON.stringify({ type: 'initialize', markdown, theme: 'light', platform: 'harness', revision, documentID }),
+  );
 }
 
 /** Polls instead of sleeping: a mount is asynchronous and a fixed delay races it. */
@@ -132,6 +134,17 @@ describe('EditorSession', () => {
     // everything after one.
     handleMessage(JSON.stringify({ type: 'replaceDocument', markdown: 'z\n', revision: 4 }));
     await settled(container, 'z');
+  });
+
+  it('answers a flush request without inventing a change', async () => {
+    const { transport, container, session } = newSession();
+    initialize(session, '# Note\n', 1);
+    await settled(container, 'Note');
+
+    handleMessage(JSON.stringify({ type: 'flush' }));
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(transport.ofType('changed')).toEqual([]);
   });
 
   it('rejects malformed host JSON with a diagnostic instead of throwing', async () => {

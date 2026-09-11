@@ -299,6 +299,7 @@ try {
     markdown: '# Note\n\ntyped text\n',
     theme: 'light',
     platform: 'linux',
+    documentID: 'production-note',
     revision: 1,
   });
 
@@ -311,6 +312,14 @@ try {
   await production.page.keyboard.type('!');
   await production.page.waitForTimeout(600);
   await production.read();
+  const change = production.ofType('changed')[0];
+  // The change must name its document: the host attributes the save by it, because
+  // an edit can arrive after the drawer has moved on to another tab.
+  check(
+    'production: the change names its document',
+    change?.documentID === 'production-note',
+    JSON.stringify(change ?? null),
+  );
   check(
     'production: typing reaches the host',
     production.ofType('changed').length === 1,
@@ -336,6 +345,7 @@ try {
     markdown: '# Note\n',
     theme: 'light',
     platform: 'linux',
+    documentID: 'production-note',
     revision: 1,
   });
 
@@ -392,6 +402,7 @@ try {
       markdown: '# Note\n',
       theme: 'light',
       platform: 'macos',
+      documentID: 'file-note',
       revision: 1,
     });
   } catch {

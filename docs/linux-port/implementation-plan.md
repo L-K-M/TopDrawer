@@ -649,7 +649,7 @@ provides `g_signal_connect` wrappers (it's a varargs macro Swift can't call).*
 - Drawer as a layer-shell surface adjacent to its tab: icon grid (GTK widgets,
   PNG icons via GTK's own loaders — file paths come from the icon pipeline),
   `DrawerMetrics` for sizing, launch on click via daemon, notes tab (TextView +
-  the portable `MarkdownText` core), folder/disks/network/cloud/recents/fresh
+  the notes surface is a bundled web editor rather than portable Swift — see `docs/markdown-editor-improvement-plan.md`), folder/disks/network/cloud/recents/fresh
   content from daemon data, type-to-find over `DrawerSearch` with key handling.
 - **Acceptance**: view-model unit tests (grid population from document fixtures);
   builds in CI.

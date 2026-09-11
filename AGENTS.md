@@ -79,8 +79,14 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 - `Common/` — `VisualEffectView`; `TabShapes` (`edgeRoundedRect` for the
   inward-rounded/edge-sharp tab pill + drawer, and `ClassicTabShape`);
   `ActivationPolicy` (the shared `.regular`↔`.accessory` revert guard);
-  `IconRenderer` (draws an `IconStyle` to an `NSImage`); `MarkdownText` (the notes
-  preview's basic-Markdown renderer).
+  `IconRenderer` (draws an `IconStyle` to an `NSImage`).
+- `Notes/` — the notes tab's editor. `NotesEditorBridge` (the wire protocol and its
+  JavaScript encoding) and `NotesEditorHostSession` (the host-side reconciler that
+  decides *when* the editor is told about a document) are Foundation-only and run on
+  both platforms' test jobs; `NotesEditorWebView` (WKWebView adapter),
+  `NotesEditorSchemeHandler` (serves the bundled assets over a custom scheme),
+  `NotesEditorMessageProxy` and `NotesEditorPane` are macOS-only. The editor itself
+  is the bundled web asset in `EditorWeb/`, copied into the app by a build phase.
 
 ## Conventions
 

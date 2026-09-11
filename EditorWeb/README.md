@@ -44,13 +44,14 @@ wait for the editor's `ready` message before sending `initialize`.
 ## Bridge protocol (`src/bridge.ts`)
 
 ```
-host -> editor: initialize(markdown, theme, platform, revision)
+host -> editor: initialize(markdown, theme, platform, revision, documentID)
                replaceDocument(markdown, revision)
                focus()
+               flush()
                command(toggleMode | undo | redo)
                setTheme(theme)
 editor -> host: ready(protocolVersion)
-               changed(markdown, editorRevision)
+               changed(markdown, editorRevision, documentID)
                openLink(url)
                focusChanged(isFocused)
                diagnostic(code, detail)
@@ -63,7 +64,9 @@ the same JS API on WKWebView and WebKitGTK.
 Data-safety invariants (enforced in `src/session.ts` and `src/editor.ts`,
 covered by tests):
 
-1. `changed` fires only after a local user edit. Rich mode additionally gates
+1. `changed` fires only after a local user edit, and names the document it belongs
+   to, so the host can save it against that note rather than whichever tab is open
+   when it lands (an edit can arrive after a drawer closed or moved on). Rich mode additionally gates
    on a real interaction (key, IME, paste, drop, toolbar click) because Crepe
    applies its parsed document in a transaction *after* mount: reporting that
    would rewrite an untouched note with remark's normalization (`-`→`*`,

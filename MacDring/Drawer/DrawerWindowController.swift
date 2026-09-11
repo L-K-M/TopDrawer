@@ -265,6 +265,11 @@ final class DrawerWindowController {
     func hide(duration: TimeInterval) {
         guard isVisible else { return }
         isVisible = false
+        // Ask the notes editor for any edit still in its debounce window before the
+        // panel goes away. `visibilitychange` is not dependable here: the web view is
+        // hidden, not navigated, and the drawer may be closed a few milliseconds after
+        // a keystroke.
+        model.requestNotesFlush?()
         guard duration > 0 else {
             panel.orderOut(nil)
             panel.alphaValue = 1
@@ -388,10 +393,15 @@ final class DrawerWindowController {
             model.items = []
             if !preserveLiveNotes {
                 model.notes = tab.notes
-                model.notesPreview = true   // a fresh open starts in the rendered view, not the editor
             }
             model.folderURL = nil
         }
+        // Every kind passes through here, so the notes editor learns that the open
+        // tab changed — and, for a refresh of the same tab, that it did not. Only a
+        // real change is written: `@Published` fires on every assignment, and a
+        // refresh happens for unrelated reasons (a screen change, a running-app
+        // update), so re-writing the same id would invalidate the drawer for nothing.
+        if model.documentID != tab.id { model.documentID = tab.id }
     }
 
     /// The drawer's flush-to-edge open frame, sized deterministically from the

@@ -46,6 +46,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.saveAndTeardown()
     }
 
+    /// Give the notes editor the chance to hand over an edit still inside its
+    /// coalescing window before the store is written for the last time. Bounded by
+    /// `flushNotesForTermination`'s own timeout, so a wedged web view cannot block
+    /// the quit.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !Self.isRunningTests, controller.hasPendingNoteEditor else { return .terminateNow }
+        controller.flushNotesForTermination {
+            // Reply on the next turn, never from inside this method: AppKit requires
+            // the `.terminateLater` return to happen before the reply, or it treats
+            // the reply as unrouted.
+            DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
+        }
+        return .terminateLater
+    }
+
     /// Opt into secure state restoration. We persist no NSWindow state ourselves,
     /// but macOS 14+ logs a warning unless the delegate answers this explicitly.
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }

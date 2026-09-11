@@ -33,10 +33,10 @@ struct DrawerView: View {
     /// each hit the store and rebuild the drawer mid-edit).
     @State private var groupNameDraft = ""
 
-    /// Keyboard focus target. The filter field is focused on open (type-to-find); the
-    /// notes editor is focused when the user clicks into a note to edit it.
+    /// Keyboard focus target. The filter field is focused on open (type-to-find).
+    /// The notes editor is a web view and owns its own focus, so it is not a case here.
     @FocusState private var focus: Field?
-    private enum Field { case search, notes, groupName }
+    private enum Field { case search, groupName }
 
     private let contentSpace = "topdrawer.drawer.content"
     private var columns: Int { PersistedLayoutBounds.clampedGridColumns(model.columns) }
@@ -103,13 +103,12 @@ struct DrawerView: View {
     private var bodyContent: some View {
         switch model.kind {
         case .notes:
-            // Bleed the editor/view to the drawer's left/right/bottom edges (negating
-            // the outer content padding) — the field's own text inset is enough.
-            Group {
-                if model.notesPreview { notesPreview } else { notesEditor }
-            }
-            .padding(.horizontal, -14)
-            .padding(.bottom, -14)
+            // The bundled web editor fills the drawer. Its text insets are its own, so
+            // it bleeds to the drawer's edges; the resolution happens inside (see
+            // NotesEditorHostSession), not here.
+            NotesEditorPane(model: model)
+                .padding(.horizontal, -14)
+                .padding(.bottom, -14)
         case .items, .folder, .disks, .network, .cloud, .recents, .fresh:
             if model.isSearching { searchResultsList }
             else if model.items.isEmpty { emptyState }
@@ -255,65 +254,6 @@ struct DrawerView: View {
         .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
         .transition(.move(edge: .top).combined(with: .opacity))
-    }
-
-    // MARK: Notes
-
-    private var notesEditor: some View {
-        // Full-bleed and transparent over the drawer's blur — the TextEditor's own text
-        // inset is the only spacing. A ✓ button (bottom-right) returns to view mode.
-        TextEditor(text: notesBinding)
-            .font(.body)
-            .focused($focus, equals: .notes)
-            .scrollContentBackground(.hidden)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottomTrailing) { doneEditingButton }
-            .onAppear { DispatchQueue.main.async { focus = .notes } }
-    }
-
-    /// Finishes editing and returns the note to its rendered view (shown only while
-    /// editing). A filled, labelled button so it reads as an action, not a status badge.
-    private var doneEditingButton: some View {
-        Button { model.notesPreview = true } label: {
-            Label("Done", systemImage: "checkmark")
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.small)
-        .help("Finish editing and show the rendered note")
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
-        .padding(10)
-    }
-
-    /// Rendered-Markdown view of the note — the default when a notes drawer opens.
-    /// Clicking anywhere switches to the editor.
-    private var notesPreview: some View {
-        ScrollView {
-            if model.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Nothing here yet — click to edit.")
-                    .foregroundStyle(.secondary).font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-            } else {
-                MarkdownText(text: model.notes, onToggle: toggleNoteCheckbox)
-                    .padding(10)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(Rectangle())
-        .onTapGesture { model.notesPreview = false }
-    }
-
-    private var notesBinding: Binding<String> {
-        Binding(get: { model.notes }, set: { model.notes = $0; model.onNotesChanged?($0) })
-    }
-
-    /// Flips the `- [ ]` / `- [x]` checkbox on note line `index` (tapped in the
-    /// preview) and persists it, without leaving the rendered view.
-    private func toggleNoteCheckbox(_ index: Int) {
-        let updated = MarkdownText.togglingCheckbox(in: model.notes, lineIndex: index)
-        guard updated != model.notes else { return }
-        model.notes = updated
-        model.onNotesChanged?(updated)
     }
 
     // MARK: Items / folder grid

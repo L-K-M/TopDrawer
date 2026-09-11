@@ -552,7 +552,7 @@ MacDring/
 │   │   ├── TabShapes.swift          # edgeRoundedRect + ClassicTabShape (tab/drawer shapes)
 │   │   ├── ActivationPolicy.swift   # shared .regular↔.accessory revert guard (Settings/New Tab)
 │   │   ├── IconRenderer.swift       # draws an IconStyle to an NSImage (drawer + editor)
-│   │   └── MarkdownText.swift       # basic-Markdown renderer for the notes preview
+│   │   └── SerialQueueGate.swift     # re-entrancy-safe serial queue (inotify teardown)
 │   └── Resources/
 │       └── Assets.xcassets          # Info.plist generated
 ├── MacDringTests/
@@ -574,7 +574,8 @@ MacDring/
 │   ├── RecentsListerTests.swift     # recents listing (mapping/order/slots/source)
 │   ├── FreshListerTests.swift       # newly-arrived listing (order/slots/cap/scopes)
 │   ├── IconStyleTests.swift         # IconStyle Codable, applyingIconStyles, IconRenderer
-│   ├── MarkdownTextTests.swift      # notes-preview Markdown line classification
+│   ├── NotesEditorBridgeTests.swift # notes-editor wire protocol + JS literal encoding
+│   ├── NotesEditorHostSessionTests.swift # when the editor is told about a document
 │   ├── TrashInspectorTests.swift    # trash entry-count / emptiness across volumes
 │   ├── FileMoverTests.swift         # move-into-directory + collision rename
 │   ├── SemanticVersionTests.swift   # version parse/compare (update checker)
@@ -648,9 +649,9 @@ MacDring/
 >   "screen" outline with **two tabs** protruding from its right edge. The **About**
 >   pane shows the real app icon.
 > - **Tab types** (`TabKind`) — besides the default **items** tab, a **notes** tab
->   (drawer is a text editor; edits persist via `setNotes` without reconciling the
->   open drawer; a header toggle flips to a basic-Markdown **preview** via
->   `MarkdownText`), a **folder** tab (drawer shows a directory's live contents,
+>   (drawer is the bundled web editor from `EditorWeb/`; edits arrive over the bridge
+>   and persist via `setNotes`; see `docs/markdown-editor-improvement-plan.md`), a
+>   **folder** tab (drawer shows a directory's live contents,
 >   read-only: launch + reveal, with an Open-in-Finder header button), and a
 >   open drawer), a **folder** tab (drawer shows a directory's live contents,
 >   read-only: launch + reveal, with an Open-in-Finder header button; per-tab sort

@@ -509,9 +509,8 @@ final class TabController {
             // Already open: the pill rides the open drawer's inner face, so the
             // cursor re-entering it fires onHover(true) constantly. Re-running
             // openDrawer would replay the whole show — wiping an active
-            // type-to-find filter, flipping a notes tab back to preview, and
-            // restarting the open animation from alpha 0. (handleDragHover has
-            // the same guard.)
+            // type-to-find filter, reloading a notes editor, and restarting the
+            // open animation from alpha 0. (handleDragHover has the same guard.)
             guard openTabID != id else { return }
             openDrawer(id)
         } else {
@@ -1046,9 +1045,27 @@ final class TabController {
             let locked = self.store.tab(id: id)?.locked ?? false
             self.store.setLocked(!locked, forTab: id)
         }
-        drawer.model.onNotesChanged = { [weak self] text in
-            guard let self, let id = self.openTabID else { return }
-            self.store.setNotes(text, forTab: id)
+        drawer.model.onNotesChanged = { [weak self] text, documentID in
+            guard let self else { return }
+            // A pending quit is waiting for this edit to land in the store, so end that
+            // wait whichever way this ends: an unknown tab must not leave the quit
+            // waiting for the timeout.
+            defer { self.finishNotesFlush() }
+            // Saved against the note the editor named, which is not necessarily the
+            // open tab any more: a flushed edit arrives after the drawer closed
+            // (`openTabID` is already nil) or after the user moved to another tab.
+            // The store is the last word on whether that note exists.
+            guard self.store.tab(id: documentID) != nil else {
+                NSLog("Notes editor: refused an edit for unknown tab \(documentID)")
+                return
+            }
+            self.store.setNotes(text, forTab: documentID)
+        }
+        drawer.model.onOpenNoteLink = { url in
+            // The editor never navigates itself; an explicit Cmd/Ctrl-click on a link
+            // is the only path out of a note. Only http(s) gets this far (the editor
+            // and the session both refuse other schemes).
+            NSWorkspace.shared.open(url)
         }
         drawer.model.onOpenFolder = { [weak self] in
             guard let self, let id = self.openTabID, let tab = self.store.tab(id: id),
@@ -1635,5 +1652,43 @@ final class TabController {
         tabWindows.removeAll()
         for (_, entry) in hotkeys { hotkeyRegistrar.unregister(entry.token) }
         hotkeys.removeAll()
+    }
+
+    // MARK: Notes editor flush
+
+    /// Set while a quit is waiting for the notes editor's last edit.
+    private var notesFlushCompletion: (() -> Void)?
+    private var notesFlushTimeout: Timer?
+
+    /// True when a quit should wait for the notes editor: an edit may still be inside
+    /// its coalescing window, and losing the last keystrokes of a note because the
+    /// app was quit a moment later is not acceptable.
+    var hasPendingNoteEditor: Bool { drawer.model.requestNotesFlush != nil }
+
+    /// Asks the open notes editor to report a pending edit and calls `completion` when
+    /// it has been persisted, or after `timeout` if the editor never answers (a wedged
+    /// web view must not hold the quit hostage). With no notes editor open this calls
+    /// back immediately.
+    func flushNotesForTermination(timeout: TimeInterval = 0.3, completion: @escaping () -> Void) {
+        guard let request = drawer.model.requestNotesFlush else {
+            completion()
+            return
+        }
+        notesFlushCompletion = completion
+        notesFlushTimeout?.invalidate()
+        notesFlushTimeout = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+            self?.finishNotesFlush()
+        }
+        request()
+    }
+
+    /// Called when the flushed edit lands (or the wait times out); idempotent, so the
+    /// two paths cannot both run the completion.
+    private func finishNotesFlush() {
+        notesFlushTimeout?.invalidate()
+        notesFlushTimeout = nil
+        let completion = notesFlushCompletion
+        notesFlushCompletion = nil
+        completion?()
     }
 }

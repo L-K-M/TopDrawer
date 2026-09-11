@@ -54,10 +54,12 @@ public final class INotifyWatcher {
 
     private let directory: URL
     private let onChange: () -> Void
-    private let queue = DispatchQueue(label: "ch.lkmc.topdrawer.inotify-watcher", qos: .utility)
+    /// All watcher state below is touched only through this gate, which also makes
+    /// `stop()` legal from the queue itself — see `SerialQueueGate` and `deinit`.
+    private let gate = SerialQueueGate(label: "ch.lkmc.topdrawer.inotify-watcher")
     private let fileManager = FileManager.default
 
-    // All of the following are touched only on `queue`.
+    // All of the following are touched only on `gate.queue`.
     private var fd: Int32 = -1
     private var watch: Int32 = -1
     /// True while we're watching the parent because `directory` doesn't exist yet.
@@ -75,12 +77,21 @@ public final class INotifyWatcher {
         self.onChange = onChange
     }
 
-    // `stop()`'s `queue.sync` in deinit is safe only because no closure submitted to
-    // `queue` releases the last reference to `self` on the queue: the event, cancel and
-    // retry handlers capture `self` weakly, and the debounce item — which needs a strong
-    // `self` to clear `debounce` — hands that strong `self` to a main-queue block before
-    // returning, so its final release lands on main, not here. Preserve that when adding
-    // queue work.
+    // `deinit` can run *on* the gate's queue: the read handler and the retry closure
+    // below load `self` weakly into a strong temporary for the duration of their body,
+    // so if the last outside owner released the watcher while one of them ran, that
+    // temporary's release is what deallocates it. `stop()` therefore goes through the
+    // gate (which runs inline when already on the queue) rather than assuming it is
+    // called from outside. That assumption was the bug: an unconditional
+    // `queue.sync` here traps with "dispatch_sync called on the same queue", which is
+    // what crashed the daemon tests intermittently (a Swift runtime trap in
+    // `INotifyWatcher.deinit`, reached from `start()`'s read-handler closure).
+    //
+    // The debounce item below is the one queued closure that cannot be last: it clears
+    // `debounce` on the queue and then hands its strong `self` to a main-queue block, so
+    // its own release is never the final one. Preserve these properties when adding
+    // queue work; anything that can drop the last reference on the gate must be
+    // prepared for `deinit` to run there.
     deinit { stop() }
 
     /// Starts watching. Safe to call twice; the second call does nothing.
@@ -89,7 +100,7 @@ public final class INotifyWatcher {
     /// never been used, a folder tab pointed at a not-yet-created path). We watch the
     /// parent until the directory appears, then re-arm on it (`armWatch`).
     public func start() {
-        queue.sync {
+        gate.sync {
             guard !started else { return }
             let descriptor = inotify_init1(O_NONBLOCK | O_CLOEXEC)
             guard descriptor >= 0 else {
@@ -104,7 +115,8 @@ public final class INotifyWatcher {
             // The cancel handler owns the descriptor by value, so the fd is always
             // closed on stop()/deinit even if `self` is already gone.
             let owned = descriptor
-            let readSource = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
+            let readSource = DispatchSource.makeReadSource(fileDescriptor: descriptor,
+                                                           queue: gate.queue)
             readSource.setEventHandler { [weak self] in self?.drain() }
             readSource.setCancelHandler { close(owned) }
             source = readSource
@@ -113,7 +125,7 @@ public final class INotifyWatcher {
     }
 
     public func stop() {
-        queue.sync {
+        gate.sync {
             guard started else { return }
             started = false
             debounce?.cancel()
@@ -147,7 +159,7 @@ public final class INotifyWatcher {
         let descriptor = target.path.withCString { inotify_add_watch(fd, $0, mask) }
         guard descriptor >= 0 else {
             NSLog("INotifyWatcher: couldn't watch \(target.path) yet; retrying.")
-            queue.asyncAfter(deadline: .now() + Self.retryInterval) { [weak self] in
+            gate.async(after: Self.retryInterval) { [weak self] in
                 guard let self, self.started else { return }
                 self.armWatch()
             }
@@ -225,10 +237,10 @@ public final class INotifyWatcher {
     /// FSEvents' latency semantics. Re-anchoring on every event (cancel + reschedule)
     /// would let a steady stream of writes postpone the notification forever; instead,
     /// once a window is open we fold later events into it and open the next only after
-    /// this one fires. The work item clears `debounce` on `queue` before delivering, so
+    /// this one fires. The work item clears `debounce` on the gate before delivering, so
     /// a following burst starts a fresh window. It captures `self` weakly and, while
     /// running, hands a strong `self` to the main-queue block — so it never releases the
-    /// last reference on `queue` (see the invariant noted above `deinit`).
+    /// last reference on the gate (see the invariant noted above `deinit`).
     private func scheduleNotify() {
         guard debounce == nil else { return }
         let item = DispatchWorkItem { [weak self] in
@@ -237,7 +249,13 @@ public final class INotifyWatcher {
             DispatchQueue.main.async { self.onChange() }
         }
         debounce = item
-        queue.asyncAfter(deadline: .now() + Self.latency, execute: item)
+        // `stop()` cancels the item, and a cancelled item must not deliver. Checked
+        // here rather than relying on `perform()`'s behaviour for a cancelled item,
+        // which is not something this code should depend on.
+        gate.async(after: Self.latency) {
+            guard !item.isCancelled else { return }
+            item.perform()
+        }
     }
 
     // MARK: Byte helpers

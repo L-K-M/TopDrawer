@@ -54,12 +54,14 @@ final class DrawerModel: ObservableObject {
     /// How the drawer arranges items (grid / list) — the open tab's per-tab `layout`
     /// already resolved against the global default, so the view and sizing agree.
     @Published var layout: DrawerLayout = .grid
-    /// The note text (for `.notes` tabs).
+    /// The note text (for `.notes` tabs): the store's copy, or the last text the
+    /// editor reported. The notes editor reconciles against this, so a background
+    /// update to it does *not* reset the editor's cursor (see `NotesEditorHostSession`).
     @Published var notes: String = ""
-    /// Whether a `.notes` tab is showing the rendered-Markdown **view** (vs. the
-    /// editor). A note opens in view mode; clicking the text switches to editing, and
-    /// the editor's ✓ button (or the next open) returns to view mode.
-    @Published var notesPreview = true
+    /// Identity of the open tab. The notes editor treats a change here as "now
+    /// showing a different document", which is what distinguishes a new note from
+    /// an unrelated refresh of the one on screen.
+    @Published var documentID: UUID?
     /// The linked directory (for `.folder` tabs), used by "Open in Finder".
     @Published var folderURL: URL?
     /// Whether the open `.recents` drawer has Top Drawer-owned history that the header
@@ -176,8 +178,19 @@ final class DrawerModel: ObservableObject {
     var onOpenSettings: (() -> Void)?
     /// Toggle this tab's locked state (drawer header lock).
     var onToggleLocked: (() -> Void)?
-    /// Notes text changed (for `.notes` tabs).
-    var onNotesChanged: ((String) -> Void)?
+    /// Notes text changed (for `.notes` tabs), with the document it belongs to —
+    /// the drawer saves against that note, not against the currently open tab,
+    /// because an edit can arrive after the drawer has moved on.
+    var onNotesChanged: ((String, UUID) -> Void)?
+    /// The notes editor asked to open a URL (an explicit Cmd/Ctrl-click on a link).
+    /// The editor itself never navigates, so this is the only way a link leaves a note.
+    var onOpenNoteLink: ((URL) -> Void)?
+    /// Set by the notes editor while it is on screen, cleared on teardown: asks it
+    /// to report a pending edit immediately. The drawer calls this as it hides,
+    /// because hiding a web view does not reliably produce a visibility change.
+    /// Deliberately not `@Published`: it is a capability, not content, and making
+    /// it observed would re-render the drawer every time the editor registers.
+    var requestNotesFlush: (() -> Void)?
     /// Open the linked directory in Finder (for `.folder` tabs).
     var onOpenFolder: (() -> Void)?
     /// Clear the recent items (for `.recents` tabs).
