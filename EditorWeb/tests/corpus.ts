@@ -5,7 +5,9 @@
  *
  * - 'exact'      getMarkdown() after plain load returns the input byte-for-byte
  * - 'normalized' serialize differs in formatting but stays semantically equal
- * - 'broken'     rich mode cannot represent it; must stay editable in source
+ *                and reaches a stable fixpoint (the safety property: document
+ *                content rich mode cannot render is kept as literal text
+ *                rather than dropped, which the escaping above causes)
  *
  * The point of recording expectations per fixture is the spike's support
  * table: any regression in this table is a data-safety finding.
@@ -13,7 +15,7 @@
 export interface CorpusFixture {
   name: string;
   input: string;
-  expect: 'exact' | 'normalized' | 'broken';
+  expect: 'exact' | 'normalized';
 }
 
 export const CORPUS: CorpusFixture[] = [

@@ -15,6 +15,7 @@
   --crepe-font-title: var(--td-font);
   --crepe-font-code: var(--td-mono);
   --crepe-shadow-1: 0 4px 10px rgba(0, 0, 0, 0.16);
+  --crepe-shadow-2: 0 8px 22px rgba(0, 0, 0, 0.22);
   --default-cell-min-width: 2em;
 }
 
@@ -95,7 +96,7 @@ body {
 .milkdown .top-bar-item:focus-visible,
 .milkdown button:focus-visible,
 .milkdown input:focus-visible {
-  outline: 2px solid var(--crepe-color-primary);
+  outline: 2px solid var(--crepe-color-primary, #b45309);
   outline-offset: -2px;
 }
 

@@ -120,9 +120,9 @@ export class EditorSession {
       this.diagnostic('stale-replace', `dropped revision ${revision}`);
       return;
     }
-    // Same revision and same content with no pending edit is a host retry:
-    // rebuilding would drop focus and undo history for nothing.
-    if (revision === this.hostRevision && markdown === this.loadedMarkdown && !this.changes.isDirty) {
+    // Same revision and same content is a host retry, not new information:
+    // rebuilding would drop focus, undo history, and any edit in flight.
+    if (revision === this.hostRevision && markdown === this.loadedMarkdown) {
       return;
     }
     this.hostRevision = revision;
@@ -183,9 +183,11 @@ export class EditorSession {
   }
 
   private async toggleMode(): Promise<void> {
-    // Serialize once at the boundary so both modes always agree on the text.
+    // Persist any pending edit before the other mode takes over the container;
+    // otherwise it would sit unflushed and be lost if the drawer closed
+    // without a further edit.
+    this.flush();
     this.loadedMarkdown = this.currentMarkdown();
-    this.changes.reset();
     this.mode = this.mode === 'rich' ? 'source' : 'rich';
     await this.rebuildEditor();
   }

@@ -186,6 +186,9 @@ export class RichEditor {
   /** Dispatches a ProseMirror command against the live editor view. */
   private run(command: Command): void {
     if (this.state.destroyed) return;
+    // A host-issued undo/redo is an explicit edit of its own; without this the
+    // interaction gate would suppress the resulting change.
+    this.userInteracted = true;
     this.builder.editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
       command(view.state, view.dispatch, view);

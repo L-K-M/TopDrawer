@@ -40,10 +40,25 @@ for (const file of ['dist/editor.js', 'dist/editor.css']) {
   console.log(`${file}: ${(size / 1024).toFixed(1)} KiB`);
 }
 
+/** Licenses the spike is allowed to ship. Anything else fails the build. */
+const ALLOWED_LICENSES = new Set([
+  'MIT',
+  'ISC',
+  'BSD-2-Clause',
+  'BSD-3-Clause',
+  'Apache-2.0',
+  '(MPL-2.0 OR Apache-2.0)',
+  '(MIT OR CC0-1.0)',
+]);
+
 // License inventory is part of the build so it cannot drift from what ships.
 const packages = new Map();
 for (const input of Object.keys(result.metafile.inputs)) {
-  const match = input.match(/node_modules\/((@[^/]+\/)?[^/]+)/);
+  // Take the last `node_modules/` segment: a nested dependency
+  // (node_modules/a/node_modules/b) ships b, not a.
+  const segments = input.split('node_modules/');
+  if (segments.length < 2) continue;
+  const match = segments[segments.length - 1].match(/^((@[^/]+\/)?[^/]+)/);
   if (!match) continue;
   const name = match[1];
   if (packages.has(name)) continue;
@@ -57,7 +72,17 @@ for (const input of Object.keys(result.metafile.inputs)) {
   }
 }
 
-const rows = [...packages.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+const unlicensed = [...packages.entries()].filter(([, [, license]]) => !ALLOWED_LICENSES.has(license));
+if (unlicensed.length > 0) {
+  throw new Error(
+    `unreviewed license(s) in the bundle: ${unlicensed.map(([n, [, l]]) => `${n} (${l})`).join(', ')}`,
+  );
+}
+
+// Codepoint order, not locale order: localeCompare depends on the host locale
+// and would break the byte-identical rebuild guarantee.
+const byName = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const rows = [...packages.entries()].sort((a, b) => byName(a[0], b[0]));
 writeFileSync(
   'LICENSES.md',
   [

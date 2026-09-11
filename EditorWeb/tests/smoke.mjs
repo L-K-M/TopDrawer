@@ -160,11 +160,17 @@ try {
     script: document.querySelectorAll('#editor script, #editor iframe').length,
     img: document.querySelectorAll('#editor img').length,
     handlers: document.querySelectorAll('#editor [onerror], #editor [onclick]').length,
-    text: (document.querySelector('#editor .ProseMirror')?.textContent ?? '').slice(0, 60),
+    text: (document.querySelector('#editor .ProseMirror')?.textContent ?? '').slice(0, 120),
   }));
   check(
     'hostile markup renders inertly',
-    injected.script === 0 && injected.img === 0 && injected.handlers === 0,
+    injected.script === 0 &&
+      injected.img === 0 &&
+      injected.handlers === 0 &&
+      // Not vacuous: the payload must be present as inert text, so a document
+      // that never loaded cannot pass this gate.
+      injected.text.includes('alert(1)') &&
+      injected.text.includes('evil.example'),
     JSON.stringify(injected),
   );
 

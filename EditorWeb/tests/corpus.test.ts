@@ -83,15 +83,21 @@ describe('rich mode corpus', () => {
   });
 
   it('renders hostile markdown inertly', async () => {
-    const hostile = CORPUS.find((f) => f.name === 'raw-html' || f.name === 'malicious-payloads');
-    expect(hostile, 'corpus needs a hostile fixture').toBeTruthy();
+    const hostile = CORPUS.find((f) => f.name === 'malicious-payloads');
+    expect(hostile, 'corpus needs the malicious-payloads fixture').toBeTruthy();
     const { root, editor } = await mount(hostile!.input);
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, SETTLE_MS));
 
     expect(root.querySelector('script')).toBeNull();
     expect(root.querySelector('img')).toBeNull();
     expect(root.querySelector('[onerror]')).toBeNull();
     expect(root.querySelector('iframe')).toBeNull();
+
+    // Not vacuous: the payload must actually be present as inert text, so a
+    // document that failed to load cannot pass this test.
+    const text = root.textContent ?? '';
+    expect(text).toContain('alert(1)');
+    expect(text).toContain('evil.example');
 
     await editor.destroy();
     root.remove();

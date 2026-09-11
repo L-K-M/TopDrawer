@@ -1,6 +1,7 @@
 body {
   display: flex;
   gap: 12px;
+  margin: 0;
   padding: 12px;
   font: 13px/1.4 system-ui, sans-serif;
   height: 100vh;
