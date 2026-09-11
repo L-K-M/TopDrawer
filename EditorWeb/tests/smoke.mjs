@@ -369,7 +369,8 @@ try {
     );
     check(
       'production: repeated document swaps do not grow the heap unboundedly',
-      Math.abs(heapAfter - heapBefore) < 8 * 1048576,
+      // Growth only; a shrinking heap is not a leak.
+      heapAfter - heapBefore < 8 * 1048576,
       `${((heapAfter - heapBefore) / 1048576).toFixed(1)} MiB growth across 10 swaps`,
     );
   } else {
@@ -377,30 +378,36 @@ try {
   }
 
   // How a host loads the page: file URL with read access scoped to dist/, or a
-  // custom scheme. This decides which one the app should use, because a CSP of
-  // `script-src 'self'` depends on the document having a real origin. Reported
-  // rather than asserted until the answer is known.
+  // custom scheme. Worth gating because a CSP of `script-src 'self'` depends on
+  // the document having an origin that matches its own assets, and file://
+  // documents have an opaque one. Measured in Chromium this works, so the
+  // shipping question is whether WKWebView agrees (see README).
   const filePage = await openPage(`file://${process.cwd()}/dist/editor.html`, { asHost: true });
   await filePage.page.waitForTimeout(300);
   await filePage.read();
-  let fileMounted = false;
+  let fileMountMs = null;
   try {
-    await filePage.measureMount({
+    fileMountMs = await filePage.measureMount({
       type: 'initialize',
       markdown: '# Note\n',
       theme: 'light',
       platform: 'macos',
       revision: 1,
     });
-    fileMounted = true;
   } catch {
-    fileMounted = false;
+    fileMountMs = null;
   }
   console.log('\nfile:// load (a host may load the page this way)');
-  console.log(`  editor mounted:      ${fileMounted ? 'yes' : 'no'}`);
-  console.log(`  ready handshake:     ${filePage.ofType('ready').length === 1 ? 'received' : 'MISSING'}`);
-  console.log(`  CSP violations:      ${filePage.cspViolations.length === 0 ? 'none' : filePage.cspViolations.join(', ')}`);
-  if (filePage.problems.length > 0) console.log(`  page problems:       ${filePage.problems.join(' | ')}`);
+  console.log(`  mounted:            ${fileMountMs === null ? 'no' : `${fileMountMs.toFixed(0)} ms`}`);
+  console.log(`  ready handshake:    ${filePage.ofType('ready').length === 1 ? 'received' : 'MISSING'}`);
+  console.log(`  CSP violations:     ${filePage.cspViolations.length === 0 ? 'none' : filePage.cspViolations.join(', ')}`);
+  if (filePage.problems.length > 0) console.log(`  page problems:      ${filePage.problems.join(' | ')}`);
+
+  check(
+    'production: file:// load mounts with the strict CSP',
+    fileMountMs !== null && filePage.ofType('ready').length === 1 && filePage.cspViolations.length === 0,
+    filePage.cspViolations.join(', ') || filePage.problems.join(' | '),
+  );
 
   if (failures.length) await dumpDiagnostics(harness, 'harness');
 } catch (error) {
