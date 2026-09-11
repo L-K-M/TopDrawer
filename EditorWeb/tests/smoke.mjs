@@ -4,10 +4,15 @@ import { extname, join, normalize } from 'node:path';
 import { chromium } from 'playwright';
 
 /**
- * Phase 0 smoke test: loads the harness in headless Chromium and verifies the
- * gates that don't need a native host — boot, ready handshake, typing produces
- * one debounced `changed`, theme/mode commands work, and zero cross-origin
- * network requests. Run: `npm run smoke`.
+ * Phase 0 gates that need a real browser engine, but not a native host.
+ *
+ * Section 1 drives the harness (a simulated host with controls and a log).
+ * Section 2 loads the shipped page in `dist/` the way a host application loads
+ * it: install a message recorder before the bundle runs, then talk to it only
+ * through the bridge. Section 2 also records the timings and memory numbers the
+ * plan asks to be published rather than guessed.
+ *
+ * Run: `npm run smoke`.
  */
 const MIME = {
   '.html': 'text/html',
@@ -39,68 +44,120 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch();
-const page = await browser.newPage();
-const crossOrigin = [];
-const pageProblems = [];
-page.on('request', (req) => {
-  if (!req.url().startsWith(base) && !req.url().startsWith('data:')) crossOrigin.push(req.url());
-});
-page.on('console', (msg) => {
-  if (msg.type() === 'error' || msg.type() === 'warning') pageProblems.push(`console.${msg.type()}: ${msg.text()}`);
-});
-page.on('pageerror', (error) => pageProblems.push(`pageerror: ${error.message}`));
-
 const failures = [];
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures.push(name);
 };
 
-/** Bridge log lines, newest last. The harness renders each message as a div. */
-const bridgeLines = () =>
-  page.evaluate(() =>
-    [...document.querySelectorAll('#bridge-log > div')].map((el) => el.textContent),
-  );
+/**
+ * A page that records bridge traffic, CSP violations and network activity.
+ *
+ * `asHost` installs the `window.webkit.messageHandlers.topdrawer` transport that
+ * WKWebView and WebKitGTK provide, so the shipped page is exercised through the
+ * transport the real host uses rather than the harness fallback.
+ */
+async function openPage(path, { asHost = false } = {}) {
+  const page = await browser.newPage();
+  const state = { crossOrigin: [], problems: [], messages: [], cspViolations: [], heap: null };
 
-async function dumpDiagnostics() {
-  console.error('\n--- bridge log ---');
-  for (const line of await bridgeLines()) console.error(line.slice(0, 200));
+  await page.addInitScript((useWebkit) => {
+    window.__editorMessages = [];
+    window.__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) => {
+      window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
+    });
+
+    if (useWebkit) {
+      window.webkit = {
+        messageHandlers: {
+          topdrawer: {
+            postMessage: (message) => window.__editorMessages.push(message),
+          },
+        },
+      };
+      return;
+    }
+
+    // The harness page is its own host and logs traffic itself.
+    window.topdrawerHarness = {
+      log(direction, message) {
+        if (direction === 'out') window.__editorMessages.push(message);
+      },
+    };
+  }, asHost);
+
+  page.on('request', (req) => {
+    if (!req.url().startsWith(base) && !req.url().startsWith('data:')) state.crossOrigin.push(req.url());
+  });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' || msg.type() === 'warning') state.problems.push(`console.${msg.type()}: ${msg.text()}`);
+  });
+  page.on('pageerror', (error) => state.problems.push(`pageerror: ${error.message}`));
+
+  const navigationStart = Date.now();
+  await page.goto(`${base}${path}`);
+  state.loadMs = Date.now() - navigationStart;
+  state.page = page;
+
+  state.read = async () => {
+    state.messages = await page.evaluate(() => window.__editorMessages ?? []);
+    state.cspViolations = await page.evaluate(() => window.__cspViolations ?? []);
+    state.heap = await page.evaluate(() => performance.memory?.usedJSHeapSize ?? null);
+    return state;
+  };
+  state.ofType = (type) => state.messages.filter((m) => m.type === type);
+  state.log = async () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('#bridge-log > div')].map((el) => el.textContent),
+    );
+
+  /** Sends a host -> editor message through the bridge, as the host would. */
+  state.send = (message) =>
+    page.evaluate((m) => window.topdrawerEditor.handleMessage(JSON.stringify(m)), message);
+
+  return state;
+}
+
+async function dumpDiagnostics(state, label) {
+  console.error(`\n--- ${label}: editor -> host ---`);
+  for (const message of await state.read().then((s) => s.messages)) {
+    console.error(JSON.stringify(message).slice(0, 200));
+  }
   console.error('--- page problems ---');
-  for (const problem of pageProblems) console.error(problem);
+  for (const problem of state.problems) console.error(problem);
   console.error('--- cross-origin requests ---');
-  for (const url of crossOrigin) console.error(url);
+  for (const url of state.crossOrigin) console.error(url);
+  console.error('--- CSP violations ---');
+  for (const violation of state.cspViolations) console.error(violation);
 }
 
 try {
-  await page.goto(`${base}/harness/index.html`);
-  await page.waitForSelector('.ProseMirror', { timeout: 15000 });
-  check('editor boots to rich mode', true);
+  // ---------------------------------------------------------------------------
+  // Section 1: the harness, which exposes controls and a visible bridge log.
+  // ---------------------------------------------------------------------------
+  const harness = await openPage('/harness/index.html');
+  await harness.page.waitForSelector('.ProseMirror', { timeout: 15000 });
+  check('harness: editor boots to rich mode', true);
 
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll('#bridge-log > div')].some((el) =>
-      el.textContent.includes('"ready"'),
-    ),
+  await harness.page.waitForFunction(() =>
+    [...document.querySelectorAll('#bridge-log > div')].some((el) => el.textContent.includes('"ready"')),
   );
-  check('ready handshake sent', true);
+  check('harness: ready handshake sent', true);
 
-  const initial = await page.locator('.ProseMirror').innerText();
-  check('corpus document rendered', initial.includes('Welcome'), initial.slice(0, 40));
+  const initial = await harness.page.locator('.ProseMirror').innerText();
+  check('harness: corpus document rendered', initial.includes('Welcome'), initial.slice(0, 40));
 
-  const changedCount = async () =>
-    (await bridgeLines()).filter((line) => line.includes('"changed"')).length;
+  const harnessChanged = async () =>
+    (await harness.log()).filter((line) => line.includes('"changed"')).length;
+  check('harness: load emits no changed', (await harnessChanged()) === 0, `${await harnessChanged()} message(s)`);
 
-  check('load emits no changed', (await changedCount()) === 0, `${await changedCount()} message(s)`);
-
-  // Type into the surface: exactly one debounced changed message. The debounce
-  // plus Playwright's own event dispatch make a fixed sleep racy, so wait for
-  // the message and then confirm no further edits produced a second one.
-  await page.locator('.ProseMirror').click();
-  // Click alone is not guaranteed to leave the contenteditable focused.
-  await page.evaluate(() => document.querySelector('.ProseMirror')?.focus());
-  await page.keyboard.press('End');
-  await page.keyboard.type(' typed');
+  await harness.page.locator('.ProseMirror').click();
+  await harness.page.evaluate(() => document.querySelector('.ProseMirror')?.focus());
+  await harness.page.keyboard.press('End');
+  await harness.page.keyboard.type(' typed');
   try {
-    await page.waitForFunction(
+    await harness.page.waitForFunction(
       () =>
         [...document.querySelectorAll('#bridge-log > div')].filter((el) =>
           el.textContent.includes('"changed"'),
@@ -108,93 +165,171 @@ try {
       { timeout: 10000 },
     );
   } catch {
-    check('typing emits debounced changed', false, 'no changed message within 10s');
+    check('harness: typing emits debounced changed', false, 'no changed message within 10s');
   }
-  await page.waitForTimeout(500);
-  const afterTyping = await changedCount();
-  if (afterTyping >= 1) check('typing emits debounced changed', afterTyping === 1, `${afterTyping} message(s)`);
+  await harness.page.waitForTimeout(500);
+  const afterTyping = await harnessChanged();
+  if (afterTyping >= 1) check('harness: typing emits debounced changed', afterTyping === 1, `${afterTyping} message(s)`);
 
-  // Toggle to source mode and back; document must survive.
-  await page.click('#mode');
-  await page.waitForSelector('.cm-content', { timeout: 5000 });
-  const sourceText = await page.locator('.cm-content').innerText();
-  check('source mode shows markdown', sourceText.includes('# Welcome'), sourceText.slice(0, 30));
-  await page.click('#mode');
-  await page.waitForSelector('.ProseMirror', { timeout: 5000 });
-  check('mode round-trip back to rich', (await page.locator('.ProseMirror').innerText()).includes('Welcome'));
+  await harness.page.click('#mode');
+  await harness.page.waitForSelector('.cm-content', { timeout: 5000 });
+  const sourceText = await harness.page.locator('.cm-content').innerText();
+  check('harness: source mode shows markdown', sourceText.includes('# Welcome'), sourceText.slice(0, 30));
 
-  // Theme command flips the root attribute.
-  await page.click('#theme');
-  const theme = await page.evaluate(() => document.documentElement.dataset.tdTheme);
-  check('setTheme dark applied', theme === 'dark');
+  await harness.page.click('#mode');
+  await harness.page.waitForSelector('.ProseMirror', { timeout: 5000 });
+  check(
+    'harness: mode round-trip back to rich',
+    (await harness.page.locator('.ProseMirror').innerText()).includes('Welcome'),
+  );
+
+  await harness.page.click('#theme');
+  const theme = await harness.page.evaluate(() => document.documentElement.dataset.tdTheme);
+  check('harness: setTheme dark applied', theme === 'dark');
 
   // Links: an editing click must not launch anything, Cmd/Ctrl-click must hand
-  // the URL to the host, and the web view must never navigate (which would
-  // destroy the session).
-  await page.selectOption('#corpus', 'links');
-  await page.click('#replace');
-  await page.waitForSelector('#editor a[href]', { timeout: 5000 });
-  const openedLinks = async () =>
-    (await bridgeLines()).filter((line) => line.includes('"openLink"')).length;
+  // the URL to the host, and the web view must never navigate.
+  await harness.page.selectOption('#corpus', 'links');
+  await harness.page.click('#replace');
+  await harness.page.waitForSelector('#editor a[href]', { timeout: 5000 });
+  const openedLinks = async () => (await harness.log()).filter((line) => line.includes('"openLink"')).length;
 
-  await page.locator('#editor a[href]').first().click();
-  await page.waitForTimeout(300);
-  check('plain click does not open a link', (await openedLinks()) === 0);
-  check('plain click does not navigate', (await page.evaluate(() => location.pathname)).includes('harness'));
+  await harness.page.locator('#editor a[href]').first().click();
+  await harness.page.waitForTimeout(300);
+  check('harness: plain click does not open a link', (await openedLinks()) === 0);
+  check(
+    'harness: plain click does not navigate',
+    (await harness.page.evaluate(() => location.pathname)).includes('harness'),
+  );
 
   // Control rather than Meta: Playwright's Meta modifier is a no-op on Linux,
   // where the handler's ctrlKey branch is the one that fires.
-  await page.locator('#editor a[href]').first().click({ modifiers: ['Control'] });
-  await page.waitForTimeout(300);
+  await harness.page.locator('#editor a[href]').first().click({ modifiers: ['Control'] });
+  await harness.page.waitForTimeout(300);
   check(
-    'Ctrl-click opens the link externally',
+    'harness: Ctrl-click opens the link externally',
     (await openedLinks()) === 1,
     `${await openedLinks()} openLink message(s)`,
   );
 
-  // Hostile corpus must render inertly under the strict CSP: no elements built
-  // from raw HTML, no image node, and no fetch attempt for the remote image.
-  await page.selectOption('#corpus', 'hostile');
-  await page.click('#replace');
-  await page.waitForTimeout(500);
-  const injected = await page.evaluate(() => ({
+  await harness.page.selectOption('#corpus', 'hostile');
+  await harness.page.click('#replace');
+  await harness.page.waitForTimeout(500);
+  const injected = await harness.page.evaluate(() => ({
     script: document.querySelectorAll('#editor script, #editor iframe').length,
     img: document.querySelectorAll('#editor img').length,
     handlers: document.querySelectorAll('#editor [onerror], #editor [onclick]').length,
-    // Full text: the non-vacuity assertions below must not depend on a
-    // truncation constant chosen for logging.
     text: document.querySelector('#editor .ProseMirror')?.textContent ?? '',
   }));
   check(
-    'hostile markup renders inertly',
+    'harness: hostile markup renders inertly',
     injected.script === 0 &&
       injected.img === 0 &&
       injected.handlers === 0 &&
-      // Not vacuous: the payload must be present as inert text, so a document
-      // that never loaded cannot pass this gate.
       injected.text.includes('alert(1)') &&
       injected.text.includes('evil.example'),
-    JSON.stringify(injected),
+    JSON.stringify({ ...injected, text: injected.text.slice(0, 60) }),
   );
 
-  // Offline gate.
-  check('zero cross-origin requests', crossOrigin.length === 0, crossOrigin.join(', '));
+  await harness.read();
+  check('harness: zero cross-origin requests', harness.crossOrigin.length === 0, harness.crossOrigin.join(', '));
+  check(
+    'harness: no CSP violations',
+    harness.cspViolations.length === 0,
+    harness.cspViolations.join(', '),
+  );
+
+  // ---------------------------------------------------------------------------
+  // Section 2: the shipped page, loaded the way a host loads it.
+  // ---------------------------------------------------------------------------
+  const production = await openPage('/dist/editor.html', { asHost: true });
+  const mountStart = Date.now();
+  await production.send({ type: 'initialize', markdown: '# Note\n\ntyped text\n', theme: 'light', platform: 'linux', revision: 1 });
+  await production.page.waitForSelector('.ProseMirror', { timeout: 15000 });
+  const mountMs = Date.now() - mountStart;
+
+  await production.read();
+  check('production: ready handshake received by host', production.ofType('ready').length === 1);
+  check('production: document mounted', (await production.page.locator('.ProseMirror').innerText()).includes('Note'));
+
+  await production.page.locator('.ProseMirror').click();
+  await production.page.evaluate(() => document.querySelector('.ProseMirror')?.focus());
+  await production.page.keyboard.type('!');
+  await production.page.waitForTimeout(600);
+  await production.read();
+  check(
+    'production: typing reaches the host',
+    production.ofType('changed').length === 1,
+    `${production.ofType('changed').length} changed message(s)`,
+  );
+
+  // The page's stricter CSP must not break the editor (fonts, styles, workers).
+  check(
+    'production: no CSP violations',
+    production.cspViolations.length === 0,
+    production.cspViolations.join(', '),
+  );
+  check(
+    'production: zero cross-origin requests',
+    production.crossOrigin.length === 0,
+    production.crossOrigin.join(', '),
+  );
+
+  // Warm reopen: assets are cached, so this is what a drawer reopen costs.
+  const warmStart = Date.now();
+  await production.page.reload();
+  await production.send({ type: 'initialize', markdown: '# Note\n', theme: 'light', platform: 'linux', revision: 1 });
+  await production.page.waitForSelector('.ProseMirror', { timeout: 15000 });
+  const warmMs = Date.now() - warmStart;
+
+  // Repeated open/close must not grow the heap: the host creates and destroys
+  // the editor on every drawer open and mode switch.
+  await production.read();
+  const heapBefore = production.heap;
+  for (let revision = 2; revision <= 11; revision += 1) {
+    await production.send({
+      type: 'replaceDocument',
+      markdown: `# Note\n\nrevision ${revision}\n`,
+      revision,
+    });
+    await production.page.waitForFunction(
+      (n) => document.querySelector('.ProseMirror')?.textContent?.includes(`revision ${n}`),
+      revision,
+      { timeout: 5000 },
+    );
+  }
+  await production.read();
+  const heapAfter = production.heap;
+
+  console.log('\nmeasurements (headless Chromium over http on a CI runner)');
+  console.log(`  page load (navigate, assets included): ${production.loadMs} ms`);
+  console.log(`  mount after initialize:                ${mountMs} ms`);
+  console.log(`  warm reopen (reload + initialize):     ${warmMs} ms`);
+  if (heapBefore !== null && heapAfter !== null) {
+    const growthKb = (heapAfter - heapBefore) / 1024;
+    console.log(`  heap after 10 document swaps:           ${(heapAfter / 1048576).toFixed(1)} MiB (${growthKb >= 0 ? '+' : ''}${growthKb.toFixed(0)} KiB vs after first mount)`);
+    check(
+      'production: repeated document swaps do not grow the heap unboundedly',
+      heapAfter < heapBefore + 40 * 1048576,
+      `${((heapAfter - heapBefore) / 1048576).toFixed(1)} MiB growth`,
+    );
+  } else {
+    console.log('  heap: performance.memory unavailable in this engine, not measured');
+  }
+
+  if (failures.length) await dumpDiagnostics(harness, 'harness');
 } catch (error) {
   console.error(`\nSmoke test threw: ${error}`);
-  await dumpDiagnostics();
   await browser.close();
   server.close();
-  process.exit(1);
-}
-
-if (failures.length) {
-  await dumpDiagnostics();
-  await browser.close();
-  server.close();
-  console.error(`\n${failures.length} gate(s) failed`);
   process.exit(1);
 }
 
 await browser.close();
 server.close();
+
+if (failures.length) {
+  console.error(`\n${failures.length} gate(s) failed`);
+  process.exit(1);
+}
 console.log('\nAll smoke gates passed');

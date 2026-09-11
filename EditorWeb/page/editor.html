@@ -1,0 +1,33 @@
+<!doctype html>
+<!--
+  The page the host applications load. The whole payload is this file plus
+  editor.js and editor.css, all in this directory, so a host only has to hand
+  the web view this directory.
+
+  Security posture, reflected in the CSP below:
+  - no inline script (the harness and this page are the only documents loaded);
+  - no network of any kind, including images and fonts (`connect-src 'none'`);
+  - no frames, objects, or plugins, and navigation is intercepted in script so
+    the web view can never leave this document;
+  - `style-src 'unsafe-inline'` is required and intentional: ProseMirror writes
+    inline style attributes (table widths, drag previews, tooltip placement).
+
+  The host is expected to load this file with read access limited to its own
+  directory, inject nothing into it, and talk to it only through the bridge in
+  editor.js (`window.topdrawerEditor.handleMessage` / the `topdrawer` message
+  handler). See README.md for the full contract.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notes</title>
+  <link rel="stylesheet" href="editor.css" />
+</head>
+<body>
+  <div id="editor"></div>
+  <script src="editor.js"></script>
+</body>
+</html>

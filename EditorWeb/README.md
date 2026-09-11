@@ -14,6 +14,32 @@ Markdown out; the host app stays authoritative for persistence.
   wrapping, history, and search. Byte-exact by construction; also the recovery
   path for documents rich mode cannot represent.
 
+## Shipping layout and host contract
+
+`dist/` is the complete payload:
+
+```
+dist/editor.html    the page a host loads
+     editor.js      the bundle
+dist/editor.css
+```
+
+A host application:
+
+1. loads `editor.html` with read access limited to that directory (on macOS,
+   `WKWebView.loadFileURL(_:allowingReadAccessTo:)` scoped to `dist/`; a
+   `WKURLSchemeHandler` serving only those two assets would be tighter still);
+2. injects nothing: the page carries its own strict CSP (`default-src 'none'`,
+   `connect-src 'none'`, no inline script) and no network access;
+3. sends host messages with `evaluateJavaScript("window.topdrawerEditor.handleMessage(<json>)")`;
+4. receives editor messages through the `topdrawer` message handler, which is
+   the same JS API on WKWebView and WebKitGTK;
+5. keeps the web view non-activating and out of the responder chain for
+   activation purposes, per the app's existing panel rules.
+
+`window.topdrawerEditor` only exists once the page has run, so a host should
+wait for the editor's `ready` message before sending `initialize`.
+
 ## Bridge protocol (`src/bridge.ts`)
 
 ```
@@ -65,15 +91,16 @@ npm ci            # pinned, lockfile-committed
 npm run build     # deterministic esbuild bundle → dist/ (committed)
 npm test          # vitest: corpus round-trip, session discipline, coalescer, protocol
 npm run check     # tsc --noEmit
-npm run smoke     # Playwright harness smoke test (needs a browser with system libs)
+npm run smoke     # Playwright: harness gates, shipped-page gates, timings, memory
 ```
 
-`dist/editor.js` and `dist/editor.css` are committed on purpose: they are the
-reviewed production artifacts the apps load. `LICENSES.md` is written by the
-build from the esbuild metafile, so the inventory cannot drift from what ships.
-Source maps and `dist/meta.json` are build-local and gitignored (they embed
-third-party sources and would swamp review diffs). The `EditorWeb CI` workflow
-rebuilds from the lockfile and fails on any diff against the committed artifacts.
+`dist/editor.js`, `dist/editor.css` and `dist/editor.html` are committed on
+purpose: they are the reviewed production artifacts the apps load.
+`LICENSES.md` is written by the build from the esbuild metafile, so the
+inventory cannot drift from what ships. Source maps and `dist/meta.json` are
+build-local and gitignored (they embed third-party sources and would swamp
+review diffs). The `EditorWeb CI` workflow rebuilds from the lockfile and fails
+on any diff against the committed artifacts.
 
 ## Harness
 
@@ -89,6 +116,13 @@ npx serve .     # or any static server; file:// works too
 The harness runs under a strict CSP with no inline script, mirroring the policy
 the shipped page gets. That is what makes the `hostile` corpus a real test:
 escaped markup must render inertly, and it fails loudly rather than executing.
+
+`npm run smoke` covers both documents: the harness (controls, corpus, links,
+hostile input) and `dist/editor.html` loaded the way a host loads it, with the
+`window.webkit.messageHandlers.topdrawer` transport installed so the shipped
+path is exercised. It also reports page load, mount and warm-reopen timings and
+the heap cost of repeated document swaps, none of which a native host can be
+asked for without a GUI session.
 
 ## Spike measurements (Phase 0)
 
