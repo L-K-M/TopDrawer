@@ -94,6 +94,10 @@ let macDringSources: [String] = [
     // nothing on macOS). Feeds the daemon's Trash / folder-tab watches. See the CInotify
     // systemLibrary target below.
     "Common/INotifyWatcher.swift",
+    // Re-entrancy-safe serial gate (plain Foundation): INotifyWatcher's teardown needs it
+    // on Linux, and the notes editor's host-side session uses it to serialise bridge
+    // traffic on macOS, so both CI jobs cover it.
+    "Common/SerialQueueGate.swift",
     // LP-13 part 3: the global-hotkey seam. The protocol + opaque HotkeyToken compile
     // here; the macOS CarbonHotkeyRegistrar (and CarbonHotkey it wraps) stay macOS-only
     // behind #if canImport(Carbon), so Linux registers no hotkey until its backend lands.
@@ -121,6 +125,7 @@ let macDringTestsSources: [String] = [
     "DrawerLaunchRequestTests.swift",
     "ExternalDropTargetTests.swift",
     "TimeBucketTests.swift",
+    "SerialQueueGateTests.swift",
     "SemanticVersionTests.swift",
     "GitHubReleaseTests.swift",
     "TabStoreTests.swift",
