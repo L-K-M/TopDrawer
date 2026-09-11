@@ -93,19 +93,18 @@ body {
   min-height: calc(100% - 20px);
 }
 
-/* Crepe's reset removes every focus ring; restore one for interactive chrome
-   so keyboard users can see where they are (WCAG 2.4.7). The extra selectors
-   cover the controls Crepe renders outside the toolbar/top-bar classes. */
-.milkdown .toolbar-item:focus-visible,
-.milkdown .top-bar-item:focus-visible,
-.milkdown .top-bar-heading-button:focus-visible,
-.milkdown .top-bar-heading-option:focus-visible,
-.milkdown .milkdown-link-edit .input-area:focus-visible,
-.milkdown .milkdown-code-block .language-list-item:focus-visible,
-.milkdown button:focus-visible,
-.milkdown input:focus-visible {
+/* Crepe's reset removes every focus ring; restore one for all interactive
+   chrome (WCAG 2.4.7). This targets the same selector as Crepe's reset and is
+   emitted later, so it wins the tie and covers controls the enumerated rules
+   below would miss. The editing surface is excluded: the caret is its
+   indicator. */
+.milkdown :focus-visible {
   outline: 2px solid var(--crepe-color-primary, #b45309);
   outline-offset: -2px;
+}
+
+.milkdown .ProseMirror:focus-visible {
+  outline: none;
 }
 
 .milkdown .ProseMirror-focused {
@@ -117,13 +116,9 @@ body {
   color: var(--crepe-color-on-surface-variant);
 }
 
-/* Keep Crepe's floating UI above the drawer's own chrome. */
-.milkdown .toolbar,
-.milkdown .top-bar,
-.milkdown .link-tooltip {
-  z-index: 30;
-}
-
+/* Crepe already stacks its own overlays (top bar and toolbar at 10, table
+   handles at 50, drag preview at 100); adding a second layer here would only
+   fight it. */
 code,
 pre {
   font-family: var(--td-mono);

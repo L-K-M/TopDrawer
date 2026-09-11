@@ -21,6 +21,7 @@ describe('support table generation', () => {
   it(
     'writes SUPPORT.md and reports no load-time change',
     async () => {
+    let loadEmittedChange = false;
     const lines: string[] = [
       '# Rich-mode normalization support table',
       '',
@@ -36,26 +37,29 @@ describe('support table generation', () => {
     for (const fixture of CORPUS) {
       const root = document.createElement('div');
       document.body.appendChild(root);
-      let changes = 0;
       const editor = await RichEditor.mount(root, {
         markdown: fixture.input,
         placeholder: '',
-        onChange: () => changes++,
+        onChange: () => {
+          loadEmittedChange = true;
+        },
         onOpenLink: () => {},
       });
       await new Promise((r) => setTimeout(r, SETTLE_MS));
       const out = editor.getMarkdown();
       const roundTrip =
         out === fixture.input ? 'exact' : `normalized (expect: ${fixture.expect})`;
-      lines.push(`| ${fixture.name} | ${changes > 0 ? 'YES — BUG' : 'no'} | ${roundTrip} |`);
+      lines.push(
+        `| ${fixture.name} | ${loadEmittedChange ? 'YES — BUG' : 'no'} | ${roundTrip} |`,
+      );
       await editor.destroy();
       root.remove();
     }
     lines.push('');
 
-    // Fail loudly rather than writing a bug into the table: the corpus test
-    // covers the same gate, but a generator that cannot fail is a trap.
-    expect(lines.filter((line) => line.includes('YES — BUG'))).toEqual([]);
+    // Assert the tracked fact, not the formatted table: re-parsing the output
+    // would pass if the marker text ever changed.
+    expect(loadEmittedChange, 'a load must not report a change').toBe(false);
 
     writeFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'SUPPORT.md'), lines.join('\n'));
   },
