@@ -44,9 +44,14 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch({
-  // Without this Chromium quantizes performance.memory, which would make the
-  // heap numbers below meaningless.
-  args: ['--enable-precise-memory-info'],
+  args: [
+    // Without this Chromium quantizes performance.memory, which would make the
+    // heap numbers below meaningless.
+    '--enable-precise-memory-info',
+    // Lets the heap be sampled after a forced collection; otherwise the figure
+    // is whatever garbage happened not to be collected yet.
+    '--js-flags=--expose-gc',
+  ],
 });
 const failures = [];
 const check = (name, ok, detail = '') => {
@@ -57,11 +62,15 @@ const check = (name, ok, detail = '') => {
 /**
  * A page that records bridge traffic, CSP violations and network activity.
  *
+ * `target` is a path under the dev server, or an absolute URL (used for the
+ * file:// load below).
+ *
  * `asHost` installs the `window.webkit.messageHandlers.topdrawer` transport that
  * WKWebView and WebKitGTK provide, so the shipped page is exercised through the
  * transport the real host uses rather than the harness fallback.
  */
-async function openPage(path, { asHost = false } = {}) {
+async function openPage(target, { asHost = false } = {}) {
+  const url = /^[a-z]+:\/\//i.test(target) ? target : `${base}${target}`;
   const page = await browser.newPage();
   const state = { crossOrigin: [], problems: [], messages: [], cspViolations: [], heap: null };
 
@@ -99,15 +108,18 @@ async function openPage(path, { asHost = false } = {}) {
   });
   page.on('pageerror', (error) => state.problems.push(`pageerror: ${error.message}`));
 
-  const navigationStart = Date.now();
-  await page.goto(`${base}${path}`);
-  state.loadMs = Date.now() - navigationStart;
+  await page.goto(url);
   state.page = page;
 
   state.read = async () => {
     state.messages = await page.evaluate(() => window.__editorMessages ?? []);
     state.cspViolations = await page.evaluate(() => window.__cspViolations ?? []);
-    state.heap = await page.evaluate(() => performance.memory?.usedJSHeapSize ?? null);
+    state.heap = await page.evaluate(async () => {
+      window.gc?.();
+      // Let the collection settle before sampling.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      return performance.memory?.usedJSHeapSize ?? null;
+    });
     return state;
   };
   state.ofType = (type) => state.messages.filter((m) => m.type === type);
@@ -352,14 +364,16 @@ try {
   console.log(`  warm reopen (reload + init):   ${warmMs.toFixed(0)} ms (page clock)`);
   if (heapBefore !== null && heapAfter !== null) {
     const growthKb = (heapAfter - heapBefore) / 1024;
-    console.log(`  heap after 10 document swaps:           ${(heapAfter / 1048576).toFixed(1)} MiB (${growthKb >= 0 ? '+' : ''}${growthKb.toFixed(0)} KiB vs after first mount)`);
+    console.log(
+      `  heap after 10 document swaps:   ${(heapAfter / 1048576).toFixed(1)} MiB (${growthKb >= 0 ? '+' : ''}${growthKb.toFixed(0)} KiB vs after the first mount, both sampled after a forced GC)`,
+    );
     check(
       'production: repeated document swaps do not grow the heap unboundedly',
-      heapAfter < heapBefore + 40 * 1048576,
-      `${((heapAfter - heapBefore) / 1048576).toFixed(1)} MiB growth`,
+      Math.abs(heapAfter - heapBefore) < 8 * 1048576,
+      `${((heapAfter - heapBefore) / 1048576).toFixed(1)} MiB growth across 10 swaps`,
     );
   } else {
-    console.log('  heap: performance.memory unavailable in this engine, not measured');
+    console.log('  heap: unavailable in this engine, not measured');
   }
 
   // How a host loads the page: file URL with read access scoped to dist/, or a
