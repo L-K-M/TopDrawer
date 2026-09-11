@@ -249,8 +249,9 @@ public final class INotifyWatcher {
             DispatchQueue.main.async { self.onChange() }
         }
         debounce = item
-        // `stop()` cancels the item; performing a cancelled item would still run its
-        // body, so the check is what preserves `asyncAfter(execute:)`'s skip.
+        // `stop()` cancels the item, and a cancelled item must not deliver. Checked
+        // here rather than relying on `perform()`'s behaviour for a cancelled item,
+        // which is not something this code should depend on.
         gate.async(after: Self.latency) {
             guard !item.isCancelled else { return }
             item.perform()

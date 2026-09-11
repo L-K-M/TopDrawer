@@ -52,7 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// the quit.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !Self.isRunningTests, controller.hasPendingNoteEditor else { return .terminateNow }
-        controller.flushNotesForTermination { NSApp.reply(toApplicationShouldTerminate: true) }
+        controller.flushNotesForTermination {
+            // Reply on the next turn, never from inside this method: AppKit requires
+            // the `.terminateLater` return to happen before the reply, or it treats
+            // the reply as unrouted.
+            DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
+        }
         return .terminateLater
     }
 

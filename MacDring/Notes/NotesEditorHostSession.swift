@@ -32,9 +32,11 @@ final class NotesEditorHostSession {
     /// lose the last keystrokes of the note the user just left.
     private var deliveredDocuments: Set<UUID> = []
 
-    /// Highest `editorRevision` accepted so far. The editor's counter only rises, so
-    /// anything at or below this is a reply that lost a race with a newer one and
-    /// would otherwise revert newer text.
+    /// Highest `editorRevision` accepted so far, within the current page. The
+    /// editor's counter only rises for as long as a page lives, so anything at or
+    /// below this is a reply that lost a race with a newer one and would otherwise
+    /// revert newer text. Reset when a fresh page says `ready`, because its counter
+    /// starts over — comparing across page loads would reject every later edit.
     private var lastEditorRevision = -1
 
     private var revision = 0
@@ -65,8 +67,19 @@ final class NotesEditorHostSession {
     }
 
     /// The page is up: the next `nextMessage()` may send the document.
+    ///
+    /// `ready` means a *fresh* page — the editor reports it once per load — so
+    /// everything the session believed about the previous page is stale: it holds no
+    /// document (the host must send one again, or a reload would leave the drawer
+    /// blank), and its edit counter has restarted (so the monotonic gate must not
+    /// compare against the old page's numbers, which would reject every edit).
     func markReady() {
         isReady = true
+        deliveredDocumentID = nil
+        deliveredMarkdown = ""
+        deliveredTheme = nil
+        deliveredDocuments.removeAll()
+        lastEditorRevision = -1
     }
 
     /// The editor reported an edit, naming the document it belongs to.

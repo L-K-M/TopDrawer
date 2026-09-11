@@ -186,6 +186,32 @@ final class NotesEditorHostSessionTests: XCTestCase {
         XCTAssertEqual(Set(revisions).count, revisions.count, "a repeated revision is dropped by the editor")
     }
 
+    /// A fresh page (a reload, or a crash recovery) holds no document and restarts
+    /// the editor's edit counter, so the session must forget both: otherwise the
+    /// host would leave the reloaded editor blank, and reject every edit it did make
+    /// for numbering lower than the previous page's edits.
+    func testReadyAfterAReloadResendsTheDocumentAndAcceptsNewEdits() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        XCTAssertNotNil(session.nextMessage())
+        XCTAssertEqual(session.recordEditorChange("# a v5", documentID: tabA.uuidString,
+                                                  editorRevision: 5), tabA)
+
+        // The page reloads: the editor announces itself again, then the host updates
+        // the view exactly as it did before.
+        session.markReady()
+        session.setDesired(documentID: tabA, markdown: "# a v5", theme: .light)
+        XCTAssertEqual(session.nextMessage(),
+                       .initialize(markdown: "# a v5", theme: "light", revision: 2,
+                                   documentID: tabA.uuidString),
+                       "a reloaded page needs the document again")
+
+        // Its counter starts over, so a low revision from the new page is valid.
+        XCTAssertEqual(session.recordEditorChange("# a v1 after reload",
+                                                  documentID: tabA.uuidString,
+                                                  editorRevision: 1), tabA)
+    }
+
     func testFlushIsOnlyOfferedOnceReady() {
         let session = NotesEditorHostSession()
         XCTAssertNil(session.flushMessage(), "nothing can be asked of a page that has not loaded")

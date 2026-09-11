@@ -1047,6 +1047,10 @@ final class TabController {
         }
         drawer.model.onNotesChanged = { [weak self] text, documentID in
             guard let self else { return }
+            // A pending quit is waiting for this edit to land in the store, so end that
+            // wait whichever way this ends: an unknown tab must not leave the quit
+            // waiting for the timeout.
+            defer { self.finishNotesFlush() }
             // Saved against the note the editor named, which is not necessarily the
             // open tab any more: a flushed edit arrives after the drawer closed
             // (`openTabID` is already nil) or after the user moved to another tab.
@@ -1056,9 +1060,6 @@ final class TabController {
                 return
             }
             self.store.setNotes(text, forTab: documentID)
-            // A pending quit is waiting for exactly this: the edit arrived, so it is
-            // now in the store and `saveNow()` on the way out will persist it.
-            self.finishNotesFlush()
         }
         drawer.model.onOpenNoteLink = { url in
             // The editor never navigates itself; an explicit Cmd/Ctrl-click on a link

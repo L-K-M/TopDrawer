@@ -117,6 +117,9 @@ export class EditorSession {
         this.theme = message.theme;
         this.documentID = message.documentID;
         this.applyTheme();
+        // Note on the revision floor: `hostRevision` is a *global* counter in the
+        // host, not a per-document one, so a new document's revision is always
+        // greater than the previous one's and this guard admits it.
         await this.loadDocument(message.markdown, message.revision);
         break;
       case 'replaceDocument':
