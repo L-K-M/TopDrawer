@@ -403,10 +403,20 @@ try {
   console.log(`  CSP violations:     ${filePage.cspViolations.length === 0 ? 'none' : filePage.cspViolations.join(', ')}`);
   if (filePage.problems.length > 0) console.log(`  page problems:      ${filePage.problems.join(' | ')}`);
 
+  const fileDetail =
+    [
+      fileMountMs === null ? 'did not mount' : null,
+      filePage.ofType('ready').length === 1 ? null : 'no ready handshake',
+      ...filePage.cspViolations,
+      ...filePage.problems,
+    ]
+      .filter(Boolean)
+      .join(' | ') || 'unknown reason';
+
   check(
     'production: file:// load mounts with the strict CSP',
     fileMountMs !== null && filePage.ofType('ready').length === 1 && filePage.cspViolations.length === 0,
-    filePage.cspViolations.join(', ') || filePage.problems.join(' | '),
+    fileDetail,
   );
 
   if (failures.length) await dumpDiagnostics(harness, 'harness');

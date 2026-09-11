@@ -250,9 +250,12 @@ WKWebView focus from a non-activating panel, WebKitGTK embedding, IME and
 spell-check, VoiceOver/Orca, and cold/warm open timings in-app.
 
 The browser-side half of the timing and memory gates is now measured rather than
-guessed (page load 114 ms, mount 83 ms, warm reopen 131 ms, flat heap across ten
-document swaps) and recorded in `EditorWeb/README.md`; the in-app budget on the
-drawer's own panel still needs a real session.
+guessed (page load 108-111 ms, mount after initialize 52-53 ms, warm reopen
+15-16 ms, both figures on the page's own clock, and heap growth of about
+175 KiB per mount/destroy cycle after a forced GC, so ten swaps add 1.7 MiB).
+Recorded in `EditorWeb/README.md`; the in-app budget on the drawer's own panel
+still needs a real session, which is also where WKWebView's `'self'` handling for
+`file://` documents has to be confirmed rather than assumed from Chromium.
 
 The shipped payload is three files (`dist/editor.html`, `editor.js`,
 `editor.css`) with its own strict CSP, so the host adapter is expected to stay
