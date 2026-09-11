@@ -51,6 +51,14 @@ export class RichEditor {
   private state = { destroyed: false };
 
   /**
+   * Owns every DOM listener this editor adds, so destroy() removes them.
+   * The editor root is the session's container, which outlives mode switches:
+   * without this, each rebuild stacked another set of listeners and one click
+   * eventually produced several openLink/focusChanged messages.
+   */
+  private listeners = new AbortController();
+
+  /**
    * Set by the first real user interaction inside the editor.
    *
    * Crepe applies its parsed `defaultValue` in a transaction *after* create()
@@ -106,7 +114,7 @@ export class RichEditor {
       this.userInteracted = true;
     };
     for (const event of ['keydown', 'beforeinput', 'paste', 'drop', 'cut', 'click']) {
-      this.root.addEventListener(event, mark, { capture: true });
+      this.root.addEventListener(event, mark, { capture: true, signal: this.listeners.signal });
     }
   }
 
@@ -118,14 +126,18 @@ export class RichEditor {
    * its default copy behaviour.
    */
   private wireLinks(onOpenLink: (url: string) => void): void {
-    this.root.addEventListener('click', (event) => {
-      const anchor = (event.target as Element | null)?.closest('a[href]');
-      if (!(anchor instanceof HTMLAnchorElement)) return;
+    this.root.addEventListener(
+      'click',
+      (event) => {
+        const anchor = (event.target as Element | null)?.closest('a[href]');
+        if (!(anchor instanceof HTMLAnchorElement)) return;
 
-      event.preventDefault();
-      if (!event.metaKey && !event.ctrlKey) return;
-      onOpenLink(anchor.href);
-    });
+        event.preventDefault();
+        if (!event.metaKey && !event.ctrlKey) return;
+        onOpenLink(anchor.href);
+      },
+      { signal: this.listeners.signal },
+    );
   }
 
   /**
@@ -137,18 +149,26 @@ export class RichEditor {
     if (!onFocusChanged) return;
     let focused = false;
 
-    this.root.addEventListener('focusin', () => {
-      if (focused) return;
-      focused = true;
-      onFocusChanged(true);
-    });
-    this.root.addEventListener('focusout', (event) => {
-      if (!focused) return;
-      const next = event.relatedTarget as Node | null;
-      if (next && this.root.contains(next)) return;
-      focused = false;
-      onFocusChanged(false);
-    });
+    this.root.addEventListener(
+      'focusin',
+      () => {
+        if (focused) return;
+        focused = true;
+        onFocusChanged(true);
+      },
+      { signal: this.listeners.signal },
+    );
+    this.root.addEventListener(
+      'focusout',
+      (event) => {
+        if (!focused) return;
+        const next = event.relatedTarget as Node | null;
+        if (next && this.root.contains(next)) return;
+        focused = false;
+        onFocusChanged(false);
+      },
+      { signal: this.listeners.signal },
+    );
   }
 
   getMarkdown(): string {
@@ -178,6 +198,7 @@ export class RichEditor {
 
   async destroy(): Promise<void> {
     this.state.destroyed = true;
+    this.listeners.abort();
     await this.builder.destroy();
     this.root.replaceChildren();
   }
