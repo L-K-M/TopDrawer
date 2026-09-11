@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 
 /**
  * Deterministic production bundle: fixed esbuild + dependency versions
@@ -35,7 +35,10 @@ const result = await build({
 // Recorded so `npm run licenses` reproduces LICENSES.md from the same build.
 writeFileSync('dist/meta.json', JSON.stringify(result.metafile));
 
-for (const file of ['dist/editor.js', 'dist/editor.css']) {
+// The shipped page sits beside the bundle so a host copies one directory.
+copyFileSync('page/editor.html', 'dist/editor.html');
+
+for (const file of ['dist/editor.js', 'dist/editor.css', 'dist/editor.html']) {
   const { size } = statSync(file);
   console.log(`${file}: ${(size / 1024).toFixed(1)} KiB`);
 }
