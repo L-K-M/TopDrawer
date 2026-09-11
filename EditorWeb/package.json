@@ -1,0 +1,35 @@
+{
+  "name": "topdrawer-editor-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Markdown editor bundle for Top Drawer notes (Milkdown rich mode + CodeMirror source mode). Spike: see docs/markdown-editor-improvement-plan.md.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "smoke": "node tests/smoke.mjs",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.10.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.11.3",
+    "@codemirror/search": "6.7.2",
+    "@codemirror/state": "6.5.2",
+    "@codemirror/view": "6.38.2",
+    "@lezer/highlight": "1.2.3",
+    "@milkdown/crepe": "7.22.1",
+    "@milkdown/kit": "7.22.1",
+    "codemirror": "6.0.2",
+    "prosemirror-history": "1.5.0",
+    "prosemirror-state": "1.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "esbuild": "0.28.2",
+    "happy-dom": "20.14.3",
+    "playwright": "1.63.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.0"
+  }
+}

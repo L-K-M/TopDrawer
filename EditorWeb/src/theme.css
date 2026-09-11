@@ -1,0 +1,125 @@
+/**
+ * Top Drawer notes theme. Crepe's components consume `--crepe-color-*`
+ * variables; we define both schemes ourselves (instead of shipping Crepe's
+ * theme files) so the editor sits transparently on the drawer's vibrancy
+ * background and follows the host's light/dark setting.
+ */
+
+:root {
+  --td-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --td-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Crepe's theme files define these; we ship our own color scheme instead, so
+     the non-color tokens they also provide have to be defined here. */
+  --crepe-font-default: var(--td-font);
+  --crepe-font-title: var(--td-font);
+  --crepe-font-code: var(--td-mono);
+  --crepe-shadow-1: 0 4px 10px rgba(0, 0, 0, 0.16);
+  --crepe-shadow-2: 0 8px 22px rgba(0, 0, 0, 0.22);
+  --default-cell-min-width: 2em;
+}
+
+/* Light is the default so the editor is legible before the host sends its
+   theme; dark overrides it. */
+:root,
+:root[data-td-theme='light'] {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: #1b1a17;
+  --crepe-color-surface: #f6f3ee;
+  --crepe-color-surface-low: #efeae2;
+  --crepe-color-on-surface: #1b1a17;
+  --crepe-color-on-surface-variant: #5b564d;
+  --crepe-color-outline: #b9b2a6;
+  --crepe-color-primary: #b45309;
+  --crepe-color-secondary: #f3e2c7;
+  --crepe-color-on-secondary: #4b2e05;
+  --crepe-color-inverse: #1b1a17;
+  --crepe-color-on-inverse: #f6f3ee;
+  --crepe-color-inline-code: #9f1239;
+  --crepe-color-error: #b91c1c;
+  --crepe-color-hover: rgba(0, 0, 0, 0.06);
+  --crepe-color-selected: rgba(180, 83, 9, 0.16);
+  --crepe-color-inline-area: rgba(0, 0, 0, 0.05);
+  --crepe-base-font-size: 13px;
+}
+
+:root[data-td-theme='dark'] {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: #eae1d9;
+  --crepe-color-surface: #26221c;
+  --crepe-color-surface-low: #201b16;
+  --crepe-color-on-surface: #ede0d4;
+  --crepe-color-on-surface-variant: #c9b8a4;
+  --crepe-color-outline: #8a7e6e;
+  --crepe-color-primary: #f4bd6f;
+  --crepe-color-secondary: #56442a;
+  --crepe-color-on-secondary: #fbdebc;
+  --crepe-color-inverse: #ede0d4;
+  --crepe-color-on-inverse: #362f27;
+  --crepe-color-inline-code: #ffb4ab;
+  --crepe-color-error: #ffb4ab;
+  --crepe-color-hover: rgba(255, 255, 255, 0.07);
+  --crepe-color-selected: rgba(244, 189, 111, 0.22);
+  --crepe-color-inline-area: rgba(255, 255, 255, 0.06);
+  --crepe-base-font-size: 13px;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  color: var(--crepe-color-on-background);
+  font-family: var(--td-font);
+}
+
+#editor {
+  height: 100%;
+  overflow: auto;
+}
+
+.milkdown {
+  background: transparent;
+  height: 100%;
+}
+
+/* Two classes on the element so this beats Crepe's own `.milkdown .ProseMirror`
+   rule regardless of stylesheet order (58px horizontal gutters are wrong for a
+   drawer). */
+.milkdown .ProseMirror.ProseMirror {
+  padding: 10px;
+  outline: none;
+  font-family: var(--td-font);
+  min-height: calc(100% - 20px);
+}
+
+/* Crepe's reset removes every focus ring; restore it for interactive chrome
+   (WCAG 2.4.7). This targets the same selector as Crepe's reset and is emitted
+   later, so it wins the tie and covers every focusable control, including ones
+   enumerated selectors would miss. The editing surface is excluded: the caret
+   is its indicator. */
+.milkdown :focus-visible {
+  outline: 2px solid var(--crepe-color-primary, #b45309);
+  outline-offset: -2px;
+}
+
+.milkdown .ProseMirror:focus-visible {
+  outline: none;
+}
+
+.milkdown .ProseMirror-focused {
+  outline: none;
+}
+
+/* Task list checkboxes: accent-colored, pointer cursor. */
+.milkdown li[data-checked='true'] {
+  color: var(--crepe-color-on-surface-variant);
+}
+
+/* Crepe already stacks its own overlays (top bar and toolbar at 10, table
+   handles at 50, drag preview at 100); adding a second layer here would only
+   fight it. */
+code,
+pre {
+  font-family: var(--td-mono);
+}

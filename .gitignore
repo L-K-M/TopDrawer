@@ -23,3 +23,11 @@ xcuserdata/
 
 # Misc
 *.log
+
+# Node (EditorWeb)
+node_modules/
+# EditorWeb/dist is committed (reviewed deterministic artifact) - un-ignore
+# EditorWeb ships the reviewed bundle but not the build-local source maps
+!EditorWeb/dist/
+EditorWeb/dist/*.map
+EditorWeb/dist/meta.json

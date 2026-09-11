@@ -1,0 +1,54 @@
+body {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 12px;
+  font: 13px/1.4 system-ui, sans-serif;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+#editor-pane {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #9996;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fdfcf9;
+}
+
+:root[data-td-theme='dark'] #editor-pane {
+  background: #232019;
+}
+
+#host-pane {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#host-pane textarea {
+  height: 110px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+#host-pane .row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#bridge-log {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #9996;
+  border-radius: 8px;
+  padding: 6px;
+  font: 10px/1.35 ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+
+#bridge-log .in { color: #6a3; }
+#bridge-log .out { color: #37a; }

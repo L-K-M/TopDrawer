@@ -364,6 +364,10 @@ unrelated event.
 **Action:** cache parsed lines by text value (sketch: `[(Line, AttributedString?)]`)
 and use lazy rendering, during a notes-model pass rather than as a blind patch.
 
+**Superseded:** the notes surface is being replaced by the bundled editor in
+`EditorWeb/` (see `docs/markdown-editor-improvement-plan.md`). Patch the current
+`MarkdownText` only if the notes tab must ship a fix before that plan's Phase 2.
+
 ### P7 P3: Spotlight work needs timeout/error/live-state ownership
 
 *(was SOL-P08)* Queries have no timeout/failure distinction (`SpotlightQuery`), and
@@ -485,6 +489,9 @@ Items. Add capacity/free-space metadata (`volumeAvailableCapacityKey` is one
 
 **Action:** labelled Edit header action and shortcut; retain whole-surface click only as
 a convenience.
+
+**Superseded:** the preview/editor split is being removed in favour of one
+continuously editable surface (`EditorWeb/`, `docs/markdown-editor-improvement-plan.md`).
 
 ### U9 P2: Group/search context and counts are misleading
 

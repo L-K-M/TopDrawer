@@ -1,0 +1,77 @@
+name: EditorWeb CI
+
+# The notes editor bundle ships as a committed artifact (EditorWeb/dist), so it
+# needs the same treatment as generated code anywhere else: prove on every push
+# that the committed bundle is exactly what the pinned lockfile builds, and that
+# the protocol/corpus/session tests pass.
+on:
+  pull_request:
+    paths:
+      - 'EditorWeb/**'
+      - '.github/workflows/editor-web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'EditorWeb/**'
+      - '.github/workflows/editor-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: editor-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & Test (EditorWeb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Pinned to an immutable commit SHA, matching ci.yml / linux-ci.yml: a
+      # mutable tag can be repointed at tampered code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node is pinned by major version; the bundle's determinism comes from the
+      # lockfile (esbuild and every dependency is exact-pinned), not the runtime.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: EditorWeb/package-lock.json
+
+      # `npm ci` installs strictly from the committed lockfile and fails if
+      # package.json and the lockfile disagree.
+      - name: Install (locked)
+        working-directory: EditorWeb
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        working-directory: EditorWeb
+        run: npm run check
+
+      - name: Test (corpus, protocol, session, coalescer)
+        working-directory: EditorWeb
+        run: npm test
+
+      # The gates that need a real browser engine: boot, ready handshake,
+      # debounced typing, mode/theme switching, and the zero-network check.
+      - name: Smoke (headless Chromium)
+        working-directory: EditorWeb
+        run: |
+          npx playwright install --with-deps chromium
+          npm run smoke
+
+      # Regenerate the committed artifacts and fail on any difference, so dist/
+      # (and LICENSES.md) can never drift from the sources that produced them.
+      # Staged, not plain `git diff`: the latter ignores untracked files, so a
+      # newly emitted artifact would slip through.
+      - name: Verify committed bundle is reproducible
+        working-directory: EditorWeb
+        run: |
+          npm run build
+          git add --all dist LICENSES.md
+          git diff --cached --exit-code -- dist LICENSES.md

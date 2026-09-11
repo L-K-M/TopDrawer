@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Standalone spike harness: simulates the native host so the editor bundle can
+  be exercised in any browser (or WebKitGTK) without the Swift app. The right
+  column is the "host": it loads corpus documents, toggles theme/mode, logs all
+  bridge traffic, and counts network requests (there must be none).
+
+  The CSP here mirrors the strict policy the shipped page gets: no inline
+  script, no network, no remote images. That is deliberate, the hostile corpus
+  is only a meaningful test if escaped markup cannot execute.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Top Drawer editor spike harness</title>
+  <link rel="stylesheet" href="../dist/editor.css" />
+  <link rel="stylesheet" href="harness.css" />
+</head>
+<body>
+  <div id="editor-pane"><div id="editor"></div></div>
+
+  <div id="host-pane">
+    <strong>Host simulator</strong>
+    <div class="row">
+      <select id="corpus"></select>
+      <button id="load">Load (initialize)</button>
+    </div>
+    <textarea id="markdown" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="theme">Toggle theme</button>
+      <button id="mode">Toggle rich/source</button>
+      <button id="replace">replaceDocument</button>
+      <button id="focus">focus()</button>
+      <button id="undo">undo</button>
+      <button id="redo">redo</button>
+    </div>
+    <div>Network requests: <b id="net-count">0</b> (must stay 0)</div>
+    <div>Bridge traffic (green = host&rarr;editor, blue = editor&rarr;host):</div>
+    <div id="bridge-log"></div>
+  </div>
+
+  <script src="harness.js"></script>
+  <script src="../dist/editor.js"></script>
+</body>
+</html>

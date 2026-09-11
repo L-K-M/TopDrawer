@@ -223,6 +223,41 @@ Decision:
 - Rich mode fails but WebKit is sound: ship CodeMirror-only first.
 - WebKit focus/accessibility is unsound: stop and write a native AppKit/GTK design based on the spike evidence.
 
+### Phase 0 status — spike landed in `EditorWeb/`
+
+The spike exists as a reviewable package (`EditorWeb/`, plus an `EditorWeb CI`
+workflow that rebuilds it and fails on any diff against the committed bundle).
+See `EditorWeb/README.md` for the protocol and measurements and
+`EditorWeb/SUPPORT.md` for the generated normalization table.
+
+Verified by the spike (unit tests plus headless Chromium):
+
+- One bundle, two modes (Crepe rich, CodeMirror source); browser harness with a
+  strict CSP; deterministic 1.48 MB bundle (493 KB gzip).
+- A view-only open/close never rewrites the note. This needed a user-interaction
+  gate: Crepe applies its parsed document in a transaction after mount, and
+  reporting that normalized `-`→`*` and `---`→`***` on every open.
+- Revision discipline: stale replacements dropped, identical host retries
+  ignored, edits coalesced and flushed on blur/hide/pagehide.
+- Zero cross-origin requests; raw HTML and images never become DOM (kept as
+  literal text), so no fetch attempt and no inline handler can run.
+- Links: plain click only moves the caret, Cmd/Ctrl-click hands the URL to the
+  host, and the web view never navigates.
+
+Still to verify on real hardware before Phase 2 (all need a GUI session):
+WKWebView focus from a non-activating panel, WebKitGTK embedding, IME and
+spell-check, VoiceOver/Orca, and cold/warm open timings in-app.
+
+Known compatibility item for Phase 2: Crepe's stylesheets rely on `color-mix()`
+(WebKit 16.2+), and macOS 13.0 shipped WebKit 16.1 (later 13.x releases ship
+newer WebKit). Verify on a 13.0 system; either the notes editor's minimum rises
+or fallback colors ship alongside it.
+
+Two measured costs shape Phase 2 and are documented in `EditorWeb/README.md`:
+raw HTML and images are kept as literal text and get escaped by remark on the
+first edit (a byte-exact inert node view, and local/data image rendering, would
+remove that), and `Tab.notes` needs no schema change either way.
+
 ### Phase 1 — Shared editor bundle and contract
 
 1. Add the TypeScript package, lockfile, deterministic build script, license report, CSP, and bridge contract.
