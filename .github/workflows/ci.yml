@@ -65,9 +65,13 @@ jobs:
       - name: Show compiler errors from the raw log
         if: failure()
         run: |
-          grep -nE "error:" /tmp/xcodebuild.log | head -40 || true
-          echo '--- last 40 lines ---'
-          tail -40 /tmp/xcodebuild.log
+          if [ -f /tmp/xcodebuild.log ]; then
+            grep -nE "error:" /tmp/xcodebuild.log | head -40 || true
+            echo '--- last 40 lines ---'
+            tail -40 /tmp/xcodebuild.log
+          else
+            echo 'no xcodebuild log was produced'
+          fi
 
       - name: Upload test results on failure
         if: failure()
@@ -84,7 +88,9 @@ jobs:
       - name: Verify the notes editor shipped in the app bundle
         run: |
           set -euo pipefail
-          app=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 6 -name 'Top Drawer.app' -path '*Build/Products*' | head -1)
+          # -print -quit rather than piping to head: a pipe would let find die of
+          # SIGPIPE, which `set -o pipefail` turns into a failed step.
+          app=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 6 -name 'Top Drawer.app' -path '*Build/Products*' -print -quit)
           test -n "$app" || { echo 'error: built app not found'; exit 1; }
           echo "app: $app"
           for asset in editor.html editor.js editor.css; do

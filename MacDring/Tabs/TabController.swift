@@ -1050,6 +1050,11 @@ final class TabController {
             // Saved against the note the editor named, which is not necessarily the
             // open tab any more: a flushed edit arrives after the drawer closed
             // (`openTabID` is already nil) or after the user moved to another tab.
+            // The store is the last word on whether that note exists.
+            guard self.store.tab(id: documentID) != nil else {
+                NSLog("Notes editor: refused an edit for unknown tab \(documentID)")
+                return
+            }
             self.store.setNotes(text, forTab: documentID)
             // A pending quit is waiting for exactly this: the edit arrived, so it is
             // now in the store and `saveNow()` on the way out will persist it.

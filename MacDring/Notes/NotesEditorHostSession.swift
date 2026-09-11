@@ -26,6 +26,17 @@ final class NotesEditorHostSession {
     private var deliveredMarkdown = ""
     private var deliveredTheme: String?
 
+    /// Every document this session has sent to the editor. A `changed` naming one of
+    /// these is genuine even if the drawer has since moved on — the editor reports
+    /// the edit it had in flight when the switch happened, and dropping it would
+    /// lose the last keystrokes of the note the user just left.
+    private var deliveredDocuments: Set<UUID> = []
+
+    /// Highest `editorRevision` accepted so far. The editor's counter only rises, so
+    /// anything at or below this is a reply that lost a race with a newer one and
+    /// would otherwise revert newer text.
+    private var lastEditorRevision = -1
+
     private var revision = 0
 
     /// True once the page has announced itself. Nothing is sent before that:
@@ -58,18 +69,30 @@ final class NotesEditorHostSession {
         isReady = true
     }
 
-    /// The editor reported an edit of the document it named.
+    /// The editor reported an edit, naming the document it belongs to.
     ///
-    /// Returns the document the edit belongs to, or `nil` when it names one the
-    /// host is no longer showing — an edit can land after the drawer moved to
-    /// another tab, and applying it to whatever is open then would write one
-    /// note's text into another. The caller reports the rejection.
+    /// Returns the document the edit belongs to, or `nil` when it cannot be trusted:
+    /// it names a document this session never sent, or its revision is not newer than
+    /// the last one accepted. The caller reports the rejection.
+    ///
+    /// Only the *desired* document's text updates the host's idea of the current note;
+    /// a late reply for the document being replaced is still accepted and returned, so
+    /// the caller can persist it against the right note, but it must not overwrite the
+    /// text the host is about to hand the editor for the new one.
     @discardableResult
-    func recordEditorChange(_ markdown: String, documentID: String) -> UUID? {
-        guard let deliveredDocumentID,
-              documentID == deliveredDocumentID.uuidString else { return nil }
-        acceptEditorChange(markdown)
-        return deliveredDocumentID
+    func recordEditorChange(_ markdown: String, documentID: String,
+                            editorRevision: Int) -> UUID? {
+        guard let document = UUID(uuidString: documentID),
+              deliveredDocuments.contains(document) else { return nil }
+        guard editorRevision > lastEditorRevision else { return nil }
+        lastEditorRevision = editorRevision
+
+        if document == deliveredDocumentID { deliveredMarkdown = markdown }
+        if document == desiredDocumentID {
+            desiredMarkdown = markdown
+            self.markdown = markdown
+        }
+        return document
     }
 
     /// The host changed the text itself (not via the editor), e.g. the store was
@@ -77,12 +100,6 @@ final class NotesEditorHostSession {
     func recordHostChange(_ markdown: String) {
         self.markdown = markdown
         desiredMarkdown = markdown
-    }
-
-    private func acceptEditorChange(_ markdown: String) {
-        self.markdown = markdown
-        desiredMarkdown = markdown
-        deliveredMarkdown = markdown
     }
 
     // MARK: Output
@@ -94,16 +111,19 @@ final class NotesEditorHostSession {
         guard isReady else { return nil }
 
         if deliveredDocumentID != desiredDocumentID {
+            // Nothing is committed until the message is certain to be sent: a nil
+            // desired document (nothing to show) must leave the delivered state alone,
+            // or the session would claim to be in sync while the editor still holds
+            // the previous note.
+            guard let document = desiredDocumentID else { return nil }
             revision += 1
-            deliveredDocumentID = desiredDocumentID
+            deliveredDocumentID = document
+            deliveredDocuments.insert(document)
             deliveredMarkdown = desiredMarkdown
             deliveredTheme = desiredTheme
             markdown = desiredMarkdown
-            // A document switch always carries an identity: the editor echoes it on
-            // every change, and an unidentified change is refused on the way back.
-            guard let documentID = desiredDocumentID?.uuidString else { return nil }
             return .initialize(markdown: desiredMarkdown, theme: desiredTheme, revision: revision,
-                               documentID: documentID)
+                               documentID: document.uuidString)
         }
 
         if deliveredMarkdown != desiredMarkdown {

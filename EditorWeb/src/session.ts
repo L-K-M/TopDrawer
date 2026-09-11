@@ -109,6 +109,11 @@ export class EditorSession {
   private async handleHostMessage(message: HostMessage): Promise<void> {
     switch (message.type) {
       case 'initialize':
+        // A pending edit belongs to the document being replaced, so report it before
+        // adopting the new one: the host attributes it by documentID and saves it
+        // against the right note. Dropping it here would silently lose the last
+        // keystrokes of the note the user just left.
+        this.flush();
         this.theme = message.theme;
         this.documentID = message.documentID;
         this.applyTheme();

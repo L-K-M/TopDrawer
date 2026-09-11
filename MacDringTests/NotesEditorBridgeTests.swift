@@ -115,6 +115,16 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertEqual(url?.absoluteString, "topdrawer-editor://editor/editor.html")
     }
 
+    /// Only the web schemes may reach the user's browser; the editor refuses others
+    /// itself, and the host refuses them again rather than trusting the page.
+    func testOnlyWebSchemesCountAsOpenable() {
+        XCTAssertTrue(NotesEditorProtocol.isWebURL(URL(string: "https://example.com")!))
+        XCTAssertTrue(NotesEditorProtocol.isWebURL(URL(string: "http://example.com")!))
+        XCTAssertFalse(NotesEditorProtocol.isWebURL(URL(string: "javascript:alert(1)")!))
+        XCTAssertFalse(NotesEditorProtocol.isWebURL(URL(string: "file:///etc/passwd")!))
+        XCTAssertFalse(NotesEditorProtocol.isWebURL(URL(string: "topdrawer-editor://editor/editor.html")!))
+    }
+
     func testOnlyTheKnownAssetsAreServed() {
         func url(_ path: String) -> URL { URL(string: "topdrawer-editor://editor/\(path)")! }
 

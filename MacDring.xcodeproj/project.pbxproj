@@ -193,7 +193,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\n# The editor is built and reviewed outside Xcode (EditorWeb/README.md); Xcode only\n# copies the three reviewed files, so the repository holds one copy of them and the\n# app cannot ship a stale bundle. Flat, by name: the page and the scheme handler\n# look them up in the resource directory.\nsrc=\"$SRCROOT/EditorWeb/dist\"\ndst=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nfor asset in editor.html editor.js editor.css; do\n  if [ ! -f \"$src/$asset\" ]; then\n    echo \"error: $src/$asset is missing; run 'cd EditorWeb && npm run build'\"\n    exit 1\n  fi\n  cp -f \"$src/$asset\" \"$dst/$asset\"\ndone\n";
+			shellScript = "set -eu\n# The editor is built and reviewed outside Xcode (EditorWeb/README.md); Xcode only\n# copies the three reviewed files, so the repository holds one copy of them and the\n# app cannot ship a stale bundle. Flat, by name: the page and the scheme handler\n# look them up in the resource directory.\nsrc=\"$SRCROOT/EditorWeb/dist\"\ndst=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$dst\"\nfor asset in editor.html editor.js editor.css; do\n  if [ ! -f \"$src/$asset\" ]; then\n    echo \"error: $src/$asset is missing; run 'cd EditorWeb && npm run build'\"\n    exit 1\n  fi\n  cp -f \"$src/$asset\" \"$dst/$asset\"\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

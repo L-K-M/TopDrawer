@@ -46,6 +46,14 @@ enum NotesEditorProtocol {
     /// The page URL a web view should load.
     static var pageURL: URL? { URL(string: "\(scheme)://\(host)\(pagePath)") }
 
+    /// Whether `url` is one the app should hand to the user's browser. Only the web
+    /// schemes: the editor refuses other schemes itself, and the host refuses them
+    /// again rather than trusting the page with what reaches `NSWorkspace`.
+    static func isWebURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
     /// Whether `url` is the editor's own page or one of its assets.
     static func isEditorURL(_ url: URL) -> Bool {
         url.scheme == scheme && url.host == host
@@ -103,8 +111,6 @@ enum NotesEditorHostMessage: Equatable {
 
     /// The message as a JSON string.
     func jsonString() throws -> String {
-        // `.fragmentsAllowed` because a bare string is not a JSON document: without
-        // it, serialising the payload's string form throws.
         let data = try JSONSerialization.data(withJSONObject: jsonObject)
         return String(decoding: data, as: UTF8.self)
     }

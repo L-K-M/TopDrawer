@@ -130,8 +130,14 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
 
     /// Tears the editor down. Called from `dismantleNSView`, i.e. when the drawer
     /// stops showing a notes tab or the app goes away.
+    ///
+    /// No flush is requested here: the reply could not be delivered, because the
+    /// message handler is removed (and the web view released) as part of this call.
+    /// The paths that can still save an edit are the drawer hiding (which flushes
+    /// while the editor is alive) and quitting (which waits for the reply); a switch
+    /// from one note to another is covered by the editor flushing the edit it had in
+    /// flight when it is handed the next document.
     func tearDown() {
-        flushPendingEdit()
         registerFlush?(nil)   // never hold the web view (or this coordinator) past teardown
         webView?.configuration.userContentController
             .removeScriptMessageHandler(forName: NotesEditorProtocol.messageHandlerName)
@@ -181,17 +187,23 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
             session.markReady()
             pump()
 
-        case let .changed(markdown, _, documentID):
-            if let document = session.recordEditorChange(markdown, documentID: documentID) {
+        case let .changed(markdown, editorRevision, documentID):
+            if let document = session.recordEditorChange(markdown, documentID: documentID,
+                                                        editorRevision: editorRevision) {
                 onChanged(markdown, document)
             } else {
-                // The drawer has moved on since this edit started; saving it against the
-                // tab that is open now would put one note's text into another.
-                NSLog("Notes editor: discarded an edit for note \(documentID); no longer showing it")
+                // Either the edit names a document this session never sent, or it is
+                // older than one already accepted. Saving it would put one note's text
+                // into another, or revert newer text with older text.
+                NSLog("Notes editor: discarded an edit for note \(documentID)"
+                      + " (revision \(editorRevision))")
             }
 
         case let .openLink(url):
-            guard let url = URL(string: url) else { return }
+            guard let url = URL(string: url), NotesEditorProtocol.isWebURL(url) else {
+                NSLog("Notes editor: refused to open \(url)")
+                return
+            }
             onOpenLink(url)
 
         case .focusChanged:
@@ -217,9 +229,7 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
         guard let url = navigationAction.request.url else { return .cancel }
         if NotesEditorProtocol.isEditorURL(url) { return .allow }
 
-        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
-            onOpenLink(url)
-        }
+        if NotesEditorProtocol.isWebURL(url) { onOpenLink(url) }
         return .cancel
     }
 }

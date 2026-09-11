@@ -397,8 +397,11 @@ final class DrawerWindowController {
             model.folderURL = nil
         }
         // Every kind passes through here, so the notes editor learns that the open
-        // tab changed — and, for a refresh of the same tab, that it did not.
-        model.documentID = tab.id
+        // tab changed — and, for a refresh of the same tab, that it did not. Only a
+        // real change is written: `@Published` fires on every assignment, and a
+        // refresh happens for unrelated reasons (a screen change, a running-app
+        // update), so re-writing the same id would invalidate the drawer for nothing.
+        if model.documentID != tab.id { model.documentID = tab.id }
     }
 
     /// The drawer's flush-to-edge open frame, sized deterministically from the

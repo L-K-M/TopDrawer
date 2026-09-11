@@ -49,7 +49,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
         session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
         XCTAssertNotNil(session.nextMessage())
 
-        session.recordEditorChange("# a typed", documentID: tabA.uuidString)
+        session.recordEditorChange("# a typed", documentID: tabA.uuidString, editorRevision: 1)
         session.setDesired(documentID: tabA, markdown: "# a typed", theme: .light)
 
         XCTAssertNil(session.nextMessage(), "the editor already shows what the host was told")
@@ -66,24 +66,25 @@ final class NotesEditorHostSessionTests: XCTestCase {
         XCTAssertEqual(session.nextMessage(), .initialize(markdown: "# b", theme: "light", revision: 2, documentID: tabB.uuidString))
     }
 
-    /// An edit that names a document the host is no longer showing is refused, not
-    /// applied to whatever is open now. This is the misattribution case: an edit can
-    /// land after the drawer has moved to another tab, or after it closed (when the
-    /// drawer no longer has an open tab at all).
-    func testEditNamingAnotherDocumentIsRejected() {
+    /// An edit naming a document this session never sent is refused outright: it is
+    /// either a bug in the page or a message from somewhere else, and applying it
+    /// would put text into a note the editor was never given.
+    func testEditNamingANeverSentDocumentIsRejected() {
         let session = readySession()
         session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
         XCTAssertNotNil(session.nextMessage())
 
         XCTAssertNil(session.recordEditorChange("# text meant for another note",
-                                                documentID: tabB.uuidString))
+                                                documentID: tabB.uuidString,
+                                                editorRevision: 1))
         XCTAssertEqual(session.markdown, "# a", "the other document's text must not be adopted")
         XCTAssertEqual(session.deliveredDocumentID, tabA)
     }
 
     /// The same, after the host has switched documents: the late reply for the old
-    /// note must not be recorded as the new one's text.
-    func testLateEditIsRejectedAfterSwitch() {
+    /// note being replaced is still persisted against that note, but it must not
+    /// become the current note's text.
+    func testLateEditAfterSwitchIsPersistedToItsOwnNoteOnly() {
         let session = readySession()
         session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
         XCTAssertNotNil(session.nextMessage())
@@ -91,9 +92,44 @@ final class NotesEditorHostSessionTests: XCTestCase {
         session.setDesired(documentID: tabB, markdown: "# b", theme: .light)
         XCTAssertNotNil(session.nextMessage())
 
-        XCTAssertNil(session.recordEditorChange("# a, edited just before the switch",
-                                                documentID: tabA.uuidString))
-        XCTAssertEqual(session.markdown, "# b")
+        // The editor reports the edit it had in flight for the note just left; the
+        // host saves it against tabA rather than dropping it or, worse, treating it
+        // as tabB's text.
+        XCTAssertEqual(
+            session.recordEditorChange("# a, edited just before the switch",
+                                       documentID: tabA.uuidString,
+                                       editorRevision: 1),
+            tabA
+        )
+        XCTAssertEqual(session.markdown, "# b", "the current note's text must not be overwritten")
+    }
+
+    /// A reply whose revision is not newer than one already accepted is a race that
+    /// lost: applying it would revert the newer text.
+    func testStaleEditorRevisionIsRejected() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        XCTAssertNotNil(session.nextMessage())
+
+        XCTAssertEqual(session.recordEditorChange("# a v2", documentID: tabA.uuidString,
+                                                  editorRevision: 2), tabA)
+        XCTAssertNil(session.recordEditorChange("# a v1 (late)", documentID: tabA.uuidString,
+                                                editorRevision: 1))
+        XCTAssertEqual(session.markdown, "# a v2")
+    }
+
+    /// Nothing to show (no open tab) must not be reported as being in sync with an
+    /// editor that is still holding the previous note.
+    func testNoDesiredDocumentIsNotInSyncWithADeliveredOne() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        XCTAssertNotNil(session.nextMessage())
+        XCTAssertTrue(session.isInSync)
+
+        session.setDesired(documentID: nil, markdown: "", theme: .light)
+        XCTAssertNil(session.nextMessage())
+        XCTAssertFalse(session.isInSync)
+        XCTAssertEqual(session.deliveredDocumentID, tabA, "the editor still shows tabA")
     }
 
     /// And an edit for the document on screen is accepted, naming it back.
@@ -102,7 +138,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
         session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
         XCTAssertNotNil(session.nextMessage())
 
-        XCTAssertEqual(session.recordEditorChange("# a typed", documentID: tabA.uuidString), tabA)
+        XCTAssertEqual(session.recordEditorChange("# a typed", documentID: tabA.uuidString, editorRevision: 1), tabA)
         XCTAssertEqual(session.markdown, "# a typed")
     }
 
