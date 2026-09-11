@@ -1,5 +1,4 @@
 import { $remark } from '@milkdown/kit/utils';
-import { visit } from 'unist-util-visit';
 import type { Editor } from '@milkdown/kit/core';
 
 /**
@@ -12,9 +11,9 @@ import type { Editor } from '@milkdown/kit/core';
  *
  * Rather than sanitizing (which would rewrite the user's bytes on load), this
  * replaces those nodes with their literal Markdown *before* the document model
- * is built, so the text is visible, editable, and preserved. Deferred to a
+ * is built, so the text stays visible, editable, and preserved. Deferred to a
  * later phase: a node view that renders local/data images and inert HTML
- * previews.
+ * previews, which would also keep the source byte-exact.
  */
 
 interface MarkdownNode {
@@ -23,29 +22,39 @@ interface MarkdownNode {
   alt?: string | null;
   url?: string;
   title?: string | null;
+  children?: MarkdownNode[];
 }
 
-/** Reconstructs the source form of an image node ("![alt](url \"title\")"). */
+/** Node kinds rich mode must not turn into DOM. */
+const UNRENDERED_NODES = new Set(['html', 'image']);
+
+/** Reconstructs an image node's source form: `![alt](url "title")`. */
 function imageSource(node: MarkdownNode): string {
   const title = node.title ? ` "${node.title}"` : '';
   return `![${node.alt ?? ''}](${node.url ?? ''}${title})`;
 }
 
-const plainTextFallback = $remark(
-  'topdrawer-plain-text-fallback',
-  () => () => (tree: unknown) => {
-    visit(tree as never, (node: MarkdownNode, index, parent) => {
-      if (index === undefined || index === null || !parent) return;
-      if (node.type !== 'html' && node.type !== 'image') return;
+/** Depth-first replacement of unrendered nodes with literal text nodes. */
+function toPlainText(node: MarkdownNode): void {
+  const children = node.children;
+  if (!children) return;
 
-      const value = node.type === 'html' ? (node.value ?? '') : imageSource(node);
-      ((parent as { children: MarkdownNode[] }).children[index] as unknown) = {
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+    if (UNRENDERED_NODES.has(child.type)) {
+      children[index] = {
         type: 'text',
-        value,
+        value: child.type === 'html' ? (child.value ?? '') : imageSource(child),
       };
-    });
-  },
-);
+      continue;
+    }
+    toPlainText(child);
+  }
+}
+
+const plainTextFallback = $remark('topdrawer-plain-text-fallback', () => () => (tree: unknown) => {
+  toPlainText(tree as MarkdownNode);
+});
 
 /**
  * Crepe feature shape (see `@milkdown/crepe/feature/shared`): a function that

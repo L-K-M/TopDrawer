@@ -49,8 +49,9 @@ covered by tests):
    immediately on blur, drawer close (`visibilitychange`), `pagehide`, or
    explicit `flush()`.
 4. Only `http(s)` links reach the host; other schemes are blocked inert. Anchors
-   inside the document are intercepted so a click can never navigate the web
-   view away from the editor.
+   inside the document are intercepted, so a click never navigates the web view.
+   Opening is explicit: Cmd/Ctrl-click hands the URL to the host, which opens it
+   in the default browser. A plain click just moves the caret.
 
 ## Build & test
 

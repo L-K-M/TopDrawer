@@ -127,6 +127,24 @@ try {
   const theme = await page.evaluate(() => document.documentElement.dataset.tdTheme);
   check('setTheme dark applied', theme === 'dark');
 
+  // Links: an editing click must not launch anything, Cmd/Ctrl-click must hand
+  // the URL to the host, and the web view must never navigate (which would
+  // destroy the session).
+  await page.selectOption('#corpus', 'links');
+  await page.click('#replace');
+  await page.waitForSelector('#editor a[href]', { timeout: 5000 });
+  const openedLinks = async () =>
+    (await bridgeLines()).filter((line) => line.includes('"openLink"')).length;
+
+  await page.locator('#editor a[href]').first().click();
+  await page.waitForTimeout(300);
+  check('plain click does not open a link', (await openedLinks()) === 0);
+  check('plain click does not navigate', (await page.evaluate(() => location.pathname)).includes('harness'));
+
+  await page.locator('#editor a[href]').first().click({ modifiers: ['Meta'] });
+  await page.waitForTimeout(300);
+  check('Cmd-click opens the link externally', (await openedLinks()) === 1);
+
   // Hostile corpus must render inertly under the strict CSP: no elements built
   // from raw HTML, no image node, and no fetch attempt for the remote image.
   await page.selectOption('#corpus', 'hostile');

@@ -76,7 +76,7 @@ export class RichEditor {
       .addFeature(topBar)
       .addFeature(codeMirror)
       .addFeature(cursor)
-      .addFeature(linkTooltip, { onCopyLink: (link: string) => options.onOpenLink(link) })
+      .addFeature(linkTooltip)
       .addFeature(listItem)
       .addFeature(placeholder, { text: options.placeholder, mode: 'doc' })
       .addFeature(table)
@@ -111,14 +111,19 @@ export class RichEditor {
   }
 
   /**
-   * Anchors inside the document must never navigate the web view (that would
-   * destroy the session). Intercept the default and hand the URL to the host.
+   * A click inside the document must never navigate the web view (that would
+   * destroy the session), and an editing click must never launch a browser
+   * either. Per the improvement plan, opening a link is explicit: Cmd/Ctrl-click
+   * hands the URL to the host, which opens it externally. The link tooltip keeps
+   * its default copy behaviour.
    */
   private wireLinks(onOpenLink: (url: string) => void): void {
     this.root.addEventListener('click', (event) => {
       const anchor = (event.target as Element | null)?.closest('a[href]');
       if (!(anchor instanceof HTMLAnchorElement)) return;
+
       event.preventDefault();
+      if (!event.metaKey && !event.ctrlKey) return;
       onOpenLink(anchor.href);
     });
   }
