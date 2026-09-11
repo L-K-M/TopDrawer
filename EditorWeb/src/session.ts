@@ -130,10 +130,29 @@ export class EditorSession {
       }
       return;
     }
-    this.hostRevision = revision;
+
+    const previousMarkdown = this.loadedMarkdown;
+    const previousRevision = this.hostRevision;
+    // The host's document wins over anything in flight (it is authoritative for
+    // the note), but the user's typing must not vanish without a trace. Which
+    // side should win on a real conflict is a Phase 2 decision; for now the
+    // host is told.
+    if (this.changes.isDirty) {
+      this.diagnostic('edit-superseded', 'host document replaced with an edit pending');
+    }
     this.loadedMarkdown = markdown;
     this.changes.reset();
-    await this.rebuildEditor();
+    try {
+      await this.rebuildEditor();
+    } catch (error) {
+      // Do not record a revision whose document never made it into an editor:
+      // that would drop the host's retry and leave the surface stuck.
+      this.loadedMarkdown = previousMarkdown;
+      this.hostRevision = previousRevision;
+      this.diagnostic('apply-failed', String(error));
+      return;
+    }
+    this.hostRevision = revision;
   }
 
   private async rebuildEditor(): Promise<void> {

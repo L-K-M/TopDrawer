@@ -52,6 +52,11 @@ covered by tests):
    inside the document are intercepted, so a click never navigates the web view.
    Opening is explicit: Cmd/Ctrl-click hands the URL to the host, which opens it
    in the default browser. A plain click just moves the caret.
+5. Applying a host document discards an edit still in flight (the host is
+   authoritative for the note) and reports `edit-superseded`, so the loss is
+   observable. Which side should win on a real conflict is a Phase 2 decision.
+   A revision is recorded only after its document has mounted, so a failed apply
+   can still be retried by the host.
 
 ## Build & test
 
