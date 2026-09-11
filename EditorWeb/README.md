@@ -47,6 +47,7 @@ wait for the editor's `ready` message before sending `initialize`.
 host -> editor: initialize(markdown, theme, platform, revision)
                replaceDocument(markdown, revision)
                focus()
+               flush()
                command(toggleMode | undo | redo)
                setTheme(theme)
 editor -> host: ready(protocolVersion)

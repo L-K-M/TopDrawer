@@ -107,6 +107,11 @@ export class EditorSession {
       case 'focus':
         this.activeEditorFocus();
         break;
+      case 'flush':
+        // The host asks explicitly because a web view can be hidden or torn down
+        // without a visibility change, and a host may be about to terminate.
+        this.flush();
+        break;
       case 'command':
         await this.handleCommand(message.name);
         break;

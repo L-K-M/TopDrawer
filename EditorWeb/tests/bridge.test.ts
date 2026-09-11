@@ -55,6 +55,10 @@ describe('parseHostMessage', () => {
     });
   });
 
+  it('accepts a flush request', () => {
+    expect(parseHostMessage({ type: 'flush' })).toEqual({ type: 'flush' });
+  });
+
   it('rejects unknown commands', () => {
     expect(parseHostMessage({ type: 'command', name: 'rm -rf' })).toBeNull();
     expect(parseHostMessage({ type: 'command', name: 'toggleMode' })).toEqual({

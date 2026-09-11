@@ -134,6 +134,17 @@ describe('EditorSession', () => {
     await settled(container, 'z');
   });
 
+  it('answers a flush request without inventing a change', async () => {
+    const { transport, container, session } = newSession();
+    initialize(session, '# Note\n', 1);
+    await settled(container, 'Note');
+
+    handleMessage(JSON.stringify({ type: 'flush' }));
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(transport.ofType('changed')).toEqual([]);
+  });
+
   it('rejects malformed host JSON with a diagnostic instead of throwing', async () => {
     const { transport, session } = newSession();
     handleMessage('not json');

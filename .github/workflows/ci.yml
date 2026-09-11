@@ -64,3 +64,19 @@ jobs:
           name: TestResults
           path: TestResults.xcresult
           if-no-files-found: ignore
+
+      # The notes tab loads a web editor out of the app bundle. Xcode copies it in
+      # with a build phase, and a silent failure there (a sandboxing change, a renamed
+      # file, a phase dropped in a merge) would leave users with a blank notes drawer
+      # that no unit test can see, so check the built product itself.
+      - name: Verify the notes editor shipped in the app bundle
+        run: |
+          set -euo pipefail
+          app=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 6 -name 'Top Drawer.app' -path '*Build/Products*' | head -1)
+          test -n "$app" || { echo 'error: built app not found'; exit 1; }
+          echo "app: $app"
+          for asset in editor.html editor.js editor.css; do
+            path="$app/Contents/Resources/$asset"
+            test -s "$path" || { echo "error: missing or empty $path"; exit 1; }
+            echo "ok: $asset ($(wc -c < "$path") bytes)"
+          done

@@ -22,6 +22,7 @@ export type HostMessage =
   | { type: 'initialize'; markdown: string; theme: Theme; platform: Platform; revision: number }
   | { type: 'replaceDocument'; markdown: string; revision: number }
   | { type: 'focus' }
+  | { type: 'flush' }
   | { type: 'command'; name: 'toggleMode' | 'undo' | 'redo' }
   | { type: 'setTheme'; theme: Theme };
 
@@ -109,6 +110,8 @@ export function parseHostMessage(raw: unknown): HostMessage | null {
       return { type: 'replaceDocument', markdown: msg.markdown, revision: msg.revision as number };
     case 'focus':
       return { type: 'focus' };
+    case 'flush':
+      return { type: 'flush' };
     case 'command':
       if (msg.name === 'toggleMode' || msg.name === 'undo' || msg.name === 'redo') {
         return { type: 'command', name: msg.name };
