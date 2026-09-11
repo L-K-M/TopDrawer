@@ -46,6 +46,13 @@ export class EditorSession {
   private hostRevision = -1;
   /** Revision of the editor's own change stream; echoed to the host. */
   private editorRevision = 0;
+  /**
+   * Identity of the document the editor is showing, as the host named it. Echoed
+   * on every `changed` so the host can attribute an edit to the note it came from:
+   * an edit can arrive after the drawer has already moved to another tab, or after
+   * it has closed the drawer and cleared its notion of "the open tab".
+   */
+  private documentID: string | null = null;
   /** Markdown as loaded by the host — the source of truth while clean. */
   private loadedMarkdown = '';
   private changes: ChangeCoalescer;
@@ -61,7 +68,12 @@ export class EditorSession {
     this.changes = new ChangeCoalescer(CHANGE_DEBOUNCE_MS, (markdown) => {
       this.editorRevision += 1;
       this.loadedMarkdown = markdown;
-      this.send({ type: 'changed', markdown, editorRevision: this.editorRevision });
+      this.send({
+        type: 'changed',
+        markdown,
+        editorRevision: this.editorRevision,
+        documentID: this.documentID ?? '',
+      });
     });
   }
 
@@ -98,6 +110,7 @@ export class EditorSession {
     switch (message.type) {
       case 'initialize':
         this.theme = message.theme;
+        this.documentID = message.documentID;
         this.applyTheme();
         await this.loadDocument(message.markdown, message.revision);
         break;

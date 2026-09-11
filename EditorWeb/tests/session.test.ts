@@ -18,8 +18,10 @@ function handleMessage(json: string) {
   window.topdrawerEditor?.handleMessage(json);
 }
 
-function initialize(session: EditorSession, markdown: string, revision: number) {
-  handleMessage(JSON.stringify({ type: 'initialize', markdown, theme: 'light', platform: 'harness', revision }));
+function initialize(session: EditorSession, markdown: string, revision: number, documentID = 'doc-1') {
+  handleMessage(
+    JSON.stringify({ type: 'initialize', markdown, theme: 'light', platform: 'harness', revision, documentID }),
+  );
 }
 
 /** Polls instead of sleeping: a mount is asynchronous and a fixed delay races it. */

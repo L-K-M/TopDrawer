@@ -9,7 +9,7 @@ final class NotesEditorBridgeTests: XCTestCase {
     // MARK: Host -> editor
 
     func testInitializeCarriesTheDocumentThemeAndRevision() {
-        let message = NotesEditorHostMessage.initialize(markdown: "# Hi", theme: "dark", revision: 3)
+        let message = NotesEditorHostMessage.initialize(markdown: "# Hi", theme: "dark", revision: 3, documentID: "note-1")
         let object = message.jsonObject
 
         XCTAssertEqual(object["type"] as? String, "initialize")
@@ -17,6 +17,7 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertEqual(object["theme"] as? String, "dark")
         XCTAssertEqual(object["revision"] as? Int, 3)
         XCTAssertEqual(object["platform"] as? String, "macos")
+        XCTAssertEqual(object["documentID"] as? String, "note-1")
     }
 
     func testEveryMessageTypeEncodesItsDiscriminator() {
@@ -52,7 +53,7 @@ final class NotesEditorBridgeTests: XCTestCase {
         \u{2028}separator\u{2029}more
         🍼 emoji
         """
-        let message = NotesEditorHostMessage.initialize(markdown: hostile, theme: "light", revision: 1)
+        let message = NotesEditorHostMessage.initialize(markdown: hostile, theme: "light", revision: 1, documentID: "note-1")
         let invocation = try message.javaScriptInvocation()
 
         // The literal decodes back to exactly the payload we meant to send …
@@ -77,8 +78,8 @@ final class NotesEditorBridgeTests: XCTestCase {
     }
 
     func testChangedDecodesTextAndRevision() {
-        let event = NotesEditorEvent(scriptMessageBody: ["type": "changed", "markdown": "# a", "editorRevision": 7])
-        XCTAssertEqual(event, .changed(markdown: "# a", editorRevision: 7))
+        let event = NotesEditorEvent(scriptMessageBody: ["type": "changed", "markdown": "# a", "editorRevision": 7, "documentID": "note-1"])
+        XCTAssertEqual(event, .changed(markdown: "# a", editorRevision: 7, documentID: "note-1"))
     }
 
     func testOpenLinkAndFocusAndDiagnosticDecode() {
@@ -97,6 +98,10 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertNil(NotesEditorEvent(scriptMessageBody: [String: Any]()))
         XCTAssertNil(NotesEditorEvent(scriptMessageBody: ["type": "futureThing"]))
         XCTAssertNil(NotesEditorEvent(scriptMessageBody: ["type": "changed"]), "missing markdown")
+        XCTAssertNil(
+            NotesEditorEvent(scriptMessageBody: ["type": "changed", "markdown": "x", "documentID": ""]),
+            "an edit with no document identity cannot be attributed"
+        )
         XCTAssertNil(NotesEditorEvent(scriptMessageBody: ["type": "openLink"]), "missing url")
     }
 

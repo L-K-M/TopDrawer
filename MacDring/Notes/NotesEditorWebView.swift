@@ -21,7 +21,9 @@ struct NotesEditorWebView: NSViewRepresentable {
     /// the editor reported. The reconciler decides whether it needs sending.
     let markdown: String
     let theme: NotesEditorTheme
-    let onChanged: (String) -> Void
+    /// Called with the edited text and the document it belongs to, so the drawer
+    /// saves it against that note rather than against whatever tab is open.
+    let onChanged: (String, UUID) -> Void
     let onOpenLink: (URL) -> Void
     /// Registers (and, with `nil`, unregisters) a way to ask the editor for a
     /// pending edit right away: the drawer close and termination paths need it,
@@ -49,12 +51,12 @@ struct NotesEditorWebView: NSViewRepresentable {
 final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     private let session = NotesEditorHostSession()
-    private let onChanged: (String) -> Void
+    private let onChanged: (String, UUID) -> Void
     private let onOpenLink: (URL) -> Void
     private let registerFlush: (((() -> Void)?) -> Void)?
     private var webView: WKWebView?
 
-    init(onChanged: @escaping (String) -> Void,
+    init(onChanged: @escaping (String, UUID) -> Void,
          onOpenLink: @escaping (URL) -> Void,
          registerFlush: (((() -> Void)?) -> Void)? = nil) {
         self.onChanged = onChanged
@@ -179,9 +181,14 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
             session.markReady()
             pump()
 
-        case let .changed(markdown, _):
-            session.recordEditorChange(markdown)
-            onChanged(markdown)
+        case let .changed(markdown, _, documentID):
+            if let document = session.recordEditorChange(markdown, documentID: documentID) {
+                onChanged(markdown, document)
+            } else {
+                // The drawer has moved on since this edit started; saving it against the
+                // tab that is open now would put one note's text into another.
+                NSLog("Notes editor: discarded an edit for note \(documentID); no longer showing it")
+            }
 
         case let .openLink(url):
             guard let url = URL(string: url) else { return }

@@ -19,7 +19,16 @@ export type Platform = 'macos' | 'linux' | 'harness';
 
 /** host -> editor */
 export type HostMessage =
-  | { type: 'initialize'; markdown: string; theme: Theme; platform: Platform; revision: number }
+  | {
+      type: 'initialize';
+      markdown: string;
+      theme: Theme;
+      platform: Platform;
+      revision: number;
+      /** Identity of the document, echoed on `changed` so the host can attribute
+       *  an edit to the note it came from rather than to whichever tab is open. */
+      documentID: string;
+    }
   | { type: 'replaceDocument'; markdown: string; revision: number }
   | { type: 'focus' }
   | { type: 'flush' }
@@ -29,7 +38,7 @@ export type HostMessage =
 /** editor -> host */
 export type EditorMessage =
   | { type: 'ready'; protocolVersion: number }
-  | { type: 'changed'; markdown: string; editorRevision: number }
+  | { type: 'changed'; markdown: string; editorRevision: number; documentID: string }
   | { type: 'openLink'; url: string }
   | { type: 'focusChanged'; isFocused: boolean }
   | { type: 'diagnostic'; code: string; detail?: string };
@@ -95,6 +104,7 @@ export function parseHostMessage(raw: unknown): HostMessage | null {
   switch (msg.type) {
     case 'initialize':
       if (typeof msg.markdown !== 'string') return null;
+      if (typeof msg.documentID !== 'string' || msg.documentID.length === 0) return null;
       if (!Number.isInteger(msg.revision) || !isTheme(msg.theme) || !isPlatform(msg.platform)) {
         return null;
       }
@@ -104,6 +114,7 @@ export function parseHostMessage(raw: unknown): HostMessage | null {
         theme: msg.theme,
         platform: msg.platform,
         revision: msg.revision as number,
+        documentID: msg.documentID,
       };
     case 'replaceDocument':
       if (typeof msg.markdown !== 'string' || !Number.isInteger(msg.revision)) return null;

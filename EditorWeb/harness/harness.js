@@ -96,6 +96,8 @@ document.getElementById('load').onclick = () => {
     theme,
     platform: 'harness',
     revision: (revision += 1),
+    // Identity of the note being shown; the editor echoes it on every change.
+    documentID: 'harness-note',
   });
 };
 document.getElementById('replace').onclick = () =>

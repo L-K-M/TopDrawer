@@ -4,14 +4,8 @@ import { parseHostMessage, PROTOCOL_VERSION } from '../src/bridge';
 describe('parseHostMessage', () => {
   it('accepts a well-formed initialize', () => {
     expect(
-      parseHostMessage({
-        type: 'initialize',
-        markdown: '# Hi',
-        theme: 'dark',
-        platform: 'macos',
-        revision: 3,
-      }),
-    ).toEqual({ type: 'initialize', markdown: '# Hi', theme: 'dark', platform: 'macos', revision: 3 });
+      parseHostMessage({ type: 'initialize', markdown: '# Hi', theme: 'dark', platform: 'macos', revision: 3, documentID: 'A' }),
+    ).toEqual({ type: 'initialize', markdown: '# Hi', theme: 'dark', platform: 'macos', revision: 3, documentID: 'A' });
   });
 
   it('rejects non-objects and missing fields', () => {
@@ -29,6 +23,7 @@ describe('parseHostMessage', () => {
         theme: 'Dark',
         platform: 'macos',
         revision: 0,
+        documentID: 'A',
       }),
     ).toBeNull();
     expect(
@@ -38,6 +33,7 @@ describe('parseHostMessage', () => {
         theme: 'light',
         platform: 'macOS',
         revision: 0,
+        documentID: 'A',
       }),
     ).toBeNull();
     expect(parseHostMessage({ type: 'setTheme', theme: 'purple' })).toBeNull();
@@ -53,6 +49,13 @@ describe('parseHostMessage', () => {
       markdown: 'x',
       revision: 1,
     });
+  });
+
+  it('requires a document identity, so a change can be attributed', () => {
+    expect(parseHostMessage({ type: 'initialize', markdown: '', theme: 'light', platform: 'macos', revision: 1 })).toBeNull();
+    expect(
+      parseHostMessage({ type: 'initialize', markdown: '', theme: 'light', platform: 'macos', revision: 1, documentID: '' }),
+    ).toBeNull();
   });
 
   it('accepts a flush request', () => {

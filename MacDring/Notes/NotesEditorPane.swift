@@ -16,7 +16,7 @@ struct NotesEditorPane: View {
             documentID: model.documentID,
             markdown: model.notes,
             theme: NotesEditorTheme(isDark: colorScheme == .dark),
-            onChanged: { model.onNotesChanged?($0) },
+            onChanged: { text, documentID in model.onNotesChanged?(text, documentID) },
             onOpenLink: { model.onOpenNoteLink?($0) },
             registerFlush: { handler in model.requestNotesFlush = handler }
         )

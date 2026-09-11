@@ -1045,9 +1045,12 @@ final class TabController {
             let locked = self.store.tab(id: id)?.locked ?? false
             self.store.setLocked(!locked, forTab: id)
         }
-        drawer.model.onNotesChanged = { [weak self] text in
-            guard let self, let id = self.openTabID else { return }
-            self.store.setNotes(text, forTab: id)
+        drawer.model.onNotesChanged = { [weak self] text, documentID in
+            guard let self else { return }
+            // Saved against the note the editor named, which is not necessarily the
+            // open tab any more: a flushed edit arrives after the drawer closed
+            // (`openTabID` is already nil) or after the user moved to another tab.
+            self.store.setNotes(text, forTab: documentID)
             // A pending quit is waiting for exactly this: the edit arrived, so it is
             // now in the store and `saveNow()` on the way out will persist it.
             self.finishNotesFlush()

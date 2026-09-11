@@ -178,8 +178,10 @@ final class DrawerModel: ObservableObject {
     var onOpenSettings: (() -> Void)?
     /// Toggle this tab's locked state (drawer header lock).
     var onToggleLocked: (() -> Void)?
-    /// Notes text changed (for `.notes` tabs).
-    var onNotesChanged: ((String) -> Void)?
+    /// Notes text changed (for `.notes` tabs), with the document it belongs to —
+    /// the drawer saves against that note, not against the currently open tab,
+    /// because an edit can arrive after the drawer has moved on.
+    var onNotesChanged: ((String, UUID) -> Void)?
     /// The notes editor asked to open a URL (an explicit Cmd/Ctrl-click on a link).
     /// The editor itself never navigates, so this is the only way a link leaves a note.
     var onOpenNoteLink: ((URL) -> Void)?

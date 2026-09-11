@@ -65,7 +65,10 @@ enum NotesEditorProtocol {
 /// `javaScriptInvocation(_:)` for why the second encoding step matters.
 enum NotesEditorHostMessage: Equatable {
     /// Loads a document and resets the editor's change tracking to `revision`.
-    case initialize(markdown: String, theme: String, revision: Int)
+    /// `documentID` names the note, and the editor echoes it on every change so the
+    /// host can attribute an edit to the note it came from rather than to whichever
+    /// tab happens to be open when it lands.
+    case initialize(markdown: String, theme: String, revision: Int, documentID: String)
     /// Replaces the document under a fresh revision (an edit made outside the
     /// editor, e.g. by the other drawer or a device sync).
     case replaceDocument(markdown: String, revision: Int)
@@ -81,9 +84,10 @@ enum NotesEditorHostMessage: Equatable {
     /// `JSONSerialization` needs; the editor validates it on arrival.
     var jsonObject: [String: Any] {
         switch self {
-        case let .initialize(markdown, theme, revision):
+        case let .initialize(markdown, theme, revision, documentID):
             return ["type": "initialize", "markdown": markdown, "theme": theme,
-                    "platform": NotesEditorProtocol.platform, "revision": revision]
+                    "platform": NotesEditorProtocol.platform, "revision": revision,
+                    "documentID": documentID]
         case let .replaceDocument(markdown, revision):
             return ["type": "replaceDocument", "markdown": markdown, "revision": revision]
         case let .setTheme(theme):
@@ -129,9 +133,8 @@ enum NotesEditorHostMessage: Equatable {
 /// Something the editor told the host.
 enum NotesEditorEvent: Equatable {
     case ready(protocolVersion: Int)
-    /// A local edit. `editorRevision` is the editor's own counter, for
-    /// diagnostics only; the host tracks its own revision for documents it sends.
-    case changed(markdown: String, editorRevision: Int)
+    /// A local edit, and the document it belongs to.
+    case changed(markdown: String, editorRevision: Int, documentID: String)
     case openLink(url: String)
     case focusChanged(isFocused: Bool)
     /// The editor refused or could not do something. Surfaced for logging.
@@ -154,8 +157,12 @@ extension NotesEditorEvent {
         case "ready":
             self = .ready(protocolVersion: Self.int(object["protocolVersion"]) ?? 0)
         case "changed":
-            guard let markdown = object["markdown"] as? String else { return nil }
-            self = .changed(markdown: markdown, editorRevision: Self.int(object["editorRevision"]) ?? 0)
+            guard let markdown = object["markdown"] as? String,
+                  let documentID = object["documentID"] as? String,
+                  !documentID.isEmpty else { return nil }
+            self = .changed(markdown: markdown,
+                            editorRevision: Self.int(object["editorRevision"]) ?? 0,
+                            documentID: documentID)
         case "openLink":
             guard let url = object["url"] as? String else { return nil }
             self = .openLink(url: url)

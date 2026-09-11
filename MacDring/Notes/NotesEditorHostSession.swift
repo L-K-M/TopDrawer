@@ -22,7 +22,7 @@ final class NotesEditorHostSession {
     /// What the host has successfully asked the editor to show. An editor
     /// callback (`changed`) updates these too, because then the editor is the
     /// source of truth for the text.
-    private var deliveredDocumentID: UUID?
+    private(set) var deliveredDocumentID: UUID?
     private var deliveredMarkdown = ""
     private var deliveredTheme: String?
 
@@ -58,12 +58,18 @@ final class NotesEditorHostSession {
         isReady = true
     }
 
-    /// The editor reported its own text. Accepting it here is what stops the
-    /// change from being echoed straight back as a `replaceDocument`.
-    func recordEditorChange(_ markdown: String) {
-        self.markdown = markdown
-        desiredMarkdown = markdown
-        deliveredMarkdown = markdown
+    /// The editor reported an edit of the document it named.
+    ///
+    /// Returns the document the edit belongs to, or `nil` when it names one the
+    /// host is no longer showing — an edit can land after the drawer moved to
+    /// another tab, and applying it to whatever is open then would write one
+    /// note's text into another. The caller reports the rejection.
+    @discardableResult
+    func recordEditorChange(_ markdown: String, documentID: String) -> UUID? {
+        guard let deliveredDocumentID,
+              documentID == deliveredDocumentID.uuidString else { return nil }
+        acceptEditorChange(markdown)
+        return deliveredDocumentID
     }
 
     /// The host changed the text itself (not via the editor), e.g. the store was
@@ -71,6 +77,12 @@ final class NotesEditorHostSession {
     func recordHostChange(_ markdown: String) {
         self.markdown = markdown
         desiredMarkdown = markdown
+    }
+
+    private func acceptEditorChange(_ markdown: String) {
+        self.markdown = markdown
+        desiredMarkdown = markdown
+        deliveredMarkdown = markdown
     }
 
     // MARK: Output
@@ -87,7 +99,11 @@ final class NotesEditorHostSession {
             deliveredMarkdown = desiredMarkdown
             deliveredTheme = desiredTheme
             markdown = desiredMarkdown
-            return .initialize(markdown: desiredMarkdown, theme: desiredTheme, revision: revision)
+            // A document switch always carries an identity: the editor echoes it on
+            // every change, and an unidentified change is refused on the way back.
+            guard let documentID = desiredDocumentID?.uuidString else { return nil }
+            return .initialize(markdown: desiredMarkdown, theme: desiredTheme, revision: revision,
+                               documentID: documentID)
         }
 
         if deliveredMarkdown != desiredMarkdown {
