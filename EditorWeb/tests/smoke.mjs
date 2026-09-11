@@ -141,9 +141,15 @@ try {
   check('plain click does not open a link', (await openedLinks()) === 0);
   check('plain click does not navigate', (await page.evaluate(() => location.pathname)).includes('harness'));
 
-  await page.locator('#editor a[href]').first().click({ modifiers: ['Meta'] });
+  // Control rather than Meta: Playwright's Meta modifier is a no-op on Linux,
+  // where the handler's ctrlKey branch is the one that fires.
+  await page.locator('#editor a[href]').first().click({ modifiers: ['Control'] });
   await page.waitForTimeout(300);
-  check('Cmd-click opens the link externally', (await openedLinks()) === 1);
+  check(
+    'Ctrl-click opens the link externally',
+    (await openedLinks()) === 1,
+    `${await openedLinks()} openLink message(s)`,
+  );
 
   // Hostile corpus must render inertly under the strict CSP: no elements built
   // from raw HTML, no image node, and no fetch attempt for the remote image.
