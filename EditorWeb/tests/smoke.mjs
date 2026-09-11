@@ -90,15 +90,28 @@ try {
 
   check('load emits no changed', (await changedCount()) === 0, `${await changedCount()} message(s)`);
 
-  // Type into the surface: exactly one debounced changed message.
+  // Type into the surface: exactly one debounced changed message. The debounce
+  // plus Playwright's own event dispatch make a fixed sleep racy, so wait for
+  // the message and then confirm no further edits produced a second one.
   await page.locator('.ProseMirror').click();
   // Click alone is not guaranteed to leave the contenteditable focused.
   await page.evaluate(() => document.querySelector('.ProseMirror')?.focus());
   await page.keyboard.press('End');
   await page.keyboard.type(' typed');
-  await page.waitForTimeout(800);
+  try {
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll('#bridge-log > div')].filter((el) =>
+          el.textContent.includes('"changed"'),
+        ).length >= 1,
+      { timeout: 10000 },
+    );
+  } catch {
+    check('typing emits debounced changed', false, 'no changed message within 10s');
+  }
+  await page.waitForTimeout(500);
   const afterTyping = await changedCount();
-  check('typing emits debounced changed', afterTyping === 1, `${afterTyping} message(s)`);
+  if (afterTyping >= 1) check('typing emits debounced changed', afterTyping === 1, `${afterTyping} message(s)`);
 
   // Toggle to source mode and back; document must survive.
   await page.click('#mode');
@@ -114,15 +127,22 @@ try {
   const theme = await page.evaluate(() => document.documentElement.dataset.tdTheme);
   check('setTheme dark applied', theme === 'dark');
 
-  // Hostile corpus must render inertly under the strict CSP.
+  // Hostile corpus must render inertly under the strict CSP: no elements built
+  // from raw HTML, no image node, and no fetch attempt for the remote image.
   await page.selectOption('#corpus', 'hostile');
   await page.click('#replace');
   await page.waitForTimeout(500);
   const injected = await page.evaluate(() => ({
     script: document.querySelectorAll('#editor script, #editor iframe').length,
     img: document.querySelectorAll('#editor img').length,
+    handlers: document.querySelectorAll('#editor [onerror], #editor [onclick]').length,
+    text: (document.querySelector('#editor .ProseMirror')?.textContent ?? '').slice(0, 60),
   }));
-  check('hostile markup renders inertly', injected.script === 0 && injected.img === 0, JSON.stringify(injected));
+  check(
+    'hostile markup renders inertly',
+    injected.script === 0 && injected.img === 0 && injected.handlers === 0,
+    JSON.stringify(injected),
+  );
 
   // Offline gate.
   check('zero cross-origin requests', crossOrigin.length === 0, crossOrigin.join(', '));

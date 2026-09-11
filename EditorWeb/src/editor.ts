@@ -10,6 +10,7 @@ import { table } from '@milkdown/crepe/feature/table';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { undo, redo } from 'prosemirror-history';
 import type { Command } from 'prosemirror-state';
+import { noRawContent } from './sanitize';
 
 // Only the CSS for enabled features; the monolithic style.css would drag in
 // KaTeX fonts, the AI panel, image upload and slash-menu chrome.
@@ -41,10 +42,10 @@ export interface RichEditorOptions {
  * out. Serialization only ever happens in response to a local change reported
  * by the listener, so a view-only open/close cycle cannot normalize the source.
  *
- * Raw HTML in a note stays inert: the CommonMark preset parses HTML blocks as
- * text (no HTML nodes are created) and is deliberately NOT sanitized on the way
- * in, because rewriting the source on load would damage the user's bytes. The
- * shipped page additionally runs under a strict CSP; see the harness README.
+ * Raw HTML and images never reach the DOM: both become literal text (see
+ * `sanitize.ts`). Notes are deliberately NOT rewritten on load, because that
+ * would damage the user's bytes; the shipped page additionally runs under a
+ * strict CSP as a second line of defence.
  */
 export class RichEditor {
   private state = { destroyed: false };
@@ -78,7 +79,8 @@ export class RichEditor {
       .addFeature(linkTooltip, { onCopyLink: (link: string) => options.onOpenLink(link) })
       .addFeature(listItem)
       .addFeature(placeholder, { text: options.placeholder, mode: 'doc' })
-      .addFeature(table);
+      .addFeature(table)
+      .addFeature(noRawContent);
 
     builder.on((api) => {
       api.markdownUpdated((_ctx, markdown, prevMarkdown) => {

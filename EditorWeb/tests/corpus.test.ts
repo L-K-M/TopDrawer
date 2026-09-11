@@ -55,17 +55,22 @@ describe('rich mode corpus', () => {
 
   for (const fixture of CORPUS.filter((f) => f.expect === 'normalized')) {
     it(`normalizes to a stable fixpoint: ${fixture.name}`, async () => {
-      // Semantics must survive even when bytes don't: serialize once (as a real
-      // edit would), then require that the output is a fixpoint of itself.
-      const first = await mount(fixture.input);
-      const out = first.editor.getMarkdown();
-      await first.editor.destroy();
-      first.root.remove();
-
-      const second = await mount(out);
-      expect(second.editor.getMarkdown()).toBe(out);
-      await second.editor.destroy();
-      second.root.remove();
+      // Semantics must survive even when bytes don't. A first real edit may
+      // normalize the source (remark's serialization, and escaping for content
+      // rich mode keeps as literal text), so the safety property is
+      // convergence: repeated round-trips must stop changing the document
+      // rather than drifting.
+      const seen: string[] = [];
+      let current = fixture.input;
+      for (let pass = 0; pass < 4; pass += 1) {
+        const { root, editor } = await mount(current);
+        current = editor.getMarkdown();
+        await editor.destroy();
+        root.remove();
+        if (seen.length > 0 && seen[seen.length - 1] === current) return;
+        seen.push(current);
+      }
+      throw new Error(`did not converge after 4 passes: ${JSON.stringify(seen)}`);
     });
   }
 

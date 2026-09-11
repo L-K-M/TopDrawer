@@ -88,15 +88,16 @@ export const CORPUS: CorpusFixture[] = [
     expect: 'normalized',
   },
   {
-    // Raw HTML is never rendered (security rule) but passes through the
-    // remark serializer verbatim, so the source survives rich mode untouched.
+    // Raw HTML is never rendered and never becomes DOM: it is kept as literal
+    // text, so remark escapes it ('<div>' -> '\<div>') on the first real edit.
+    // Content is preserved; a byte-exact inert node view is Phase 2 work.
     name: 'raw-html',
     input: 'Before\n\n<div class="note">raw html block</div>\n\nAfter\n',
-    expect: 'exact',
+    expect: 'normalized',
   },
   {
     // Payloads that must render inertly: no DOM element, no attribute handler,
-    // no javascript: navigation. Covered by the hostile-rendering test.
+    // no javascript: navigation, no image fetch. Covered by the hostile test.
     name: 'malicious-payloads',
     input:
       '<script>alert(1)</script>\n\n[xss](javascript:alert(1))\n\n![img](https://evil.example/x.png)\n\n<img src=x onerror="alert(2)">\n',

@@ -17,7 +17,7 @@ real user edit does to the bytes.
 | emphasis-combos | no | exact |
 | escaped-punctuation | no | normalized (expect: normalized) |
 | malformed-unclosed | no | normalized (expect: normalized) |
-| raw-html | no | exact |
+| raw-html | no | normalized (expect: normalized) |
 | malicious-payloads | no | normalized (expect: normalized) |
 | reference-link | no | normalized (expect: normalized) |
 | hard-break | no | normalized (expect: normalized) |
