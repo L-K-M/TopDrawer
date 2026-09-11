@@ -43,7 +43,11 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  // Without this Chromium quantizes performance.memory, which would make the
+  // heap numbers below meaningless.
+  args: ['--enable-precise-memory-info'],
+});
 const failures = [];
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
@@ -116,6 +120,29 @@ async function openPage(path, { asHost = false } = {}) {
   state.send = (message) =>
     page.evaluate((m) => window.topdrawerEditor.handleMessage(JSON.stringify(m)), message);
 
+  /**
+   * Times a mount on the page's own clock, not Node's: a `Date.now()` span
+   * around `page.goto`/`send` includes IPC and Playwright overhead.
+   */
+  state.measureMount = (message) =>
+    page.evaluate(async (m) => {
+      const start = performance.now();
+      window.topdrawerEditor.handleMessage(JSON.stringify(m));
+      await new Promise((resolve) => {
+        const poll = () =>
+          document.querySelector('.ProseMirror') ? resolve() : requestAnimationFrame(poll);
+        poll();
+      });
+      return performance.now() - start;
+    }, message);
+
+  /** Page load as the browser reports it (Navigation Timing). */
+  state.pageLoadMs = () =>
+    page.evaluate(() => {
+      const entry = performance.getEntriesByType('navigation')[0];
+      return entry ? entry.loadEventEnd - entry.startTime : null;
+    });
+
   return state;
 }
 
@@ -150,9 +177,14 @@ try {
 
   const harnessChanged = async () =>
     (await harness.log()).filter((line) => line.includes('"changed"')).length;
-  check('harness: load emits no changed', (await harnessChanged()) === 0, `${await harnessChanged()} message(s)`);
+  const changedOnLoad = await harnessChanged();
+  check('harness: load emits no changed', changedOnLoad === 0, `${changedOnLoad} message(s)`);
 
+  // Typing must reach the host as one debounced change. The debounce plus
+  // Playwright's own dispatch make a fixed sleep racy, so wait for the message
+  // and then confirm a settle period produced no second one.
   await harness.page.locator('.ProseMirror').click();
+  // Click alone is not guaranteed to leave the contenteditable focused.
   await harness.page.evaluate(() => document.querySelector('.ProseMirror')?.focus());
   await harness.page.keyboard.press('End');
   await harness.page.keyboard.type(' typed');
@@ -196,7 +228,12 @@ try {
 
   await harness.page.locator('#editor a[href]').first().click();
   await harness.page.waitForTimeout(300);
-  check('harness: plain click does not open a link', (await openedLinks()) === 0);
+  const linksAfterPlainClick = await openedLinks();
+  check(
+    'harness: plain click does not open a link',
+    linksAfterPlainClick === 0,
+    `${linksAfterPlainClick} openLink message(s)`,
+  );
   check(
     'harness: plain click does not navigate',
     (await harness.page.evaluate(() => location.pathname)).includes('harness'),
@@ -206,10 +243,11 @@ try {
   // where the handler's ctrlKey branch is the one that fires.
   await harness.page.locator('#editor a[href]').first().click({ modifiers: ['Control'] });
   await harness.page.waitForTimeout(300);
+  const linksAfterCtrlClick = await openedLinks();
   check(
     'harness: Ctrl-click opens the link externally',
-    (await openedLinks()) === 1,
-    `${await openedLinks()} openLink message(s)`,
+    linksAfterCtrlClick === 1,
+    `${linksAfterCtrlClick} openLink message(s)`,
   );
 
   await harness.page.selectOption('#corpus', 'hostile');
@@ -243,10 +281,14 @@ try {
   // Section 2: the shipped page, loaded the way a host loads it.
   // ---------------------------------------------------------------------------
   const production = await openPage('/dist/editor.html', { asHost: true });
-  const mountStart = Date.now();
-  await production.send({ type: 'initialize', markdown: '# Note\n\ntyped text\n', theme: 'light', platform: 'linux', revision: 1 });
-  await production.page.waitForSelector('.ProseMirror', { timeout: 15000 });
-  const mountMs = Date.now() - mountStart;
+  const pageLoadMs = await production.pageLoadMs();
+  const mountMs = await production.measureMount({
+    type: 'initialize',
+    markdown: '# Note\n\ntyped text\n',
+    theme: 'light',
+    platform: 'linux',
+    revision: 1,
+  });
 
   await production.read();
   check('production: ready handshake received by host', production.ofType('ready').length === 1);
@@ -276,11 +318,14 @@ try {
   );
 
   // Warm reopen: assets are cached, so this is what a drawer reopen costs.
-  const warmStart = Date.now();
   await production.page.reload();
-  await production.send({ type: 'initialize', markdown: '# Note\n', theme: 'light', platform: 'linux', revision: 1 });
-  await production.page.waitForSelector('.ProseMirror', { timeout: 15000 });
-  const warmMs = Date.now() - warmStart;
+  const warmMs = await production.measureMount({
+    type: 'initialize',
+    markdown: '# Note\n',
+    theme: 'light',
+    platform: 'linux',
+    revision: 1,
+  });
 
   // Repeated open/close must not grow the heap: the host creates and destroys
   // the editor on every drawer open and mode switch.
@@ -302,9 +347,9 @@ try {
   const heapAfter = production.heap;
 
   console.log('\nmeasurements (headless Chromium over http on a CI runner)');
-  console.log(`  page load (navigate, assets included): ${production.loadMs} ms`);
-  console.log(`  mount after initialize:                ${mountMs} ms`);
-  console.log(`  warm reopen (reload + initialize):     ${warmMs} ms`);
+  console.log(`  page load (Navigation Timing): ${pageLoadMs === null ? 'unavailable' : `${Math.round(pageLoadMs)} ms`}`);
+  console.log(`  mount after initialize:        ${mountMs.toFixed(0)} ms (page clock)`);
+  console.log(`  warm reopen (reload + init):   ${warmMs.toFixed(0)} ms (page clock)`);
   if (heapBefore !== null && heapAfter !== null) {
     const growthKb = (heapAfter - heapBefore) / 1024;
     console.log(`  heap after 10 document swaps:           ${(heapAfter / 1048576).toFixed(1)} MiB (${growthKb >= 0 ? '+' : ''}${growthKb.toFixed(0)} KiB vs after first mount)`);
@@ -316,6 +361,32 @@ try {
   } else {
     console.log('  heap: performance.memory unavailable in this engine, not measured');
   }
+
+  // How a host loads the page: file URL with read access scoped to dist/, or a
+  // custom scheme. This decides which one the app should use, because a CSP of
+  // `script-src 'self'` depends on the document having a real origin. Reported
+  // rather than asserted until the answer is known.
+  const filePage = await openPage(`file://${process.cwd()}/dist/editor.html`, { asHost: true });
+  await filePage.page.waitForTimeout(300);
+  await filePage.read();
+  let fileMounted = false;
+  try {
+    await filePage.measureMount({
+      type: 'initialize',
+      markdown: '# Note\n',
+      theme: 'light',
+      platform: 'macos',
+      revision: 1,
+    });
+    fileMounted = true;
+  } catch {
+    fileMounted = false;
+  }
+  console.log('\nfile:// load (a host may load the page this way)');
+  console.log(`  editor mounted:      ${fileMounted ? 'yes' : 'no'}`);
+  console.log(`  ready handshake:     ${filePage.ofType('ready').length === 1 ? 'received' : 'MISSING'}`);
+  console.log(`  CSP violations:      ${filePage.cspViolations.length === 0 ? 'none' : filePage.cspViolations.join(', ')}`);
+  if (filePage.problems.length > 0) console.log(`  page problems:       ${filePage.problems.join(' | ')}`);
 
   if (failures.length) await dumpDiagnostics(harness, 'harness');
 } catch (error) {

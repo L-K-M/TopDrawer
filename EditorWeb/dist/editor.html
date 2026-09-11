@@ -5,12 +5,17 @@
   the web view this directory.
 
   Security posture, reflected in the CSP below:
-  - no inline script (the harness and this page are the only documents loaded);
-  - no network of any kind, including images and fonts (`connect-src 'none'`);
-  - no frames, objects, or plugins, and navigation is intercepted in script so
-    the web view can never leave this document;
+  - no inline script: the bundle is the only script, loaded from this directory;
+  - no outbound requests: `connect-src 'none'`, and `img-src` allows only
+    same-directory and data: URLs, so an image in a note cannot phone home;
+  - no frames, objects, plugins, fonts or form submission, and no base URL to
+    rewrite relative links;
   - `style-src 'unsafe-inline'` is required and intentional: ProseMirror writes
     inline style attributes (table widths, drag previews, tooltip placement).
+
+  Navigating away is prevented in the editor script, not by CSP (the CSP has no
+  top-level navigation directive to lean on): anchor clicks are intercepted and
+  only an explicit Cmd/Ctrl-click on an http(s) link is forwarded to the host.
 
   The host is expected to load this file with read access limited to its own
   directory, inject nothing into it, and talk to it only through the bridge in

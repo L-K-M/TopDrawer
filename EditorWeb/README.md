@@ -20,7 +20,7 @@ Markdown out; the host app stays authoritative for persistence.
 
 ```
 dist/editor.html    the page a host loads
-     editor.js      the bundle
+dist/editor.js      the bundle
 dist/editor.css
 ```
 
