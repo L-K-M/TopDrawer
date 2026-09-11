@@ -44,45 +44,58 @@ for (const file of ['dist/editor.js', 'dist/editor.css']) {
 const ALLOWED_LICENSES = new Set([
   'MIT',
   'ISC',
-  'BSD-2-Clause',
-  'BSD-3-Clause',
-  'Apache-2.0',
-  '(MPL-2.0 OR Apache-2.0)',
+  'BSD-2-CLAUSE',
+  'BSD-3-CLAUSE',
+  'APACHE-2.0',
+  '(MPL-2.0 OR APACHE-2.0)',
   '(MIT OR CC0-1.0)',
 ]);
 
+/** package.json license fields vary in case and spacing; compare normalized. */
+const normalizeLicense = (license) =>
+  String(license ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
 // License inventory is part of the build so it cannot drift from what ships.
+// Keyed by resolved directory, not bare name: the same package can ship twice
+// (top-level and nested) at different versions and licenses, and keying by name
+// would check only whichever copy was enumerated first.
 const packages = new Map();
 for (const input of Object.keys(result.metafile.inputs)) {
-  // Take the last `node_modules/` segment: a nested dependency
-  // (node_modules/a/node_modules/b) ships b, not a.
   const segments = input.split('node_modules/');
   if (segments.length < 2) continue;
   const match = segments[segments.length - 1].match(/^((@[^/]+\/)?[^/]+)/);
   if (!match) continue;
+
   const name = match[1];
-  if (packages.has(name)) continue;
+  const packageDir = `${input.slice(0, input.length - segments[segments.length - 1].length)}${name}`;
+  if (packages.has(packageDir)) continue;
+
   try {
-    const manifest = JSON.parse(readFileSync(`node_modules/${name}/package.json`, 'utf8'));
+    const manifest = JSON.parse(readFileSync(`${packageDir}/package.json`, 'utf8'));
     const license =
       typeof manifest.license === 'string' ? manifest.license : JSON.stringify(manifest.license);
-    packages.set(name, [manifest.version ?? '?', license || 'UNKNOWN']);
+    packages.set(packageDir, [name, manifest.version ?? '?', license || 'UNKNOWN']);
   } catch {
-    packages.set(name, ['?', 'UNKNOWN']);
+    packages.set(packageDir, [name, '?', 'UNKNOWN']);
   }
 }
 
-const unlicensed = [...packages.entries()].filter(([, [, license]]) => !ALLOWED_LICENSES.has(license));
+const unlicensed = [...packages.values()].filter(
+  ([, , license]) => !ALLOWED_LICENSES.has(normalizeLicense(license)),
+);
 if (unlicensed.length > 0) {
   throw new Error(
-    `unreviewed license(s) in the bundle: ${unlicensed.map(([n, [, l]]) => `${n} (${l})`).join(', ')}`,
+    `unreviewed license(s) in the bundle: ${unlicensed.map(([n, , l]) => `${n} (${l})`).join(', ')}`,
   );
 }
 
 // Codepoint order, not locale order: localeCompare depends on the host locale
 // and would break the byte-identical rebuild guarantee.
-const byName = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-const rows = [...packages.entries()].sort((a, b) => byName(a[0], b[0]));
+const byName = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+const rows = [...packages.values()].sort(byName);
 writeFileSync(
   'LICENSES.md',
   [
@@ -93,7 +106,7 @@ writeFileSync(
     '',
     '| Package | Version | License |',
     '|---|---|---|',
-    ...rows.map(([name, [version, license]]) => `| ${name} | ${version} | ${license} |`),
+    ...rows.map(([name, version, license]) => `| ${name} | ${version} | ${license} |`),
     '',
   ].join('\n'),
 );

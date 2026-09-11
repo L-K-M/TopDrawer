@@ -91,9 +91,14 @@ body {
 }
 
 /* Crepe's reset removes every focus ring; restore one for interactive chrome
-   so keyboard users can see where they are (WCAG 2.4.7). */
+   so keyboard users can see where they are (WCAG 2.4.7). The extra selectors
+   cover the controls Crepe renders outside the toolbar/top-bar classes. */
 .milkdown .toolbar-item:focus-visible,
 .milkdown .top-bar-item:focus-visible,
+.milkdown .top-bar-heading-button:focus-visible,
+.milkdown .top-bar-heading-option:focus-visible,
+.milkdown .language-list-item:focus-visible,
+.milkdown .milkdown-link-edit .input-area:focus-visible,
 .milkdown button:focus-visible,
 .milkdown input:focus-visible {
   outline: 2px solid var(--crepe-color-primary, #b45309);

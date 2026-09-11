@@ -248,6 +248,10 @@ Still to verify on real hardware before Phase 2 (all need a GUI session):
 WKWebView focus from a non-activating panel, WebKitGTK embedding, IME and
 spell-check, VoiceOver/Orca, and cold/warm open timings in-app.
 
+Known compatibility item for Phase 2: Crepe's stylesheets rely on `color-mix()`
+(Safari 16.2+/WebKit 16.2+), while macOS 13.0–13.2 ship WebKit 16.1. Either the
+notes editor's minimum rises to 13.3 or fallback colors ship alongside it.
+
 Two measured costs shape Phase 2 and are documented in `EditorWeb/README.md`:
 raw HTML and images are kept as literal text and get escaped by remark on the
 first edit (a byte-exact inert node view, and local/data image rendering, would

@@ -20,17 +20,22 @@ const CORPUS = {
   unicode: '# Héllo 世界\n\nעברית וערבית mixed with english text.\n\nEmoji 🍼 in a paragraph.\n',
 };
 
-// Offline gate: count only real network schemes, including resources fetched
-// before the observer registered (buffered) and under file:// where
-// location.origin is "null".
+// Offline gate: count cross-origin network fetches only. Same-origin entries
+// are the harness's own assets when it is served over HTTP, and resources
+// fetched before the observer registered are included via `buffered`.
 let netCount = 0;
 const netCountEl = document.getElementById('net-count');
 function countResource(entry) {
   try {
-    const { protocol } = new URL(entry.name);
-    if (protocol === 'http:' || protocol === 'https:') netCount += 1;
+    const { origin, protocol } = new URL(entry.name);
+    if (protocol !== 'http:' && protocol !== 'https:') return;
+    // Under file:// both sides are the opaque origin "null", which compares
+    // equal, so local assets are excluded there too.
+    if (origin === location.origin) return;
+    netCount += 1;
   } catch {
     // Non-URL entry names cannot be network fetches.
+    return;
   }
   netCountEl.textContent = String(netCount);
 }

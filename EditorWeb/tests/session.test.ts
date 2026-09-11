@@ -132,17 +132,23 @@ describe('EditorSession', () => {
     ]);
   });
 
-  it('keeps a pending edit when the host retries the pre-edit document', async () => {
+  it('ignores an identical host retry and keeps the mounted editor', async () => {
     const { transport, container, session } = newSession();
     initialize(session, 'original\n', 1);
     await settled(container, 'original');
+    const editorBefore = container.querySelector('.ProseMirror');
 
-    // Simulate the host re-sending the same revision/body after a mount.
+    // Same revision and text: a redelivery must not rebuild.
     handleMessage(JSON.stringify({ type: 'replaceDocument', markdown: 'original\n', revision: 1 }));
     await new Promise((r) => setTimeout(r, 50));
 
-    // The retry is dropped, so no edit is reported and the editor survives.
+    expect(container.querySelector('.ProseMirror')).toBe(editorBefore);
     expect(transport.ofType('changed')).toEqual([]);
-    expect(container.querySelector('.ProseMirror')).toBeTruthy();
   });
+
+  // The dirty-retry case (a retry arriving while an edit is pending) cannot be
+  // reproduced here: happy-dom has no input pipeline, so no local edit can be
+  // simulated. It is covered end to end by tests/smoke.mjs, which types into a
+  // real engine. The guard itself no longer depends on dirtiness: an identical
+  // revision and body is dropped regardless of pending state.
 });

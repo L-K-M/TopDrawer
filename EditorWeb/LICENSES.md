@@ -15,7 +15,9 @@ actually ships in the bundle is listed. Do not hand-edit.
 | @codemirror/lint | 6.9.7 | MIT |
 | @codemirror/search | 6.7.2 | MIT |
 | @codemirror/state | 6.5.2 | MIT |
+| @codemirror/state | 6.7.4 | MIT |
 | @codemirror/view | 6.38.2 | MIT |
+| @codemirror/view | 6.43.11 | MIT |
 | @floating-ui/core | 1.8.0 | MIT |
 | @floating-ui/dom | 1.8.0 | MIT |
 | @floating-ui/utils | 0.2.12 | MIT |

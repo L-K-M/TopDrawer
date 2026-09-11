@@ -67,8 +67,11 @@ jobs:
 
       # Regenerate the committed artifacts and fail on any difference, so dist/
       # (and LICENSES.md) can never drift from the sources that produced them.
+      # Staged, not plain `git diff`: the latter ignores untracked files, so a
+      # newly emitted artifact would slip through.
       - name: Verify committed bundle is reproducible
         working-directory: EditorWeb
         run: |
           npm run build
-          git diff --exit-code -- dist LICENSES.md
+          git add --all dist LICENSES.md
+          git diff --cached --exit-code -- dist LICENSES.md

@@ -160,7 +160,9 @@ try {
     script: document.querySelectorAll('#editor script, #editor iframe').length,
     img: document.querySelectorAll('#editor img').length,
     handlers: document.querySelectorAll('#editor [onerror], #editor [onclick]').length,
-    text: (document.querySelector('#editor .ProseMirror')?.textContent ?? '').slice(0, 120),
+    // Full text: the non-vacuity assertions below must not depend on a
+    // truncation constant chosen for logging.
+    text: document.querySelector('#editor .ProseMirror')?.textContent ?? '',
   }));
   check(
     'hostile markup renders inertly',
