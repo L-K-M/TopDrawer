@@ -93,11 +93,11 @@ body {
   min-height: calc(100% - 20px);
 }
 
-/* Crepe's reset removes every focus ring; restore one for all interactive
-   chrome (WCAG 2.4.7). This targets the same selector as Crepe's reset and is
-   emitted later, so it wins the tie and covers controls the enumerated rules
-   below would miss. The editing surface is excluded: the caret is its
-   indicator. */
+/* Crepe's reset removes every focus ring; restore it for interactive chrome
+   (WCAG 2.4.7). This targets the same selector as Crepe's reset and is emitted
+   later, so it wins the tie and covers every focusable control, including ones
+   enumerated selectors would miss. The editing surface is excluded: the caret
+   is its indicator. */
 .milkdown :focus-visible {
   outline: 2px solid var(--crepe-color-primary, #b45309);
   outline-offset: -2px;
