@@ -21,7 +21,7 @@ describe('support table generation', () => {
   it(
     'writes SUPPORT.md and reports no load-time change',
     async () => {
-    let loadEmittedChange = false;
+    const offenders: string[] = [];
     const lines: string[] = [
       '# Rich-mode normalization support table',
       '',
@@ -35,6 +35,10 @@ describe('support table generation', () => {
     ];
 
     for (const fixture of CORPUS) {
+      // Per fixture, not shared across the loop: a row has to name the fixture
+      // that actually misbehaved, or the first offender marks every row after it
+      // and the table stops pointing at the bug it is there to expose.
+      let loadEmittedChange = false;
       const root = document.createElement('div');
       document.body.appendChild(root);
       const editor = await RichEditor.mount(root, {
@@ -52,6 +56,7 @@ describe('support table generation', () => {
       lines.push(
         `| ${fixture.name} | ${loadEmittedChange ? 'YES — BUG' : 'no'} | ${roundTrip} |`,
       );
+      if (loadEmittedChange) offenders.push(fixture.name);
       await editor.destroy();
       root.remove();
     }
@@ -59,7 +64,7 @@ describe('support table generation', () => {
 
     // Assert the tracked fact, not the formatted table: re-parsing the output
     // would pass if the marker text ever changed.
-    expect(loadEmittedChange, 'a load must not report a change').toBe(false);
+    expect(offenders, 'a load must not report a change').toEqual([]);
 
     writeFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'SUPPORT.md'), lines.join('\n'));
   },

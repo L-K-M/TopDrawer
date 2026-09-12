@@ -32,7 +32,9 @@ const result = await build({
   loader: { '.css': 'css' },
 });
 
-// Recorded so `npm run licenses` reproduces LICENSES.md from the same build.
+// The esbuild metafile: the input graph the license inventory below is derived
+// from, kept on disk (uncommitted) so a surprising LICENSES.md row can be traced
+// back to the import that pulled the package in.
 writeFileSync('dist/meta.json', JSON.stringify(result.metafile));
 
 // The shipped page sits beside the bundle so a host copies one directory.
