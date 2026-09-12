@@ -1,9 +1,10 @@
 name: EditorWeb CI
 
-# The notes editor bundle ships as a committed artifact (EditorWeb/dist), so it
-# needs the same treatment as generated code anywhere else: prove on every push
-# that the committed bundle is exactly what the pinned lockfile builds, and that
-# the protocol/corpus/session tests pass.
+# The notes editor ships committed generated artifacts (EditorWeb/dist, plus
+# LICENSES.md and SUPPORT.md), so they need the same treatment as generated
+# code anywhere else: prove on every push that each committed artifact is
+# exactly what the pinned lockfile produces, and that the protocol/corpus/
+# session tests pass.
 on:
   pull_request:
     paths:
@@ -65,13 +66,22 @@ jobs:
           npx playwright install --with-deps chromium
           npm run smoke
 
-      # Regenerate the committed artifacts and fail on any difference, so dist/
-      # (and LICENSES.md) can never drift from the sources that produced them.
-      # Staged, not plain `git diff`: the latter ignores untracked files, so a
-      # newly emitted artifact would slip through.
-      - name: Verify committed bundle is reproducible
+      # Regenerate the committed artifacts and fail on any difference, so
+      # dist/, LICENSES.md and SUPPORT.md can never drift from the sources that
+      # produced them. Staged, not plain `git diff`: the latter ignores
+      # untracked files, so a newly emitted artifact would slip through.
+      - name: Verify committed artifacts are reproducible
         working-directory: EditorWeb
         run: |
           npm run build
-          git add --all dist LICENSES.md
-          git diff --cached --exit-code -- dist LICENSES.md
+          # SUPPORT.md is written by the support-table test, not by the build,
+          # so regenerate it here rather than depending on the earlier `npm
+          # test` step staying ahead of this one.
+          npm run gen:support
+          git add --all dist LICENSES.md SUPPORT.md
+          if ! git diff --cached --exit-code -- dist LICENSES.md SUPPORT.md; then
+            echo "::error::Committed artifacts differ from what the sources produce."
+            echo "Regenerate with: cd EditorWeb && npm run build && npm run gen:support"
+            echo "then commit dist/, LICENSES.md and SUPPORT.md."
+            exit 1
+          fi
