@@ -81,6 +81,40 @@ final class DrawerModelTests: XCTestCase {
                        .occupiedItem(id: topLevel.id, topLevelPlacementSlot: nil))
     }
 
+    // MARK: Notes
+
+    /// `notes` is the editor's input on every update pass, so an edit that is not
+    /// mirrored here is handed straight back to the editor as the pre-edit text.
+    /// `NotesEditorHostSessionTests.testARefreshAfterAnEditSendsNothingWhenTheDrawerMirrorsIt`
+    /// runs the same mirror through the reconciler and shows what the miss costs.
+    func testNotesEditIsMirroredForTheOpenDocument() {
+        let model = DrawerModel()
+        let note = UUID()
+        model.documentID = note
+        model.notes = "# a"
+
+        model.recordNotesEdit("# a typed", forDocument: note)
+        XCTAssertEqual(model.notes, "# a typed")
+    }
+
+    /// An edit the editor reported for the note the drawer has already left is still
+    /// persisted by the controller, but it is not this drawer's text any more.
+    func testNotesEditForAnotherDocumentIsIgnored() {
+        let model = DrawerModel()
+        model.documentID = UUID()
+        model.notes = "# b"
+
+        model.recordNotesEdit("# a, edited just before the switch", forDocument: UUID())
+        XCTAssertEqual(model.notes, "# b")
+    }
+
+    /// And with no notes tab open there is nothing to mirror into.
+    func testNotesEditWithNoOpenDocumentIsIgnored() {
+        let model = DrawerModel()
+        model.recordNotesEdit("# stray", forDocument: UUID())
+        XCTAssertEqual(model.notes, "")
+    }
+
     // MARK: Groups
 
     func testVisibleItemsFollowsTheOpenGroup() {
