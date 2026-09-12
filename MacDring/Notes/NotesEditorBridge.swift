@@ -11,7 +11,7 @@ import Foundation
 enum NotesEditorProtocol {
 
     /// The version this host speaks. Any change to the message shapes bumps it.
-    static let version = 1
+    static let version = 2
 
     /// Name of the `WKScriptMessageHandler` the page posts to
     /// (`window.webkit.messageHandlers.topdrawer`), which is also the name
@@ -81,6 +81,8 @@ enum NotesEditorHostMessage: Equatable {
     /// editor, e.g. by the other drawer or a device sync).
     case replaceDocument(markdown: String, revision: Int)
     case setTheme(theme: String)
+    /// Shows or hides the rich-mode formatting bar.
+    case setFormattingBar(formattingBar: String)
     case focus
     /// Asks the editor to report any pending edit right away. The drawer close
     /// path uses this, because hiding a web view does not reliably produce a
@@ -100,6 +102,8 @@ enum NotesEditorHostMessage: Equatable {
             return ["type": "replaceDocument", "markdown": markdown, "revision": revision]
         case let .setTheme(theme):
             return ["type": "setTheme", "theme": theme]
+        case let .setFormattingBar(formattingBar):
+            return ["type": "setFormattingBar", "formattingBar": formattingBar]
         case .focus:
             return ["type": "focus"]
         case .flush:

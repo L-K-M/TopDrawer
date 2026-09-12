@@ -9,6 +9,7 @@ import SwiftUI
 struct NotesEditorPane: View {
 
     @ObservedObject var model: DrawerModel
+    @ObservedObject var preferences: Preferences
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -16,6 +17,7 @@ struct NotesEditorPane: View {
             documentID: model.documentID,
             markdown: model.notes,
             theme: NotesEditorTheme(isDark: colorScheme == .dark),
+            formattingBar: NotesEditorFormattingBar(isVisible: preferences.notesFormattingBarVisible),
             // One call, because mirroring and persisting have to stay together:
             // `model.notes` is this view's own input on the next update pass, so an
             // edit that is only persisted comes straight back at the editor as a

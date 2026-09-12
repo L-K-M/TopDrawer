@@ -50,6 +50,16 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(Preferences(defaults: defaults).freshDirectScan)
     }
 
+    func testNotesFormattingBarDefaultsHiddenAndRoundTrips() {
+        // Hidden by default: a notes drawer is mostly text, and the bar wraps to two
+        // rows at drawer widths.
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertFalse(prefs.notesFormattingBarVisible)
+
+        prefs.notesFormattingBarVisible = true
+        XCTAssertTrue(Preferences(defaults: defaults).notesFormattingBarVisible)
+    }
+
     func testDrawerTranslucencyBackingOpacityRunsTranslucentToSolid() {
         XCTAssertEqual(DrawerTranslucency.translucent.backingOpacity, 0)
         XCTAssertLessThan(DrawerTranslucency.translucent.backingOpacity, DrawerTranslucency.frosted.backingOpacity)

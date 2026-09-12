@@ -41,6 +41,8 @@
   --crepe-color-selected: rgba(180, 83, 9, 0.16);
   --crepe-color-inline-area: rgba(0, 0, 0, 0.05);
   --crepe-base-font-size: 13px;
+  --td-canvas: #f6f3ee;
+  color-scheme: light;
 }
 
 :root[data-td-theme='dark'] {
@@ -62,13 +64,31 @@
   --crepe-color-selected: rgba(244, 189, 111, 0.22);
   --crepe-color-inline-area: rgba(255, 255, 255, 0.06);
   --crepe-base-font-size: 13px;
+  --td-canvas: #201b16;
+  color-scheme: dark;
 }
 
+/* Before the bundle runs there is no `data-td-theme` yet, and the canvas would
+   paint light inside a dark drawer. The web view inherits the host application's
+   appearance, so follow it until the host's theme arrives. Canvas only: the
+   palette above is driven by `data-td-theme`, which the session sets from the
+   same signal before the editor mounts. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-td-theme]) {
+    --td-canvas: #201b16;
+    color-scheme: dark;
+  }
+}
+
+/* An opaque canvas, not `transparent`. WebKit paints an opaque base behind a
+   transparent page unless the web view opts out through the private
+   `drawsBackground` key, so a transparent page reads as white in the drawer,
+   which is unreadable against the dark palette. */
 html,
 body {
   margin: 0;
   height: 100%;
-  background: transparent;
+  background: var(--td-canvas);
   color: var(--crepe-color-on-background);
   font-family: var(--td-font);
 }
@@ -78,9 +98,26 @@ body {
   overflow: auto;
 }
 
+/* A column flex box that grows with the note, not a fixed `height: 100%` box.
+   The top bar is `position: sticky`, so its containing block decides how far it
+   can stay pinned: at exactly one drawer height it unpinned and scrolled away as
+   soon as the note was longer than that. */
 .milkdown {
   background: transparent;
-  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The formatting bar is opt-in. Crepe assigns `style.display = ''` on every
+   editor update rather than an inline value, so a stylesheet rule decides. */
+.milkdown .milkdown-top-bar {
+  display: none;
+}
+
+:root[data-td-formatting-bar='visible'] .milkdown .milkdown-top-bar {
+  display: flex;
+  flex: 0 0 auto;
 }
 
 /* Two classes on the element so this beats Crepe's own `.milkdown .ProseMirror`
@@ -90,7 +127,10 @@ body {
   padding: 10px;
   outline: none;
   font-family: var(--td-font);
-  min-height: calc(100% - 20px);
+  /* Fill whatever the top bar leaves, so a click anywhere in an empty drawer
+     lands in the editor. A percentage `min-height` cannot do this any more:
+     the flex parent's height is indefinite, so it would resolve to zero. */
+  flex: 1 0 auto;
 }
 
 /* Crepe's reset removes every focus ring; restore it for interactive chrome

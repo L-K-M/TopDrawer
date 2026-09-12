@@ -20,7 +20,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// anything evaluated before the bundle has run.
     func testNothingIsSentBeforeReady() {
         let session = NotesEditorHostSession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
 
         XCTAssertNil(session.nextMessage())
         XCTAssertFalse(session.isInSync)
@@ -33,11 +33,11 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// drawer does many times a second — must not re-send the document.
     func testRepeatedIdenticalUpdatesSendNothing() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         for _ in 0..<5 {
-            session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+            session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
             XCTAssertNil(session.nextMessage(), "an unrelated invalidation must not reset the editor")
         }
         XCTAssertTrue(session.isInSync)
@@ -46,11 +46,11 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// The user's own edit must not be echoed back as a replacement.
     func testEditorChangeIsNotEchoedBack() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         session.recordEditorChange("# a typed", documentID: tabA.uuidString, editorRevision: 1)
-        session.setDesired(documentID: tabA, markdown: "# a typed", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a typed", theme: .light, formattingBar: .hidden)
 
         XCTAssertNil(session.nextMessage(), "the editor already shows what the host was told")
         XCTAssertEqual(session.markdown, "# a typed")
@@ -68,7 +68,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
         model.notes = "# a"
 
         let session = readySession()
-        session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light)
+        session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         // The editor reports an edit, and the drawer handles it the one way the pane
@@ -80,17 +80,17 @@ final class NotesEditorHostSessionTests: XCTestCase {
 
         // A screen change, another tab's mutation, a running-app update: the pane is
         // re-evaluated with the model's inputs and must produce no message.
-        session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light)
+        session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light, formattingBar: .hidden)
         XCTAssertNil(session.nextMessage(), "a refresh must not push the pre-edit text back")
     }
 
     /// A different tab is a different document, and gets a fresh revision.
     func testSwitchingDocumentInitializesWithANewRevision() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertEqual(session.nextMessage(), .initialize(markdown: "# a", theme: "light", revision: 1, documentID: tabA.uuidString))
 
-        session.setDesired(documentID: tabB, markdown: "# b", theme: .light)
+        session.setDesired(documentID: tabB, markdown: "# b", theme: .light, formattingBar: .hidden)
         XCTAssertEqual(session.nextMessage(), .initialize(markdown: "# b", theme: "light", revision: 2, documentID: tabB.uuidString))
     }
 
@@ -99,7 +99,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// would put text into a note the editor was never given.
     func testEditNamingANeverSentDocumentIsRejected() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         XCTAssertNil(session.recordEditorChange("# text meant for another note",
@@ -114,10 +114,10 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// become the current note's text.
     func testLateEditAfterSwitchIsPersistedToItsOwnNoteOnly() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
-        session.setDesired(documentID: tabB, markdown: "# b", theme: .light)
+        session.setDesired(documentID: tabB, markdown: "# b", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         // The editor reports the edit it had in flight for the note just left; the
@@ -136,7 +136,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// lost: applying it would revert the newer text.
     func testStaleEditorRevisionIsRejected() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         XCTAssertEqual(session.recordEditorChange("# a v2", documentID: tabA.uuidString,
@@ -150,11 +150,11 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// editor that is still holding the previous note.
     func testNoDesiredDocumentIsNotInSyncWithADeliveredOne() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
         XCTAssertTrue(session.isInSync)
 
-        session.setDesired(documentID: nil, markdown: "", theme: .light)
+        session.setDesired(documentID: nil, markdown: "", theme: .light, formattingBar: .hidden)
         XCTAssertNil(session.nextMessage())
         XCTAssertFalse(session.isInSync)
         XCTAssertEqual(session.deliveredDocumentID, tabA, "the editor still shows tabA")
@@ -163,7 +163,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// And an edit for the document on screen is accepted, naming it back.
     func testEditForTheShownDocumentIsAccepted() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         XCTAssertEqual(session.recordEditorChange("# a typed", documentID: tabA.uuidString, editorRevision: 1), tabA)
@@ -175,10 +175,10 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// is unchanged, so the editor keeps its mode and scroll position.
     func testExternalTextChangeReplacesTheDocument() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
-        session.setDesired(documentID: tabA, markdown: "# a edited elsewhere", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a edited elsewhere", theme: .light, formattingBar: .hidden)
         XCTAssertEqual(session.nextMessage(),
                        .replaceDocument(markdown: "# a edited elsewhere", revision: 2))
     }
@@ -187,27 +187,72 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// away the cursor and the undo stack.
     func testThemeChangeSendsOnlyTheTheme() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .dark)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .dark, formattingBar: .hidden)
         XCTAssertEqual(session.nextMessage(), .setTheme(theme: "dark"))
         XCTAssertNil(session.nextMessage())
         XCTAssertTrue(session.isInSync)
+    }
+
+    /// The formatting bar is chrome, so it travels on its own message too: toggling
+    /// it must not cost the cursor or the undo stack.
+    func testFormattingBarIsSentAfterTheDocumentAndOnlyWhenItChanges() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .visible)
+
+        // The document first: `initialize` does not carry the bar, so the reconciler
+        // follows it with one message and then agrees with the editor.
+        XCTAssertEqual(session.nextMessage(),
+                       .initialize(markdown: "# a", theme: "light", revision: 1,
+                                   documentID: tabA.uuidString))
+        XCTAssertEqual(session.nextMessage(), .setFormattingBar(formattingBar: "visible"))
+        XCTAssertNil(session.nextMessage())
+        XCTAssertTrue(session.isInSync)
+
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
+        XCTAssertEqual(session.nextMessage(), .setFormattingBar(formattingBar: "hidden"))
+        XCTAssertNil(session.nextMessage())
+    }
+
+    /// The editor starts with the bar hidden, so the host that also wants it hidden
+    /// must say nothing at all: an extra message per document would be pure traffic.
+    func testAHiddenFormattingBarIsNeverAnnounced() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
+
+        XCTAssertNotNil(session.nextMessage())
+        XCTAssertNil(session.nextMessage())
+        XCTAssertTrue(session.isInSync)
+    }
+
+    /// A reload starts a page whose bar is hidden again, so a host that wants it
+    /// shown has to say so again even though its own wish never changed.
+    func testFormattingBarIsResentAfterAReload() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .visible)
+        while session.nextMessage() != nil {}
+
+        session.markReady()
+        var messages: [NotesEditorHostMessage] = []
+        while let message = session.nextMessage() { messages.append(message) }
+
+        XCTAssertTrue(messages.contains(.setFormattingBar(formattingBar: "visible")))
     }
 
     /// Revisions must strictly increase: the editor drops anything at or below the
     /// revision it has already applied, so a repeated value would be ignored.
     func testRevisionsAreStrictlyIncreasingAcrossMessages() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         var revisions: [Int] = []
         if case let .initialize(_, _, revision, _)? = session.nextMessage() { revisions.append(revision) }
 
-        session.setDesired(documentID: tabA, markdown: "# b", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# b", theme: .light, formattingBar: .hidden)
         if case let .replaceDocument(_, revision)? = session.nextMessage() { revisions.append(revision) }
 
-        session.setDesired(documentID: tabB, markdown: "# c", theme: .light)
+        session.setDesired(documentID: tabB, markdown: "# c", theme: .light, formattingBar: .hidden)
         if case let .initialize(_, _, revision, _)? = session.nextMessage() { revisions.append(revision) }
 
         XCTAssertEqual(revisions, revisions.sorted())
@@ -220,7 +265,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
     /// for numbering lower than the previous page's edits.
     func testReadyAfterAReloadResendsTheDocumentAndAcceptsNewEdits() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
         XCTAssertEqual(session.recordEditorChange("# a v5", documentID: tabA.uuidString,
                                                   editorRevision: 5), tabA)
@@ -228,7 +273,7 @@ final class NotesEditorHostSessionTests: XCTestCase {
         // The page reloads: the editor announces itself again, then the host updates
         // the view exactly as it did before.
         session.markReady()
-        session.setDesired(documentID: tabA, markdown: "# a v5", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a v5", theme: .light, formattingBar: .hidden)
         XCTAssertEqual(session.nextMessage(),
                        .initialize(markdown: "# a v5", theme: "light", revision: 2,
                                    documentID: tabA.uuidString),
@@ -250,12 +295,12 @@ final class NotesEditorHostSessionTests: XCTestCase {
 
     func testHostChangeRecordsTheTextAndSendsIt() {
         let session = readySession()
-        session.setDesired(documentID: tabA, markdown: "# a", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .hidden)
         XCTAssertNotNil(session.nextMessage())
 
         session.recordHostChange("# from disk")
         XCTAssertEqual(session.markdown, "# from disk")
-        session.setDesired(documentID: tabA, markdown: "# from disk", theme: .light)
+        session.setDesired(documentID: tabA, markdown: "# from disk", theme: .light, formattingBar: .hidden)
         XCTAssertEqual(session.nextMessage(), .replaceDocument(markdown: "# from disk", revision: 2))
     }
 

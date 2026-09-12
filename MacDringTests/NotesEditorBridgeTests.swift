@@ -26,6 +26,20 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertEqual(NotesEditorHostMessage.focus.jsonObject["type"] as? String, "focus")
         XCTAssertEqual(NotesEditorHostMessage.flush.jsonObject["type"] as? String, "flush")
         XCTAssertEqual(NotesEditorHostMessage.command(name: "toggleMode").jsonObject["type"] as? String, "command")
+        XCTAssertEqual(NotesEditorHostMessage.setFormattingBar(formattingBar: "visible")
+            .jsonObject["type"] as? String, "setFormattingBar")
+    }
+
+    func testSetFormattingBarCarriesTheVisibility() {
+        let object = NotesEditorHostMessage.setFormattingBar(formattingBar: "visible").jsonObject
+
+        XCTAssertEqual(object["formattingBar"] as? String, "visible")
+    }
+
+    /// The page reports its own version on `ready`, and the host logs a mismatch,
+    /// so the two numbers have to be kept in step by hand when a message is added.
+    func testProtocolVersionMatchesTheBundledEditor() {
+        XCTAssertEqual(NotesEditorProtocol.version, 2)
     }
 
     // MARK: The JavaScript invocation

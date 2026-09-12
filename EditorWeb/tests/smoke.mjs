@@ -231,6 +231,32 @@ try {
   const theme = await harness.page.evaluate(() => document.documentElement.dataset.tdTheme);
   check('harness: setTheme dark applied', theme === 'dark');
 
+  // The dark palette is only legible over a dark canvas. A transparent page is
+  // not enough: the embedder paints an opaque base behind it, which is white.
+  const canvas = await harness.page.evaluate(
+    () => getComputedStyle(document.documentElement).backgroundColor,
+  );
+  check(
+    'harness: dark theme paints a dark canvas',
+    canvas === 'rgb(32, 27, 22)',
+    canvas,
+  );
+
+  // The formatting bar is opt-in. Section 3 covers what it does to the layout
+  // once it is on; this only covers the host switching it.
+  const barVisibility = async () =>
+    harness.page.evaluate(() => {
+      const bar = document.querySelector('.milkdown-top-bar');
+      return bar ? getComputedStyle(bar).display : 'absent';
+    });
+  check('harness: formatting bar hidden by default', (await barVisibility()) === 'none');
+
+  await harness.page.click('#formatting-bar');
+  check('harness: formatting bar shown on request', (await barVisibility()) === 'flex');
+
+  await harness.page.click('#formatting-bar');
+  check('harness: formatting bar hidden again on request', (await barVisibility()) === 'none');
+
   // Links: an editing click must not launch anything, Cmd/Ctrl-click must hand
   // the URL to the host, and the web view must never navigate.
   await harness.page.selectOption('#corpus', 'links');
@@ -433,6 +459,80 @@ try {
       // reported it.
       filePage.problems.length === 0,
     fileDetail,
+  );
+
+  // ---------------------------------------------------------------------------
+  // Section 3: drawer layout of the shipped page, in a drawer-sized viewport.
+  //
+  // Both gates guard the same structural rule: `#editor` scrolls, and
+  // `.milkdown` inside it must grow with the note. The formatting bar is
+  // `position: sticky`, so it can only stay pinned inside its containing block;
+  // when `.milkdown` was exactly one drawer tall the bar unpinned and scrolled
+  // out of view as soon as the note was longer than that. The harness gate above
+  // covers switching the bar on; this one covers the shipped page and the ends of
+  // the scroll range. Growing `.milkdown` costs the percentage `min-height` that
+  // used to stretch the editable, so the second gate keeps the editable filling a
+  // short drawer (a click anywhere in the empty area must land in the editor).
+  // ---------------------------------------------------------------------------
+  const layout = await openPage('/dist/editor.html', { asHost: true });
+  await layout.page.setViewportSize({ width: 520, height: 640 });
+  await layout.send({
+    type: 'initialize',
+    markdown: ['# Long note', ...Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`)].join('\n\n'),
+    theme: 'light',
+    platform: 'linux',
+    documentID: 'layout-note',
+    revision: 1,
+  });
+  await layout.page.waitForSelector('.ProseMirror', { timeout: 15000 });
+  await layout.send({ type: 'setFormattingBar', formattingBar: 'visible' });
+  await layout.page.waitForFunction(
+    () => {
+      const bar = document.querySelector('.milkdown-top-bar');
+      return bar !== null && getComputedStyle(bar).display !== 'none';
+    },
+    null,
+    { timeout: 5000 },
+  );
+
+  const barOffsets = await layout.page.evaluate(() => {
+    const scroller = document.querySelector('#editor');
+    const bar = document.querySelector('.milkdown-top-bar');
+    const scrollportTop = scroller.getBoundingClientRect().top;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    // One drawer height is where the old layout let go; the rest covers the
+    // whole range, including the very bottom.
+    return [0, scroller.clientHeight, Math.round(max / 2), max].map((offset) => {
+      scroller.scrollTop = offset;
+      return Math.round(bar.getBoundingClientRect().top - scrollportTop);
+    });
+  });
+  check(
+    'production: the formatting bar stays pinned at every scroll offset',
+    barOffsets.every((offset) => offset === 0),
+    `bar top at 0/one-drawer/half/end: ${barOffsets.join(', ')}`,
+  );
+
+  await layout.send({ type: 'replaceDocument', markdown: '# Short note\n', revision: 2 });
+  await layout.page.waitForFunction(
+    () => document.querySelector('.ProseMirror')?.textContent?.includes('Short note'),
+    null,
+    { timeout: 5000 },
+  );
+  const shortNote = await layout.page.evaluate(() => {
+    const scroller = document.querySelector('#editor');
+    const editable = document.querySelector('.ProseMirror');
+    return {
+      gapBelowEditable: Math.round(
+        scroller.getBoundingClientRect().bottom - editable.getBoundingClientRect().bottom,
+      ),
+      overflow: scroller.scrollHeight - scroller.clientHeight,
+    };
+  });
+  check(
+    'production: a short note still fills the drawer, without scrolling it',
+    shortNote.gapBelowEditable === 0 && shortNote.overflow === 0,
+    JSON.stringify(shortNote),
   );
 
   if (failures.length) await dumpDiagnostics(harness, 'harness');

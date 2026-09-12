@@ -21,6 +21,8 @@ struct NotesEditorWebView: NSViewRepresentable {
     /// the editor reported. The reconciler decides whether it needs sending.
     let markdown: String
     let theme: NotesEditorTheme
+    /// Whether the editor shows its formatting bar.
+    let formattingBar: NotesEditorFormattingBar
     /// Called with the edited text and the document it belongs to, so the drawer
     /// saves it against that note rather than against whatever tab is open.
     let onChanged: (String, UUID) -> Void
@@ -39,7 +41,8 @@ struct NotesEditorWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.update(documentID: documentID, markdown: markdown, theme: theme)
+        context.coordinator.update(documentID: documentID, markdown: markdown, theme: theme,
+                                   formattingBar: formattingBar)
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: NotesEditorCoordinator) {
@@ -104,7 +107,9 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
         webView.allowsLinkPreview = false
         // The drawer is a vibrancy panel; a white page background would flash over it
         // while the editor loads. Public API (macOS 12+), not the private
-        // `drawsBackground` key.
+        // `drawsBackground` key. That key is also why the loaded page paints an opaque
+        // canvas of its own: without it WebKit puts an opaque white base behind a
+        // transparent page, which is what made the dark palette unreadable.
         webView.underPageBackgroundColor = .clear
         self.webView = webView
         // The drawer may hide at any moment; give it a way to ask for a pending edit.
@@ -119,8 +124,10 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
     /// Reconciles the editor with what the drawer wants shown. Called on every
     /// SwiftUI update pass, so it must be cheap and must not re-send unchanged
     /// state — see `NotesEditorHostSession`.
-    func update(documentID: UUID?, markdown: String, theme: NotesEditorTheme) {
-        session.setDesired(documentID: documentID, markdown: markdown, theme: theme)
+    func update(documentID: UUID?, markdown: String, theme: NotesEditorTheme,
+                formattingBar: NotesEditorFormattingBar) {
+        session.setDesired(documentID: documentID, markdown: markdown, theme: theme,
+                           formattingBar: formattingBar)
         pump()
     }
 

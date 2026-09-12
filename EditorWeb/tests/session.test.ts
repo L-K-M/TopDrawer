@@ -53,7 +53,23 @@ function newSession() {
 describe('EditorSession', () => {
   it('announces readiness with the protocol version', () => {
     const { transport } = newSession();
-    expect(transport.ofType('ready')).toEqual([{ type: 'ready', protocolVersion: 1 }]);
+    expect(transport.ofType('ready')).toEqual([{ type: 'ready', protocolVersion: 2 }]);
+  });
+
+  it('hides the formatting bar until the host asks for it', async () => {
+    newSession();
+    expect(document.documentElement.dataset.tdFormattingBar).toBe('hidden');
+
+    handleMessage(JSON.stringify({ type: 'setFormattingBar', formattingBar: 'visible' }));
+    await waitFor(() => document.documentElement.dataset.tdFormattingBar === 'visible');
+
+    handleMessage(JSON.stringify({ type: 'setFormattingBar', formattingBar: 'hidden' }));
+    await waitFor(() => document.documentElement.dataset.tdFormattingBar === 'hidden');
+  });
+
+  it('applies a theme before the host sends one', () => {
+    newSession();
+    expect(document.documentElement.dataset.tdTheme).toBe('light');
   });
 
   it('load + flush without edits sends no changed message', async () => {

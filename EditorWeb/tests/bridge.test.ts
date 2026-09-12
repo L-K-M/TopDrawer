@@ -70,7 +70,20 @@ describe('parseHostMessage', () => {
     });
   });
 
-  it('protocol version is pinned at 1', () => {
-    expect(PROTOCOL_VERSION).toBe(1);
+  it('accepts a formatting-bar request and rejects any other value', () => {
+    expect(parseHostMessage({ type: 'setFormattingBar', formattingBar: 'visible' })).toEqual({
+      type: 'setFormattingBar',
+      formattingBar: 'visible',
+    });
+    expect(parseHostMessage({ type: 'setFormattingBar', formattingBar: 'hidden' })).toEqual({
+      type: 'setFormattingBar',
+      formattingBar: 'hidden',
+    });
+    expect(parseHostMessage({ type: 'setFormattingBar', formattingBar: true })).toBeNull();
+    expect(parseHostMessage({ type: 'setFormattingBar' })).toBeNull();
+  });
+
+  it('protocol version is pinned at 2', () => {
+    expect(PROTOCOL_VERSION).toBe(2);
   });
 });

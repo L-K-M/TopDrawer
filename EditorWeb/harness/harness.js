@@ -86,6 +86,7 @@ select.onchange = () => {
 
 let revision = 0;
 let theme = 'light';
+let formattingBar = 'hidden';
 const send = (message) => window.topdrawerEditor.handleMessage(JSON.stringify(message));
 
 document.getElementById('load').onclick = () => {
@@ -105,6 +106,10 @@ document.getElementById('replace').onclick = () =>
 document.getElementById('theme').onclick = () => {
   theme = theme === 'light' ? 'dark' : 'light';
   send({ type: 'setTheme', theme });
+};
+document.getElementById('formatting-bar').onclick = () => {
+  formattingBar = formattingBar === 'hidden' ? 'visible' : 'hidden';
+  send({ type: 'setFormattingBar', formattingBar });
 };
 document.getElementById('mode').onclick = () => send({ type: 'command', name: 'toggleMode' });
 document.getElementById('focus').onclick = () => send({ type: 'focus' });

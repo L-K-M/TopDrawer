@@ -650,7 +650,9 @@ MacDring/
 >   pane shows the real app icon.
 > - **Tab types** (`TabKind`) — besides the default **items** tab, a **notes** tab
 >   (drawer is the bundled web editor from `EditorWeb/`; edits arrive over the bridge
->   and persist via `setNotes`; see `docs/markdown-editor-improvement-plan.md`), a
+>   and persist via `setNotes`; the editor's formatting bar is off by default and
+>   toggled from a header button, app-wide via `Preferences.notesFormattingBarVisible`;
+>   see `docs/markdown-editor-improvement-plan.md`), a
 >   **folder** tab (drawer shows a directory's live contents,
 >   read-only: launch + reveal, with an Open-in-Finder header button), and a
 >   open drawer), a **folder** tab (drawer shows a directory's live contents,

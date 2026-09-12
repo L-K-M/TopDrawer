@@ -106,7 +106,7 @@ struct DrawerView: View {
             // The bundled web editor fills the drawer. Its text insets are its own, so
             // it bleeds to the drawer's edges; the resolution happens inside (see
             // NotesEditorHostSession), not here.
-            NotesEditorPane(model: model)
+            NotesEditorPane(model: model, preferences: preferences)
                 .padding(.horizontal, -14)
                 .padding(.bottom, -14)
         case .items, .folder, .disks, .network, .cloud, .recents, .fresh:
@@ -214,6 +214,15 @@ struct DrawerView: View {
                 headerButton("eject", help: "Eject all volumes") { model.onEjectAll?() }
                     .disabled(model.items.isEmpty || !model.ejectingItemIDs.isEmpty)
             }
+            if model.kind == .notes {
+                headerButton("textformat",
+                             help: preferences.notesFormattingBarVisible
+                                 ? "Hide the formatting bar"
+                                 : "Show the formatting bar",
+                             isOn: preferences.notesFormattingBarVisible) {
+                    preferences.notesFormattingBarVisible.toggle()
+                }
+            }
             if model.kind == .recents, model.canClearRecents {
                 headerButton("trash", help: "Clear recent items") { model.onClearRecents?() }
             }
@@ -225,10 +234,14 @@ struct DrawerView: View {
         }
     }
 
-    private func headerButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+    /// `isOn` marks a button that toggles something rather than performing an
+    /// action, so the drawer shows the state without a second control.
+    private func headerButton(_ symbol: String, help: String, isOn: Bool = false,
+                              action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: symbol) }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor)
+                                  : AnyShapeStyle(HierarchicalShapeStyle.secondary))
             .help(help)
     }
 

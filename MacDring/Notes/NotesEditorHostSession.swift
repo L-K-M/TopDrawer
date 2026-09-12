@@ -18,6 +18,7 @@ final class NotesEditorHostSession {
     private var desiredDocumentID: UUID?
     private var desiredMarkdown = ""
     private var desiredTheme = NotesEditorTheme.light.rawValue
+    private var desiredFormattingBar = NotesEditorFormattingBar.hidden.rawValue
 
     /// What the host has successfully asked the editor to show. An editor
     /// callback (`changed`) updates these too, because then the editor is the
@@ -25,6 +26,10 @@ final class NotesEditorHostSession {
     private(set) var deliveredDocumentID: UUID?
     private var deliveredMarkdown = ""
     private var deliveredTheme: String?
+    /// Not optional, unlike the fields above: a fresh page holds no document and no
+    /// theme, but it does start with the formatting bar hidden, so that is what the
+    /// editor is known to be showing until told otherwise.
+    private var deliveredFormattingBar = NotesEditorFormattingBar.hidden.rawValue
 
     /// Every document this session has sent to the editor. A `changed` naming one of
     /// these is genuine even if the drawer has since moved on — the editor reports
@@ -53,17 +58,19 @@ final class NotesEditorHostSession {
     /// Whether the editor is showing the document the host last asked for.
     var isInSync: Bool {
         isReady && deliveredDocumentID == desiredDocumentID && deliveredMarkdown == desiredMarkdown
-            && deliveredTheme == desiredTheme
+            && deliveredTheme == desiredTheme && deliveredFormattingBar == desiredFormattingBar
     }
 
     // MARK: Host-side input
 
     /// Records what the drawer wants shown. Call it on every view update; it is
     /// cheap and idempotent.
-    func setDesired(documentID: UUID?, markdown: String, theme: NotesEditorTheme) {
+    func setDesired(documentID: UUID?, markdown: String, theme: NotesEditorTheme,
+                    formattingBar: NotesEditorFormattingBar) {
         desiredDocumentID = documentID
         desiredMarkdown = markdown
         desiredTheme = theme.rawValue
+        desiredFormattingBar = formattingBar.rawValue
     }
 
     /// The page is up: the next `nextMessage()` may send the document.
@@ -78,6 +85,7 @@ final class NotesEditorHostSession {
         deliveredDocumentID = nil
         deliveredMarkdown = ""
         deliveredTheme = nil
+        deliveredFormattingBar = NotesEditorFormattingBar.hidden.rawValue
         deliveredDocuments.removeAll()
         lastEditorRevision = -1
     }
@@ -151,6 +159,14 @@ final class NotesEditorHostSession {
             return .setTheme(theme: desiredTheme)
         }
 
+        // Not folded into `initialize`: the editor's own default matches this
+        // session's, so the common case sends nothing at all, and keeping the bar a
+        // message of its own means a toggle costs no document round trip.
+        if deliveredFormattingBar != desiredFormattingBar {
+            deliveredFormattingBar = desiredFormattingBar
+            return .setFormattingBar(formattingBar: desiredFormattingBar)
+        }
+
         return nil
     }
 
@@ -159,6 +175,17 @@ final class NotesEditorHostSession {
     /// arrives as a `changed` event like any other edit.
     func flushMessage() -> NotesEditorHostMessage? {
         isReady ? .flush : nil
+    }
+}
+
+/// Whether the rich-mode formatting bar is shown. Hidden is the editor's own
+/// default, so a host that never sends one gets an uncluttered drawer.
+enum NotesEditorFormattingBar: String {
+    case hidden
+    case visible
+
+    init(isVisible: Bool) {
+        self = isVisible ? .visible : .hidden
     }
 }
 
