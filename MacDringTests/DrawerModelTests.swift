@@ -120,6 +120,8 @@ final class DrawerModelTests: XCTestCase {
         model.handleNotesEdit("# a, edited just before the switch", forDocument: left)
 
         XCTAssertEqual(model.notes, "# b", "the open note's text must not be overwritten")
+        XCTAssertEqual(persisted().map(\.0), ["# a, edited just before the switch"],
+                       "the edit carries its own text, not the open note's")
         XCTAssertEqual(persisted().map(\.1), [left], "the edit still belongs to the note it names")
     }
 
@@ -128,10 +130,12 @@ final class DrawerModelTests: XCTestCase {
     func testNotesEditWithNoOpenDocumentIsStillPersisted() {
         let (model, persisted) = recordingModel()
 
-        model.handleNotesEdit("# stray", forDocument: UUID())
+        let orphan = UUID()
+        model.handleNotesEdit("# stray", forDocument: orphan)
 
         XCTAssertEqual(model.notes, "")
-        XCTAssertEqual(persisted().count, 1)
+        XCTAssertEqual(persisted().map(\.0), ["# stray"])
+        XCTAssertEqual(persisted().map(\.1), [orphan])
     }
 
     /// An edit that matches the text already shown still reaches the controller: a
@@ -146,7 +150,8 @@ final class DrawerModelTests: XCTestCase {
         model.handleNotesEdit("# a", forDocument: note)
 
         XCTAssertEqual(model.notes, "# a")
-        XCTAssertEqual(persisted().count, 1, "the flush reply must still be acknowledged")
+        XCTAssertEqual(persisted().map(\.0), ["# a"], "the flush reply must still be acknowledged")
+        XCTAssertEqual(persisted().map(\.1), [note])
     }
 
     // MARK: Groups
