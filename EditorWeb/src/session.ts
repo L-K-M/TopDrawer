@@ -3,6 +3,7 @@ import {
   detectTransport,
   parseHostMessage,
   type EditorMessage,
+  type FormattingBar,
   type HostMessage,
   type Theme,
   type Transport,
@@ -17,6 +18,11 @@ const PLACEHOLDER = 'Write a note…';
 export const CHANGE_DEBOUNCE_MS = 200;
 
 type Mode = 'rich' | 'source';
+
+/** The host application's appearance, where the platform reports one. */
+function preferredTheme(): Theme {
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 /**
  * Owns one note-editing session: the two editor modes, revision discipline,
@@ -40,7 +46,16 @@ export class EditorSession {
   private rich: RichEditor | null = null;
   private source: SourceEditor | null = null;
   private mode: Mode = 'rich';
-  private theme: Theme = 'light';
+  /**
+   * Until the host's `initialize` arrives, follow the host application's own
+   * appearance: the web view inherits it, so this is the same signal the host
+   * will send, and it keeps a dark drawer from flashing a light editor. The
+   * stylesheet carries the matching canvas fallback for the moment before this
+   * runs. `matchMedia` is guarded because the unit tests run in happy-dom.
+   */
+  private theme: Theme = preferredTheme();
+  /** Opt-in chrome: the formatting bar stays out of the way until asked for. */
+  private formattingBar: FormattingBar = 'hidden';
 
   /** Revision last assigned by the host (monotonic). */
   private hostRevision = -1;
@@ -78,6 +93,8 @@ export class EditorSession {
   }
 
   start(): void {
+    this.applyTheme();
+    this.applyFormattingBar();
     window.topdrawerEditor = {
       handleMessage: (raw: string) => {
         let parsed: unknown;
@@ -140,6 +157,10 @@ export class EditorSession {
         this.theme = message.theme;
         this.applyTheme();
         this.source?.setTheme(this.theme);
+        break;
+      case 'setFormattingBar':
+        this.formattingBar = message.formattingBar;
+        this.applyFormattingBar();
         break;
     }
   }
@@ -275,6 +296,15 @@ export class EditorSession {
 
   private applyTheme(): void {
     document.documentElement.dataset.tdTheme = this.theme;
+  }
+
+  /**
+   * Shown or hidden by stylesheet rather than by adding and removing Crepe's
+   * feature: rebuilding the editor to toggle chrome would cost the cursor and
+   * the undo history.
+   */
+  private applyFormattingBar(): void {
+    document.documentElement.dataset.tdFormattingBar = this.formattingBar;
   }
 
   private diagnostic(code: string, detail?: string): void {

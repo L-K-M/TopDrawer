@@ -405,6 +405,7 @@ auto-hide, pinned-open, optional hotkey.
 | Launch on | Single / double click | Single |
 | Tab window level | Floating / Normal | Floating |
 | Disconnect policy | Park / Move to main | Park |
+| Notes formatting bar | Toggle | Off |
 | Launch at login | Toggle (`SMAppService`) | Off |
 
 Colors persist as hex via a reused **`ColorHex`** helper (`NSColor(hex:)` / `.hexString`
@@ -415,7 +416,8 @@ Colors persist as hex via a reused **`ColorHex`** helper (`NSColor(hex:)` / `.he
    policy, and the Fresh tabs' opt-in direct folder check (off by default; the
    Spotlight-only default never triggers folder-access prompts).
 2. **Appearance** — **tab style (modern / classic)**, material, default color, icon size,
-   layout, radius, thickness. Side (left/right) tabs print their name vertically.
+   layout, radius, thickness, and whether notes show their formatting bar. Side
+   (left/right) tabs print their name vertically.
 3. **Tabs** — manage all tabs: list with color swatches, edge/screen pickers, per-tab
    color/glyph, and each tab's items (add/remove/reorder/relink). The home for keyboard-
    first management without dragging on screen.
@@ -650,10 +652,12 @@ MacDring/
 >   pane shows the real app icon.
 > - **Tab types** (`TabKind`) — besides the default **items** tab, a **notes** tab
 >   (drawer is the bundled web editor from `EditorWeb/`; edits arrive over the bridge
->   and persist via `setNotes`; see `docs/markdown-editor-improvement-plan.md`), a
+>   and persist via `setNotes`; the editor's formatting bar is off by default and
+>   toggled from a header button, app-wide via `Preferences.notesFormattingBarVisible`;
+>   the editor paints its own opaque themed canvas, so a notes drawer is the one
+>   drawer that does not follow `Preferences.drawerTranslucency`;
+>   see `docs/markdown-editor-improvement-plan.md`), a
 >   **folder** tab (drawer shows a directory's live contents,
->   read-only: launch + reveal, with an Open-in-Finder header button), and a
->   open drawer), a **folder** tab (drawer shows a directory's live contents,
 >   read-only: launch + reveal, with an Open-in-Finder header button; per-tab sort
 >   order + show-hidden, and live FSEvents refresh on directory change), and a
 >   **disks** tab (drawer shows the mounted **ejectable** volumes live via

@@ -7,13 +7,16 @@ Top Drawer (repository: MacDring) is a Swift/Xcode macOS app with a Linux port i
 | Workflow | Trigger | Purpose |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | Pull requests and pushes to `main` | Build and test the app with a pinned Xcode toolchain. |
+| `.github/workflows/editor-web.yml` | Pull requests and pushes to `main` touching `EditorWeb/**` | Type-check and test the notes editor bundle, run its headless-Chromium smoke gates, and rebuild `dist/` from the lockfile to prove the committed artifact matches its sources. |
 | `.github/workflows/linux-ci.yml` | Pull requests and pushes to `main`; also called by `release.yml` | Build and test the shared core and the `linux/` package (daemon + shell) in the pinned `swift:6.3-noble` container, under a private D-Bus session. |
 | `.github/workflows/release.yml` | Pushing a `v*` tag (e.g. `v1.2.0`, or `v1.2.0-beta.1` for a pre-release) | Build an unsigned `.app`, package `.zip` + `.dmg`, and publish a GitHub Release; build the Linux `.deb`, smoke-test it in a pristine Ubuntu 24.04 container, and attach it to that release. |
+| `.github/workflows/zai-code-review.yml` | Non-draft pull requests from branches in this repository | Review the diff with GLM and post the findings as PR comments. Skipped for forks: `pull_request_target` would expose the API key to untrusted code. |
 
 ## Continuous integration (`ci.yml`)
 
 Runs a single **Build & Test** job on `macos-14`. In-progress runs for the same ref are cancelled when a new commit is pushed.
 
+- Runs `scripts/check-notes-protocol-version.sh` first, which fails if the app and the bundled web editor disagree on the notes bridge protocol version. It runs here rather than in `editor-web.yml` because that workflow is path-filtered to `EditorWeb/**` and would miss a Swift-only change.
 - Selects **Xcode 16.2** via `maxim-lobanov/setup-xcode` — pinned so a runner-image bump can't silently change the toolchain.
 - Installs `xcbeautify` (for readable build logs).
 - Runs `xcodebuild clean test` against the `MacDring` scheme in `MacDring.xcodeproj`, destination `platform=macOS`, with `CODE_SIGNING_ALLOWED=NO` (no signing needed for CI), writing results to `TestResults.xcresult`.
@@ -70,4 +73,4 @@ Four more jobs run in parallel with the macOS ones and are deliberately decouple
 
 ## Secrets
 
-None. Neither workflow uses repository secrets beyond the automatically provided `GITHUB_TOKEN` (which `action-gh-release` uses to create the release). Releases are intentionally unsigned, so no Apple certificates or notarization credentials are required.
+One: `ZAI_API_KEY`, used only by `zai-code-review.yml`. The build, test and release workflows use no repository secrets beyond the automatically provided `GITHUB_TOKEN` (which `action-gh-release` uses to create the release). Releases are intentionally unsigned, so no Apple certificates or notarization credentials are required.

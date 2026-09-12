@@ -1,8 +1,8 @@
 /**
  * Top Drawer notes theme. Crepe's components consume `--crepe-color-*`
  * variables; we define both schemes ourselves (instead of shipping Crepe's
- * theme files) so the editor sits transparently on the drawer's vibrancy
- * background and follows the host's light/dark setting.
+ * theme files) so the editor paints its own opaque themed canvas and follows
+ * the host's light/dark setting.
  */
 
 :root {
@@ -41,6 +41,11 @@
   --crepe-color-selected: rgba(180, 83, 9, 0.16);
   --crepe-color-inline-area: rgba(0, 0, 0, 0.05);
   --crepe-base-font-size: 13px;
+  /* One step lighter than `--crepe-color-surface`, so the formatting bar reads as
+     its own band the way it already does in dark (a #201b16 canvas under a
+     #26221c bar). Identical values leave only the bar's 1px border. */
+  --td-canvas: #fdfbf7;
+  color-scheme: light;
 }
 
 :root[data-td-theme='dark'] {
@@ -62,13 +67,34 @@
   --crepe-color-selected: rgba(244, 189, 111, 0.22);
   --crepe-color-inline-area: rgba(255, 255, 255, 0.06);
   --crepe-base-font-size: 13px;
+  --td-canvas: #201b16;
+  color-scheme: dark;
+}
+
+/* Before the bundle runs there is no `data-td-theme` yet, and the canvas would
+   paint light inside a dark drawer. The web view inherits the host application's
+   appearance, so follow it until the host's theme arrives. Canvas only: the
+   palette above is driven by `data-td-theme`, which the session sets from the
+   same signal before the editor mounts. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-td-theme]) {
+    --td-canvas: #201b16;
+    color-scheme: dark;
+  }
+}
+
+/* An opaque canvas, not `transparent`. WebKit paints an opaque base behind a
+   transparent page unless the web view opts out through the private
+   `drawsBackground` key, so a transparent page reads as white in the drawer,
+   which is unreadable against the dark palette. */
+html {
+  background: var(--td-canvas);
 }
 
 html,
 body {
   margin: 0;
   height: 100%;
-  background: transparent;
   color: var(--crepe-color-on-background);
   font-family: var(--td-font);
 }
@@ -76,11 +102,35 @@ body {
 #editor {
   height: 100%;
   overflow: auto;
+  /* Keeps the caret out from under the pinned formatting bar: the browser scrolls
+     the caret itself on plain cursor movement, and this is the only thing it
+     consults. The editor measures the bar and sets the variable, because the bar
+     wraps to more rows as the drawer narrows. */
+  scroll-padding-top: var(--td-bar-height, 0px);
 }
 
+/* A column flex box that grows with the note, not a fixed `height: 100%` box.
+   The top bar is `position: sticky`, so its containing block decides how far it
+   can stay pinned: at exactly one drawer height it unpinned and scrolled away as
+   soon as the note was longer than that. */
 .milkdown {
   background: transparent;
-  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The formatting bar is opt-in. Crepe assigns `style.display = ''` on every editor
+   update rather than an inline value, so a stylesheet rule decides. (0,4,0) beats
+   Crepe's own (0,2,0) `display: flex`, so hiding does not rest on this file being
+   imported last. */
+:root:not([data-td-formatting-bar='visible']) .milkdown .milkdown-top-bar {
+  display: none;
+}
+
+:root[data-td-formatting-bar='visible'] .milkdown .milkdown-top-bar {
+  display: flex;
+  flex: 0 0 auto;
 }
 
 /* Two classes on the element so this beats Crepe's own `.milkdown .ProseMirror`
@@ -90,20 +140,29 @@ body {
   padding: 10px;
   outline: none;
   font-family: var(--td-font);
-  min-height: calc(100% - 20px);
+  /* Fill whatever the top bar leaves, so a click anywhere in an empty drawer
+     lands in the editor. A percentage `min-height` cannot do this any more:
+     the flex parent's height is indefinite, so it would resolve to zero. */
+  flex: 1 0 auto;
 }
 
 /* Crepe's reset removes every focus ring; restore it for interactive chrome
-   (WCAG 2.4.7). This targets the same selector as Crepe's reset and is emitted
-   later, so it wins the tie and covers every focusable control, including ones
-   enumerated selectors would miss. The editing surface is excluded: the caret
-   is its indicator. */
-.milkdown :focus-visible {
+   (WCAG 2.4.7). Coming later than Crepe's own `:focus-visible` reset is not
+   enough: its `.milkdown button:focus` reset scores (0,2,1) and outranks a plain
+   `.milkdown :focus-visible` at (0,2,0), which left every toolbar button with no
+   ring at all. Repeating the pseudo-class lifts this to (0,3,0) without
+   enumerating element types, which would miss whatever Crepe makes focusable
+   next. The editing surface is excluded below: the caret is its indicator. */
+.milkdown :focus-visible:focus-visible {
   outline: 2px solid var(--crepe-color-primary, #b45309);
   outline-offset: -2px;
 }
 
-.milkdown .ProseMirror:focus-visible {
+/* Doubled like the padding rule above, for the same reason: lifting the restore
+   rule to (0,3,0) left this exclusion tying it, so the editing surface stayed
+   ring-free only because this rule happens to be emitted later. (0,4,0) settles
+   it regardless of order. */
+.milkdown .ProseMirror.ProseMirror:focus-visible {
   outline: none;
 }
 

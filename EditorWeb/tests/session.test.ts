@@ -53,7 +53,37 @@ function newSession() {
 describe('EditorSession', () => {
   it('announces readiness with the protocol version', () => {
     const { transport } = newSession();
-    expect(transport.ofType('ready')).toEqual([{ type: 'ready', protocolVersion: 1 }]);
+    expect(transport.ofType('ready')).toEqual([{ type: 'ready', protocolVersion: 2 }]);
+  });
+
+  it('hides the formatting bar until the host asks for it', async () => {
+    newSession();
+    expect(document.documentElement.dataset.tdFormattingBar).toBe('hidden');
+
+    handleMessage(JSON.stringify({ type: 'setFormattingBar', formattingBar: 'visible' }));
+    await waitFor(() => document.documentElement.dataset.tdFormattingBar === 'visible');
+
+    handleMessage(JSON.stringify({ type: 'setFormattingBar', formattingBar: 'hidden' }));
+    await waitFor(() => document.documentElement.dataset.tdFormattingBar === 'hidden');
+  });
+
+  it('applies a theme before the host sends one', () => {
+    newSession();
+    expect(document.documentElement.dataset.tdTheme).toBe('light');
+  });
+
+  it('follows a dark host appearance before the host sends one', () => {
+    const real = window.matchMedia;
+    // happy-dom answers every media query with `matches: false`, so the dark
+    // branch is only reachable with a stub. It is read once, at construction.
+    window.matchMedia = ((query: string) =>
+      ({ matches: query.includes('dark'), media: query }) as MediaQueryList) as typeof window.matchMedia;
+    try {
+      newSession();
+      expect(document.documentElement.dataset.tdTheme).toBe('dark');
+    } finally {
+      window.matchMedia = real;
+    }
   });
 
   it('load + flush without edits sends no changed message', async () => {

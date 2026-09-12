@@ -21,6 +21,8 @@ struct NotesEditorWebView: NSViewRepresentable {
     /// the editor reported. The reconciler decides whether it needs sending.
     let markdown: String
     let theme: NotesEditorTheme
+    /// Whether the editor shows its formatting bar.
+    let formattingBar: NotesEditorFormattingBar
     /// Called with the edited text and the document it belongs to, so the drawer
     /// saves it against that note rather than against whatever tab is open.
     let onChanged: (String, UUID) -> Void
@@ -39,7 +41,8 @@ struct NotesEditorWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.update(documentID: documentID, markdown: markdown, theme: theme)
+        context.coordinator.update(documentID: documentID, markdown: markdown, theme: theme,
+                                   formattingBar: formattingBar)
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: NotesEditorCoordinator) {
@@ -102,9 +105,12 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
         // Force-touch/force-click previews fetch the linked page inside the web view,
         // which would put a network request where the app promises none.
         webView.allowsLinkPreview = false
-        // The drawer is a vibrancy panel; a white page background would flash over it
-        // while the editor loads. Public API (macOS 12+), not the private
-        // `drawsBackground` key.
+        // The colour WebKit paints *under* the page: scroll bouncing, and the window
+        // between attach and first paint, where the drawer should show through rather
+        // than flash. Public API (macOS 12+). There is no public way to make a macOS
+        // WKWebView itself non-opaque (that is `_setDrawsBackground:`, SPI, unused
+        // here), so the loaded page paints its own opaque themed canvas instead; see
+        // EditorWeb/src/theme.css.
         webView.underPageBackgroundColor = .clear
         self.webView = webView
         // The drawer may hide at any moment; give it a way to ask for a pending edit.
@@ -119,8 +125,10 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
     /// Reconciles the editor with what the drawer wants shown. Called on every
     /// SwiftUI update pass, so it must be cheap and must not re-send unchanged
     /// state — see `NotesEditorHostSession`.
-    func update(documentID: UUID?, markdown: String, theme: NotesEditorTheme) {
-        session.setDesired(documentID: documentID, markdown: markdown, theme: theme)
+    func update(documentID: UUID?, markdown: String, theme: NotesEditorTheme,
+                formattingBar: NotesEditorFormattingBar) {
+        session.setDesired(documentID: documentID, markdown: markdown, theme: theme,
+                           formattingBar: formattingBar)
         pump()
     }
 

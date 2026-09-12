@@ -85,7 +85,11 @@ select.onchange = () => {
 };
 
 let revision = 0;
-let theme = 'light';
+// Mirrors `preferredTheme()` in src/session.ts: the editor now starts from the
+// platform's appearance, and a harness that assumed light would spend its first
+// "Toggle theme" click sending the theme already in effect.
+let theme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+let formattingBar = 'hidden';
 const send = (message) => window.topdrawerEditor.handleMessage(JSON.stringify(message));
 
 document.getElementById('load').onclick = () => {
@@ -105,6 +109,10 @@ document.getElementById('replace').onclick = () =>
 document.getElementById('theme').onclick = () => {
   theme = theme === 'light' ? 'dark' : 'light';
   send({ type: 'setTheme', theme });
+};
+document.getElementById('formatting-bar').onclick = () => {
+  formattingBar = formattingBar === 'hidden' ? 'visible' : 'hidden';
+  send({ type: 'setFormattingBar', formattingBar });
 };
 document.getElementById('mode').onclick = () => send({ type: 'command', name: 'toggleMode' });
 document.getElementById('focus').onclick = () => send({ type: 'focus' });

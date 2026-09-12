@@ -44,6 +44,7 @@ final class Preferences: ObservableObject {
         static let tabWindowLevel = TabWindowLevel.floating
         static let disconnectPolicy = DisconnectPolicy.park
         static let freshDirectScan = false
+        static let notesFormattingBarVisible = false
     }
 
     private enum Key {
@@ -66,6 +67,7 @@ final class Preferences: ObservableObject {
         static let tabWindowLevel = "tabWindowLevel"
         static let disconnectPolicy = "disconnectPolicy"
         static let freshDirectScan = "freshDirectScan"
+        static let notesFormattingBarVisible = "notesFormattingBarVisible"
         static let launchAtLogin = "launchAtLogin"
     }
 
@@ -169,6 +171,13 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(freshDirectScan, forKey: Key.freshDirectScan) }
     }
 
+    /// Whether a notes tab shows the editor's formatting bar. Off by default: the
+    /// bar costs two rows of a drawer that is mostly there to hold text, and the
+    /// same formatting is reachable from Markdown syntax and the selection toolbar.
+    @Published var notesFormattingBarVisible: Bool {
+        didSet { defaults.set(notesFormattingBarVisible, forKey: Key.notesFormattingBarVisible) }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet {
             guard !isSyncingLaunchAtLogin else { return }
@@ -206,6 +215,8 @@ final class Preferences: ObservableObject {
         tabWindowLevel = TabWindowLevel(rawValue: defaults.string(forKey: Key.tabWindowLevel) ?? "") ?? Default.tabWindowLevel
         disconnectPolicy = DisconnectPolicy(rawValue: defaults.string(forKey: Key.disconnectPolicy) ?? "") ?? Default.disconnectPolicy
         freshDirectScan = defaults.object(forKey: Key.freshDirectScan) as? Bool ?? Default.freshDirectScan
+        notesFormattingBarVisible = defaults.object(forKey: Key.notesFormattingBarVisible) as? Bool
+            ?? Default.notesFormattingBarVisible
 
         launchAtLogin = loginItem.isEnabled()
             ?? (defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false)

@@ -12,9 +12,12 @@
  * replacing a document must never serialize and re-emit the original string.
  */
 
-export const PROTOCOL_VERSION = 1;
+/** v2 adds `setFormattingBar`. Both halves ship together and move together. */
+export const PROTOCOL_VERSION = 2;
 
 export type Theme = 'light' | 'dark';
+/** Whether the rich-mode formatting bar (Crepe's top bar) is shown. */
+export type FormattingBar = 'hidden' | 'visible';
 export type Platform = 'macos' | 'linux' | 'harness';
 
 /** host -> editor */
@@ -33,7 +36,8 @@ export type HostMessage =
   | { type: 'focus' }
   | { type: 'flush' }
   | { type: 'command'; name: 'toggleMode' | 'undo' | 'redo' }
-  | { type: 'setTheme'; theme: Theme };
+  | { type: 'setTheme'; theme: Theme }
+  | { type: 'setFormattingBar'; formattingBar: FormattingBar };
 
 /** editor -> host */
 export type EditorMessage =
@@ -81,6 +85,7 @@ export function detectTransport(sink?: (message: EditorMessage) => void): Transp
 }
 
 const THEMES: readonly string[] = ['light', 'dark'];
+const FORMATTING_BARS: readonly string[] = ['hidden', 'visible'];
 const PLATFORMS: readonly string[] = ['macos', 'linux', 'harness'];
 
 function isTheme(value: unknown): value is Theme {
@@ -89,6 +94,10 @@ function isTheme(value: unknown): value is Theme {
 
 function isPlatform(value: unknown): value is Platform {
   return typeof value === 'string' && PLATFORMS.includes(value);
+}
+
+function isFormattingBar(value: unknown): value is FormattingBar {
+  return typeof value === 'string' && FORMATTING_BARS.includes(value);
 }
 
 /**
@@ -131,6 +140,9 @@ export function parseHostMessage(raw: unknown): HostMessage | null {
     case 'setTheme':
       if (!isTheme(msg.theme)) return null;
       return { type: 'setTheme', theme: msg.theme };
+    case 'setFormattingBar':
+      if (!isFormattingBar(msg.formattingBar)) return null;
+      return { type: 'setFormattingBar', formattingBar: msg.formattingBar };
     default:
       return null;
   }

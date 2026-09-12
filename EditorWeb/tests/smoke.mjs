@@ -231,6 +231,34 @@ try {
   const theme = await harness.page.evaluate(() => document.documentElement.dataset.tdTheme);
   check('harness: setTheme dark applied', theme === 'dark');
 
+  // The formatting bar is opt-in. Section 3 covers what it does to the layout
+  // once it is on; this only covers the host switching it.
+  const barVisibility = async () =>
+    harness.page.evaluate(() => {
+      const bar = document.querySelector('.milkdown-top-bar');
+      return bar ? getComputedStyle(bar).display : 'absent';
+    });
+  check('harness: formatting bar hidden by default', (await barVisibility()) === 'none');
+
+  const awaitBar = (display) =>
+    harness.page
+      .waitForFunction(
+        (want) => getComputedStyle(document.querySelector('.milkdown-top-bar')).display === want,
+        display,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+
+  // The toggle travels host -> bridge -> DOM, so assert after the transition has
+  // landed rather than racing it.
+  await harness.page.click('#formatting-bar');
+  await awaitBar('flex');
+  check('harness: formatting bar shown on request', (await barVisibility()) === 'flex');
+
+  await harness.page.click('#formatting-bar');
+  await awaitBar('none');
+  check('harness: formatting bar hidden again on request', (await barVisibility()) === 'none');
+
   // Links: an editing click must not launch anything, Cmd/Ctrl-click must hand
   // the URL to the host, and the web view must never navigate.
   await harness.page.selectOption('#corpus', 'links');
@@ -434,6 +462,256 @@ try {
       filePage.problems.length === 0,
     fileDetail,
   );
+
+  // ---------------------------------------------------------------------------
+  // Section 3: drawer layout of the shipped page, in a drawer-sized viewport.
+  //
+  // Both gates guard the same structural rule: `#editor` scrolls, and
+  // `.milkdown` inside it must grow with the note. The formatting bar is
+  // `position: sticky`, so it can only stay pinned inside its containing block;
+  // when `.milkdown` was exactly one drawer tall the bar unpinned and scrolled
+  // out of view as soon as the note was longer than that. The harness gate above
+  // covers switching the bar on; this one covers the shipped page and the ends of
+  // the scroll range. Growing `.milkdown` costs the percentage `min-height` that
+  // used to stretch the editable, so the second gate keeps the editable filling a
+  // short drawer (a click anywhere in the empty area must land in the editor).
+  // ---------------------------------------------------------------------------
+  const layout = await openPage('/dist/editor.html', { asHost: true });
+  await layout.page.setViewportSize({ width: 520, height: 640 });
+  await layout.send({
+    type: 'initialize',
+    markdown: ['# Long note', ...Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`)].join('\n\n'),
+    theme: 'light',
+    platform: 'linux',
+    documentID: 'layout-note',
+    revision: 1,
+  });
+  await layout.page.waitForSelector('.ProseMirror', { timeout: 15000 });
+  await layout.send({ type: 'setFormattingBar', formattingBar: 'visible' });
+  await layout.page.waitForFunction(
+    () => {
+      const bar = document.querySelector('.milkdown-top-bar');
+      return bar !== null && getComputedStyle(bar).display !== 'none';
+    },
+    null,
+    { timeout: 5000 },
+  );
+
+  const barOffsets = await layout.page.evaluate(() => {
+    const scroller = document.querySelector('#editor');
+    const bar = document.querySelector('.milkdown-top-bar');
+    const scrollportTop = scroller.getBoundingClientRect().top;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    // One drawer height is where the old layout let go; the rest covers the
+    // whole range, including the very bottom.
+    return [0, scroller.clientHeight, Math.round(max / 2), max].map((offset) => {
+      scroller.scrollTop = offset;
+      return Math.round(bar.getBoundingClientRect().top - scrollportTop);
+    });
+  });
+  check(
+    'production: the formatting bar stays pinned at every scroll offset',
+    barOffsets.every((offset) => offset === 0),
+    `bar top at 0/one-drawer/half/end: ${barOffsets.join(', ')}`,
+  );
+
+  await layout.send({ type: 'replaceDocument', markdown: '# Short note\n', revision: 2 });
+  await layout.page.waitForFunction(
+    () => document.querySelector('.ProseMirror')?.textContent?.includes('Short note'),
+    null,
+    { timeout: 5000 },
+  );
+  const shortNote = await layout.page.evaluate(() => {
+    const scroller = document.querySelector('#editor');
+    const editable = document.querySelector('.ProseMirror');
+    return {
+      gapBelowEditable: Math.round(
+        scroller.getBoundingClientRect().bottom - editable.getBoundingClientRect().bottom,
+      ),
+      overflow: scroller.scrollHeight - scroller.clientHeight,
+    };
+  });
+  check(
+    'production: a short note still fills the drawer, without scrolling it',
+    shortNote.gapBelowEditable === 0 && shortNote.overflow === 0,
+    JSON.stringify(shortNote),
+  );
+
+  // A notes drawer floors at `DrawerMetrics.notesSize`, where the bar wraps to
+  // several rows. That is the tallest the sticky item gets and the hardest case
+  // for its containing block.
+  await layout.page.setViewportSize({ width: 288, height: 400 });
+  await layout.send({
+    type: 'replaceDocument',
+    markdown: ['# Long note', ...Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`)].join('\n\n'),
+    revision: 3,
+  });
+  await layout.page.waitForFunction(
+    () => document.querySelector('.ProseMirror')?.textContent?.includes('Paragraph 200'),
+    null,
+    { timeout: 5000 },
+  );
+  const narrowOffsets = await layout.page.evaluate(() => {
+    const scroller = document.querySelector('#editor');
+    const bar = document.querySelector('.milkdown-top-bar');
+    const scrollportTop = scroller.getBoundingClientRect().top;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    return [0, scroller.clientHeight, Math.round(max / 2), max].map((offset) => {
+      scroller.scrollTop = offset;
+      return Math.round(bar.getBoundingClientRect().top - scrollportTop);
+    });
+  });
+  check(
+    'production: the wrapped formatting bar stays pinned in a minimum-size drawer',
+    narrowOffsets.every((offset) => offset === 0),
+    `bar top at 0/one-drawer/half/end: ${narrowOffsets.join(', ')}`,
+  );
+
+  // Nothing scrolls the caret with the pinned bar in mind unless it is told, and
+  // plain cursor movement is the browser's own scroll, which consults only the
+  // scrollport's `scroll-padding-top`. Arrowing upwards used to park the caret
+  // behind the bar, fully hidden.
+  await layout.page.setViewportSize({ width: 520, height: 640 });
+  await layout.page.evaluate(() => {
+    document.querySelector('#editor').scrollTop = Number.MAX_SAFE_INTEGER;
+  });
+  await layout.page.click('.ProseMirror p:nth-last-of-type(3)');
+  // Null until something is actually measured: a run where the selection never
+  // yields a rect must fail rather than pass on an empty maximum.
+  let worstOverlap = null;
+  for (let press = 0; press < 40; press += 1) {
+    await layout.page.keyboard.press('ArrowUp');
+    const overlap = await layout.page.evaluate(() => {
+      const selection = window.getSelection();
+      const rects = selection?.rangeCount ? selection.getRangeAt(0).getClientRects() : [];
+      if (!rects.length) return null;
+      const bar = document.querySelector('.milkdown-top-bar').getBoundingClientRect();
+      return Math.round(bar.bottom - rects[0].top);
+    });
+    if (overlap !== null) worstOverlap = Math.max(worstOverlap ?? Number.NEGATIVE_INFINITY, overlap);
+  }
+  check(
+    'production: arrowing upwards keeps the caret clear of the pinned bar',
+    worstOverlap !== null && worstOverlap <= 0,
+    worstOverlap === null ? 'no caret rect was ever measured' : `worst overlap ${worstOverlap}px`,
+  );
+
+  // Crepe's reset strips every focus ring, and its `button:focus` rule outranks a
+  // plain `:focus-visible` override, so the bar's buttons had none at all
+  // (WCAG 2.4.7). The editing surface stays ring-free: the caret is its indicator.
+  const focusRings = [];
+  // Out of the editable first: ProseMirror handles Tab itself, so tabbing from
+  // inside the document never reaches the bar.
+  await layout.page.evaluate(() => document.activeElement?.blur());
+  await layout.page.keyboard.press('Tab');
+  for (let stop = 0; stop < 4; stop += 1) {
+    focusRings.push(
+      await layout.page.evaluate(() => {
+        const style = getComputedStyle(document.activeElement);
+        return {
+          inBar: !!document.activeElement.closest('.milkdown-top-bar'),
+          ring: `${style.outlineWidth} ${style.outlineStyle}`,
+        };
+      }),
+    );
+    await layout.page.keyboard.press('Tab');
+  }
+  const barStops = focusRings.filter((stop) => stop.inBar);
+  check(
+    'production: keyboard focus is visible on the formatting bar',
+    barStops.length > 0 && barStops.every((stop) => stop.ring === '2px solid'),
+    barStops.length ? barStops.map((stop) => stop.ring).join(', ') : 'no bar control was tabbable',
+  );
+
+  // The other half of the same rule: the editing surface is deliberately exempt,
+  // because the caret is its focus indicator. Tabbed into, not clicked into, so
+  // the exemption is exercised through `:focus-visible` rather than around it.
+  await layout.page.evaluate(() => document.activeElement?.blur());
+  let reachedEditable = false;
+  for (let stop = 0; stop < 25 && !reachedEditable; stop += 1) {
+    await layout.page.keyboard.press('Tab');
+    reachedEditable = await layout.page.evaluate(
+      () => document.activeElement?.classList?.contains('ProseMirror') ?? false,
+    );
+  }
+  const editable = reachedEditable
+    ? await layout.page.evaluate(() => {
+        const style = getComputedStyle(document.activeElement);
+        return { width: style.outlineWidth, style: style.outlineStyle };
+      })
+    : null;
+  check(
+    'production: the editing surface keeps no focus ring of its own',
+    // The style, not the width: with `outline-style: none` nothing is painted
+    // whatever the width computes to, and that width is a UA default that
+    // differs between platforms (0px locally, 3px on the CI runner).
+    editable !== null && (editable.style === 'none' || editable.width === '0px'),
+    editable ? `${editable.width} ${editable.style}` : 'never tabbed into the editable',
+  );
+
+  // Switching the bar back off has to take the inset with it, or a drawer with no
+  // bar would scroll as if one were there.
+  await layout.send({ type: 'setFormattingBar', formattingBar: 'hidden' });
+  await layout.page.waitForFunction(
+    () => getComputedStyle(document.querySelector('#editor')).scrollPaddingTop === '0px',
+    null,
+    { timeout: 5000 },
+  ).catch(() => {});
+  const insetWhenHidden = await layout.page.evaluate(
+    () => getComputedStyle(document.querySelector('#editor')).scrollPaddingTop,
+  );
+  check(
+    'production: hiding the formatting bar clears the caret inset',
+    insetWhenHidden === '0px',
+    insetWhenHidden,
+  );
+  await layout.send({ type: 'setFormattingBar', formattingBar: 'visible' });
+
+  // The dark palette is only legible over the page's own opaque canvas: a page
+  // that paints nothing gets the embedder's opaque base, which resolves light.
+  // Opacity is asserted separately because a transparent canvas reports
+  // `rgba(0, 0, 0, 0)`, which would otherwise score as black and pass. Both
+  // modes share `#editor`, so both are checked.
+  const relativeLuminance = (color) => {
+    const [r, g, b] = color
+      .match(/[\d.]+/g)
+      .slice(0, 3)
+      .map((value) => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrastRatio = (a, b) => {
+    const [high, low] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  };
+  const isOpaque = (color) => !/^rgba\(/.test(color) || /,\s*1\s*\)$/.test(color);
+
+  await layout.send({ type: 'setTheme', theme: 'dark' });
+  for (const mode of ['rich', 'source']) {
+    if (mode === 'source') await layout.send({ type: 'command', name: 'toggleMode' });
+    const selector = mode === 'source' ? '.cm-content' : '.ProseMirror';
+    await layout.page.waitForSelector(selector, { timeout: 15000 });
+    const paint = await layout.page.evaluate((sel) => {
+      const root = getComputedStyle(document.documentElement);
+      return {
+        canvas: root.backgroundColor,
+        scheme: root.colorScheme,
+        text: getComputedStyle(document.querySelector(sel)).color,
+      };
+    }, selector);
+    check(
+      `production: ${mode} mode declares a dark color-scheme`,
+      paint.scheme === 'dark',
+      paint.scheme,
+    );
+    check(
+      `production: ${mode} mode dark text is legible on an opaque canvas`,
+      isOpaque(paint.canvas) && contrastRatio(paint.text, paint.canvas) >= 4.5,
+      `${contrastRatio(paint.text, paint.canvas).toFixed(1)}:1 (${paint.text} on ${paint.canvas})`,
+    );
+  }
 
   if (failures.length) await dumpDiagnostics(harness, 'harness');
 } catch (error) {

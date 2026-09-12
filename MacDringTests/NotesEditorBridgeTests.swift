@@ -26,6 +26,22 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertEqual(NotesEditorHostMessage.focus.jsonObject["type"] as? String, "focus")
         XCTAssertEqual(NotesEditorHostMessage.flush.jsonObject["type"] as? String, "flush")
         XCTAssertEqual(NotesEditorHostMessage.command(name: "toggleMode").jsonObject["type"] as? String, "command")
+        XCTAssertEqual(NotesEditorHostMessage.setFormattingBar(formattingBar: "visible")
+            .jsonObject["type"] as? String, "setFormattingBar")
+    }
+
+    func testSetFormattingBarCarriesTheVisibility() {
+        let object = NotesEditorHostMessage.setFormattingBar(formattingBar: "visible").jsonObject
+
+        XCTAssertEqual(object["formattingBar"] as? String, "visible")
+    }
+
+    /// A tripwire, not a cross-check: this cannot read the bundled editor's own
+    /// number, so it only fails when this side moves alone. The two pins are
+    /// compared against each other by `scripts/check-notes-protocol-version.sh`,
+    /// which `ci.yml` runs on every pull request.
+    func testProtocolVersionConstant() {
+        XCTAssertEqual(NotesEditorProtocol.version, 2)
     }
 
     // MARK: The JavaScript invocation

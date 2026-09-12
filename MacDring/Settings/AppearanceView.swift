@@ -46,6 +46,13 @@ struct AppearanceView: View {
                     .foregroundStyle(.secondary)
                 ColorPicker("Default color for new tabs", selection: defaultColorBinding, supportsOpacity: false)
             }
+
+            Section("Notes") {
+                Toggle("Show the formatting bar", isOn: $preferences.notesFormattingBarVisible)
+                Text("The button row above a note, off by default. A notes drawer's header toggles the same setting. Markdown shortcuts and the selection toolbar work either way.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

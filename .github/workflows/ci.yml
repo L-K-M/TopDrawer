@@ -38,6 +38,12 @@ jobs:
         with:
           persist-credentials: false   # nothing here runs git after checkout
 
+      # Before the 40-minute build, because this is a one-line answer. `editor-web.yml`
+      # is path-filtered to EditorWeb/, so a Swift-only change to the bridge protocol
+      # reaches no editor job at all and the two version pins can drift apart.
+      - name: Check the notes-editor protocol versions agree
+        run: scripts/check-notes-protocol-version.sh
+
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:

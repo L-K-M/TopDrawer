@@ -25,7 +25,8 @@ Jetty all draw it.
   hover) to open a drawer.
 - **Eight tab types** — an **items** tab (apps, files, folders, links arranged freely
   in a grid with gaps), a **notes** tab (a live Markdown scratchpad: type formatted
-  text, tick off task items, switch to raw Markdown when you want it), a **folder**
+  text, tick off task items, switch to raw Markdown when you want it, and show the
+  formatting bar from the drawer header when you want the buttons), a **folder**
   tab (a live, read-only view of a directory's contents), a **disks** tab (your mounted
   ejectable volumes), a **network** tab (your mounted network shares), a **cloud** tab
   (your cloud drives — iCloud, Dropbox, …), a **recents** tab (what you've recently

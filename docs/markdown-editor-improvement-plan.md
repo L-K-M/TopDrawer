@@ -101,7 +101,7 @@ An AppKit text system implementation could feel excellent on macOS, and GtkSourc
 - The note opens exactly where it was left, already editable; no preview state and no **Done** button.
 - Body text, headings, lists, quotes, links, code, and tasks render in place.
 - Markdown shortcuts work naturally (`# `, `- `, `1. `, `- [ ] `, `> `, triple backticks), and Backspace at the start of an empty block returns it to a paragraph.
-- A compact top bar exposes paragraph/heading, bold, italic, link, bullet list, numbered list, and task list. Less-used quote, code block, rule, table, and **Source** actions live in an overflow menu. The bar collapses responsibly in narrow drawers.
+- A compact top bar exposes paragraph/heading, bold, italic, link, bullet list, numbered list, and task list. Less-used quote, code block, rule, table, and **Source** actions live in an overflow menu. The bar is **off by default** and toggled from the drawer header: at drawer widths it wraps to two rows and costs more of the note than it earns, and the selection toolbar plus Markdown shortcuts already cover formatting. When it is on it stays pinned to the top of the drawer while the note scrolls.
 - Standard platform shortcuts use `Cmd` on macOS and `Ctrl` on Linux. Undo/redo operate on editor transactions, not host updates.
 - Task boxes toggle in place. Links require an explicit open action (for example, Cmd/Ctrl-click or an **Open Link** tooltip) so an editing click never launches unexpectedly.
 - Autosave is communicated subtly only when useful (for example, an error or unsaved state), not with a modal editing mode.
@@ -156,6 +156,7 @@ host -> editor: initialize(markdown, theme, platform, revision)
                focus(selection?)
                command(name)
                setTheme(theme)
+               setFormattingBar(hidden | visible)
 editor -> host: ready(protocolVersion)
                changed(markdown, editorRevision)
                openLink(url)

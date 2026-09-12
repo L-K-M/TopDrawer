@@ -54,6 +54,7 @@ host -> editor: initialize(markdown, theme, platform, revision, documentID)
                flush()
                command(toggleMode | undo | redo)
                setTheme(theme)
+               setFormattingBar(hidden | visible)
 editor -> host: ready(protocolVersion)
                changed(markdown, editorRevision, documentID)
                openLink(url)
@@ -92,6 +93,35 @@ covered by tests):
    A revision is recorded only after its document has mounted, so a failed apply
    can still be retried by the host.
 
+## Appearance (`src/theme.css`)
+
+Two host-driven switches, both attributes on `<html>` so a change costs no
+rebuild and therefore no cursor or undo history:
+
+- `data-td-theme` (`light` | `dark`) selects the palette, from `setTheme` or
+  `initialize`.
+- `data-td-formatting-bar` (`hidden` | `visible`) shows the rich-mode formatting
+  bar, from `setFormattingBar`. Hidden is the default, so a host that never
+  sends one gets an uncluttered editor.
+
+Until the host's first message arrives the page follows
+`prefers-color-scheme`, which the web view inherits from the host application.
+
+The formatting bar is pinned over the scrollport, so the editor measures it and
+publishes the height as `--td-bar-height` on `#editor`. That drives the
+scrollport's `scroll-padding-top`, which is the only thing the browser consults
+when it scrolls the caret on plain cursor movement, and `RichEditor` feeds the
+same number to ProseMirror's `scrollThreshold`/`scrollMargin` for the scrolls
+ProseMirror does itself. Without both, arrowing upwards parks the caret behind
+the bar.
+
+The page paints an opaque canvas (`--td-canvas`) rather than sitting transparent
+over the host's window background. WebKit paints an opaque base behind a
+transparent page unless the web view opts out through the private
+`drawsBackground` key, so a transparent page reads as white, which is unreadable
+against the dark palette. `color-scheme` is declared alongside it so scrollbars,
+form controls and the caret follow the same scheme.
+
 ## Build & test
 
 ```bash
@@ -113,7 +143,8 @@ on any diff against the committed artifacts.
 ## Harness
 
 `harness/index.html` simulates the native host in any browser: corpus loader,
-theme/mode/undo/redo toggles, bridge traffic log, and a network-request counter
+theme/formatting-bar/mode/undo/redo toggles, bridge traffic log, and a
+network-request counter
 that must stay at 0. Serve the package root and open it:
 
 ```bash
