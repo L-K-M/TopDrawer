@@ -85,7 +85,10 @@ select.onchange = () => {
 };
 
 let revision = 0;
-let theme = 'light';
+// Mirrors `preferredTheme()` in src/session.ts: the editor now starts from the
+// platform's appearance, and a harness that assumed light would spend its first
+// "Toggle theme" click sending the theme already in effect.
+let theme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 let formattingBar = 'hidden';
 const send = (message) => window.topdrawerEditor.handleMessage(JSON.stringify(message));
 

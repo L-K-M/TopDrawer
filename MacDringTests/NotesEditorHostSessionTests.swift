@@ -227,6 +227,20 @@ final class NotesEditorHostSessionTests: XCTestCase {
         XCTAssertTrue(session.isInSync)
     }
 
+    /// Switching notes replaces the document, not the chrome: the page lives on, so
+    /// the bar it was already told about must not be re-announced or reset.
+    func testSwitchingDocumentKeepsTheVisibleFormattingBar() {
+        let session = readySession()
+        session.setDesired(documentID: tabA, markdown: "# a", theme: .light, formattingBar: .visible)
+        while session.nextMessage() != nil {}
+
+        session.setDesired(documentID: tabB, markdown: "# b", theme: .light, formattingBar: .visible)
+        XCTAssertEqual(session.nextMessage(),
+                       .initialize(markdown: "# b", theme: "light", revision: 2,
+                                   documentID: tabB.uuidString))
+        XCTAssertNil(session.nextMessage(), "the bar was already delivered; initialize must not reset it")
+    }
+
     /// A reload starts a page whose bar is hidden again, so a host that wants it
     /// shown has to say so again even though its own wish never changed.
     func testFormattingBarIsResentAfterAReload() {

@@ -658,8 +658,6 @@ MacDring/
 >   drawer that does not follow `Preferences.drawerTranslucency`;
 >   see `docs/markdown-editor-improvement-plan.md`), a
 >   **folder** tab (drawer shows a directory's live contents,
->   read-only: launch + reveal, with an Open-in-Finder header button), and a
->   open drawer), a **folder** tab (drawer shows a directory's live contents,
 >   read-only: launch + reveal, with an Open-in-Finder header button; per-tab sort
 >   order + show-hidden, and live FSEvents refresh on directory change), and a
 >   **disks** tab (drawer shows the mounted **ejectable** volumes live via

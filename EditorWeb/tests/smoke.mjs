@@ -240,10 +240,23 @@ try {
     });
   check('harness: formatting bar hidden by default', (await barVisibility()) === 'none');
 
+  const awaitBar = (display) =>
+    harness.page
+      .waitForFunction(
+        (want) => getComputedStyle(document.querySelector('.milkdown-top-bar')).display === want,
+        display,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+
+  // The toggle travels host -> bridge -> DOM, so assert after the transition has
+  // landed rather than racing it.
   await harness.page.click('#formatting-bar');
+  await awaitBar('flex');
   check('harness: formatting bar shown on request', (await barVisibility()) === 'flex');
 
   await harness.page.click('#formatting-bar');
+  await awaitBar('none');
   check('harness: formatting bar hidden again on request', (await barVisibility()) === 'none');
 
   // Links: an editing click must not launch anything, Cmd/Ctrl-click must hand
@@ -563,7 +576,9 @@ try {
     document.querySelector('#editor').scrollTop = Number.MAX_SAFE_INTEGER;
   });
   await layout.page.click('.ProseMirror p:nth-last-of-type(3)');
-  let worstOverlap = Number.NEGATIVE_INFINITY;
+  // Null until something is actually measured: a run where the selection never
+  // yields a rect must fail rather than pass on an empty maximum.
+  let worstOverlap = null;
   for (let press = 0; press < 40; press += 1) {
     await layout.page.keyboard.press('ArrowUp');
     const overlap = await layout.page.evaluate(() => {
@@ -573,12 +588,39 @@ try {
       const bar = document.querySelector('.milkdown-top-bar').getBoundingClientRect();
       return Math.round(bar.bottom - rects[0].top);
     });
-    if (overlap !== null) worstOverlap = Math.max(worstOverlap, overlap);
+    if (overlap !== null) worstOverlap = Math.max(worstOverlap ?? Number.NEGATIVE_INFINITY, overlap);
   }
   check(
     'production: arrowing upwards keeps the caret clear of the pinned bar',
-    worstOverlap <= 0,
-    `worst overlap ${worstOverlap}px`,
+    worstOverlap !== null && worstOverlap <= 0,
+    worstOverlap === null ? 'no caret rect was ever measured' : `worst overlap ${worstOverlap}px`,
+  );
+
+  // Crepe's reset strips every focus ring, and its `button:focus` rule outranks a
+  // plain `:focus-visible` override, so the bar's buttons had none at all
+  // (WCAG 2.4.7). The editing surface stays ring-free: the caret is its indicator.
+  const focusRings = [];
+  // Out of the editable first: ProseMirror handles Tab itself, so tabbing from
+  // inside the document never reaches the bar.
+  await layout.page.evaluate(() => document.activeElement?.blur());
+  await layout.page.keyboard.press('Tab');
+  for (let stop = 0; stop < 4; stop += 1) {
+    focusRings.push(
+      await layout.page.evaluate(() => {
+        const style = getComputedStyle(document.activeElement);
+        return {
+          inBar: !!document.activeElement.closest('.milkdown-top-bar'),
+          ring: `${style.outlineWidth} ${style.outlineStyle}`,
+        };
+      }),
+    );
+    await layout.page.keyboard.press('Tab');
+  }
+  const barStops = focusRings.filter((stop) => stop.inBar);
+  check(
+    'production: keyboard focus is visible on the formatting bar',
+    barStops.length > 0 && barStops.every((stop) => stop.ring === '2px solid'),
+    barStops.length ? barStops.map((stop) => stop.ring).join(', ') : 'no bar control was tabbable',
   );
 
   // Switching the bar back off has to take the inset with it, or a drawer with no

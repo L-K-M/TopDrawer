@@ -36,9 +36,11 @@ final class NotesEditorBridgeTests: XCTestCase {
         XCTAssertEqual(object["formattingBar"] as? String, "visible")
     }
 
-    /// The page reports its own version on `ready`, and the host logs a mismatch,
-    /// so the two numbers have to be kept in step by hand when a message is added.
-    func testProtocolVersionMatchesTheBundledEditor() {
+    /// A tripwire, not a cross-check: this cannot read the bundled editor's own
+    /// number, so it only fails when this side moves alone. The two pins are
+    /// compared against each other by `scripts/check-notes-protocol-version.sh`,
+    /// which `ci.yml` runs on every pull request.
+    func testProtocolVersionConstant() {
         XCTAssertEqual(NotesEditorProtocol.version, 2)
     }
 

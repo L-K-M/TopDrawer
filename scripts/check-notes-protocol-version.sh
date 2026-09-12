@@ -20,12 +20,14 @@ editor_file="$repo/EditorWeb/src/bridge.ts"
 host=$(sed -nE 's/^[[:space:]]*static let version = ([0-9]+).*/\1/p' "$swift_file")
 editor=$(sed -nE 's/^export const PROTOCOL_VERSION = ([0-9]+);.*/\1/p' "$editor_file")
 
-if [[ -z "$host" ]]; then
-  echo "error: could not read \`static let version\` from $swift_file" >&2
+# A second matching declaration would make the capture multi-line, and two such
+# strings can compare equal while saying nothing about which constant ships.
+if [[ -z "$host" || "$host" == *$'\n'* ]]; then
+  echo "error: could not read exactly one \`static let version\` from $swift_file" >&2
   exit 1
 fi
-if [[ -z "$editor" ]]; then
-  echo "error: could not read \`PROTOCOL_VERSION\` from $editor_file" >&2
+if [[ -z "$editor" || "$editor" == *$'\n'* ]]; then
+  echo "error: could not read exactly one \`PROTOCOL_VERSION\` from $editor_file" >&2
   exit 1
 fi
 

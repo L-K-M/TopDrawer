@@ -147,11 +147,13 @@ body {
 }
 
 /* Crepe's reset removes every focus ring; restore it for interactive chrome
-   (WCAG 2.4.7). This targets the same selector as Crepe's reset and is emitted
-   later, so it wins the tie and covers every focusable control, including ones
-   enumerated selectors would miss. The editing surface is excluded: the caret
-   is its indicator. */
-.milkdown :focus-visible {
+   (WCAG 2.4.7). Coming later than Crepe's own `:focus-visible` reset is not
+   enough: its `.milkdown button:focus` reset scores (0,2,1) and outranks a plain
+   `.milkdown :focus-visible` at (0,2,0), which left every toolbar button with no
+   ring at all. Repeating the pseudo-class lifts this to (0,3,0) without
+   enumerating element types, which would miss whatever Crepe makes focusable
+   next. The editing surface is excluded below: the caret is its indicator. */
+.milkdown :focus-visible:focus-visible {
   outline: 2px solid var(--crepe-color-primary, #b45309);
   outline-offset: -2px;
 }

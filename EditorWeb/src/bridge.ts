@@ -12,6 +12,7 @@
  * replacing a document must never serialize and re-emit the original string.
  */
 
+/** v2 adds `setFormattingBar`. Both halves ship together and move together. */
 export const PROTOCOL_VERSION = 2;
 
 export type Theme = 'light' | 'dark';

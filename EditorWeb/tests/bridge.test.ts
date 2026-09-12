@@ -80,6 +80,7 @@ describe('parseHostMessage', () => {
       formattingBar: 'hidden',
     });
     expect(parseHostMessage({ type: 'setFormattingBar', formattingBar: true })).toBeNull();
+    expect(parseHostMessage({ type: 'setFormattingBar', formattingBar: 'bogus' })).toBeNull();
     expect(parseHostMessage({ type: 'setFormattingBar' })).toBeNull();
   });
 
