@@ -158,7 +158,11 @@ body {
   outline-offset: -2px;
 }
 
-.milkdown .ProseMirror:focus-visible {
+/* Doubled like the padding rule above, for the same reason: lifting the restore
+   rule to (0,3,0) left this exclusion tying it, so the editing surface stayed
+   ring-free only because this rule happens to be emitted later. (0,4,0) settles
+   it regardless of order. */
+.milkdown .ProseMirror.ProseMirror:focus-visible {
   outline: none;
 }
 

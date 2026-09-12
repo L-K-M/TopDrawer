@@ -623,6 +623,29 @@ try {
     barStops.length ? barStops.map((stop) => stop.ring).join(', ') : 'no bar control was tabbable',
   );
 
+  // The other half of the same rule: the editing surface is deliberately exempt,
+  // because the caret is its focus indicator. Tabbed into, not clicked into, so
+  // the exemption is exercised through `:focus-visible` rather than around it.
+  await layout.page.evaluate(() => document.activeElement?.blur());
+  let reachedEditable = false;
+  for (let stop = 0; stop < 25 && !reachedEditable; stop += 1) {
+    await layout.page.keyboard.press('Tab');
+    reachedEditable = await layout.page.evaluate(
+      () => document.activeElement?.classList?.contains('ProseMirror') ?? false,
+    );
+  }
+  const editable = reachedEditable
+    ? await layout.page.evaluate(() => {
+        const style = getComputedStyle(document.activeElement);
+        return `${style.outlineWidth} ${style.outlineStyle}`;
+      })
+    : null;
+  check(
+    'production: the editing surface keeps no focus ring of its own',
+    editable === '0px none',
+    editable ?? 'never tabbed into the editable',
+  );
+
   // Switching the bar back off has to take the inset with it, or a drawer with no
   // bar would scroll as if one were there.
   await layout.send({ type: 'setFormattingBar', formattingBar: 'hidden' });
