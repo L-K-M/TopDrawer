@@ -102,6 +102,11 @@ body {
 #editor {
   height: 100%;
   overflow: auto;
+  /* Keeps the caret out from under the pinned formatting bar: the browser scrolls
+     the caret itself on plain cursor movement, and this is the only thing it
+     consults. The editor measures the bar and sets the variable, because the bar
+     wraps to more rows as the drawer narrows. */
+  scroll-padding-top: var(--td-bar-height, 0px);
 }
 
 /* A column flex box that grows with the note, not a fixed `height: 100%` box.

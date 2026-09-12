@@ -107,6 +107,14 @@ rebuild and therefore no cursor or undo history:
 Until the host's first message arrives the page follows
 `prefers-color-scheme`, which the web view inherits from the host application.
 
+The formatting bar is pinned over the scrollport, so the editor measures it and
+publishes the height as `--td-bar-height` on `#editor`. That drives the
+scrollport's `scroll-padding-top`, which is the only thing the browser consults
+when it scrolls the caret on plain cursor movement, and `RichEditor` feeds the
+same number to ProseMirror's `scrollThreshold`/`scrollMargin` for the scrolls
+ProseMirror does itself. Without both, arrowing upwards parks the caret behind
+the bar.
+
 The page paints an opaque canvas (`--td-canvas`) rather than sitting transparent
 over the host's window background. WebKit paints an opaque base behind a
 transparent page unless the web view opts out through the private

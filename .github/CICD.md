@@ -1,18 +1,23 @@
 # CI/CD — building, testing & releasing Top Drawer
 
 Top Drawer (and its sibling app **Zap**) ship via **GitHub Actions** on macOS runners.
-Three workflows do the work, and **none of them needs any secrets or API keys**:
+Five workflows do the work. Only the AI review needs a secret; nothing in the build,
+test or release path does:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
 | [`ci.yml`](workflows/ci.yml) | every pull request + push to `main` | `xcodebuild clean test` with **no code signing** — verifies the app builds and the XCTest suite passes |
+| [`editor-web.yml`](workflows/editor-web.yml) | pull requests + pushes to `main` touching `EditorWeb/**` | type-checks and tests the notes editor bundle, runs its headless-Chromium smoke gates, and rebuilds `dist/` from the lockfile to prove the committed artifact matches its sources |
 | [`linux-ci.yml`](workflows/linux-ci.yml) | every pull request + push to `main`; also called by `release.yml` | builds and tests the shared core and the `linux/` daemon + frontend in the pinned `swift:6.3-noble` container (D-Bus tests under a private session bus) |
 | [`release.yml`](workflows/release.yml) | pushing a `v*` tag (e.g. `v1.2.0`; `v1.2.0-beta.1` for a pre-release) | builds a Release **without Developer ID signing or notarization**, ad-hoc signs it so it can launch, packages a **DMG** + **zip**, and creates a **GitHub Release** with both attached; separately builds the Linux **`.deb`**, smoke-tests it in a pristine Ubuntu 24.04 container, and attaches it to that release |
+| [`zai-code-review.yml`](workflows/zai-code-review.yml) | non-draft pull requests from branches in this repository | reviews the diff with GLM and posts the findings as PR comments. The one workflow that needs a secret (`ZAI_API_KEY`), and the one that never runs for a fork, because `pull_request_target` would hand that secret to untrusted code |
 
-The macOS jobs run on `macos-14` (Apple Silicon) with a **pinned Xcode** (`16.2`). There
-are no third-party dependencies, so there's nothing to cache or install beyond the build
-tools. The Linux jobs run in a digest-pinned Swift container; see
-[Linux `.deb`](#linux-deb) below. The two toolchains differ on purpose — Xcode 16.2's
+The macOS jobs run on `macos-14` (Apple Silicon) with a **pinned Xcode** (`16.2`). The app
+target has no third-party dependencies, so there's nothing to cache or install beyond the
+build tools; the notes editor bundle is the exception, and it vendors its npm dependencies
+into the committed `EditorWeb/dist/` rather than resolving them at build time, so only
+`editor-web.yml` installs anything (from the lockfile). The Linux jobs run in a
+digest-pinned Swift container; see [Linux `.deb`](#linux-deb) below. The two toolchains differ on purpose — Xcode 16.2's
 Swift on macOS, Swift 6.3 on Linux — and the shared core must keep compiling under both,
 which each platform's CI enforces.
 
@@ -114,6 +119,9 @@ Gatekeeper prompt.
 
 `ci.yml` builds and runs tests with `CODE_SIGNING_ALLOWED=NO`, so it needs no secrets and runs
 on forked-PR branches too. It uploads the `.xcresult` bundle as an artifact when tests fail.
+Before the build it runs `scripts/check-notes-protocol-version.sh`, which compares the notes
+editor's two protocol version pins: `editor-web.yml` is path-filtered to `EditorWeb/**`, so a
+Swift-only change to the bridge would otherwise reach no editor job at all.
 
 The only project requirement is a **shared scheme** (`MacDring.xcscheme` in `xcshareddata`)
 whose Test action covers the test target — `ci.yml` relies on it. (Hardened Runtime and a
@@ -138,7 +146,8 @@ Two ways to avoid drift:
 1. **Copy** the files into Zap and edit the `env:` block (simplest).
 2. **Reusable workflow:** move the jobs into a `workflow_call` workflow (parametrised by
    `project` / `scheme` / `app_name`) hosted in one repo (or a shared `l-k-m/.github` repo),
-   and have each app call it. Since there are no secrets, the caller is trivial.
+   and have each app call it. Since `ci.yml` and `release.yml` use no secrets, the caller is
+   trivial.
 
 ---
 

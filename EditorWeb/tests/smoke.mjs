@@ -554,6 +554,51 @@ try {
     `bar top at 0/one-drawer/half/end: ${narrowOffsets.join(', ')}`,
   );
 
+  // Nothing scrolls the caret with the pinned bar in mind unless it is told, and
+  // plain cursor movement is the browser's own scroll, which consults only the
+  // scrollport's `scroll-padding-top`. Arrowing upwards used to park the caret
+  // behind the bar, fully hidden.
+  await layout.page.setViewportSize({ width: 520, height: 640 });
+  await layout.page.evaluate(() => {
+    document.querySelector('#editor').scrollTop = Number.MAX_SAFE_INTEGER;
+  });
+  await layout.page.click('.ProseMirror p:nth-last-of-type(3)');
+  let worstOverlap = Number.NEGATIVE_INFINITY;
+  for (let press = 0; press < 40; press += 1) {
+    await layout.page.keyboard.press('ArrowUp');
+    const overlap = await layout.page.evaluate(() => {
+      const selection = window.getSelection();
+      const rects = selection?.rangeCount ? selection.getRangeAt(0).getClientRects() : [];
+      if (!rects.length) return null;
+      const bar = document.querySelector('.milkdown-top-bar').getBoundingClientRect();
+      return Math.round(bar.bottom - rects[0].top);
+    });
+    if (overlap !== null) worstOverlap = Math.max(worstOverlap, overlap);
+  }
+  check(
+    'production: arrowing upwards keeps the caret clear of the pinned bar',
+    worstOverlap <= 0,
+    `worst overlap ${worstOverlap}px`,
+  );
+
+  // Switching the bar back off has to take the inset with it, or a drawer with no
+  // bar would scroll as if one were there.
+  await layout.send({ type: 'setFormattingBar', formattingBar: 'hidden' });
+  await layout.page.waitForFunction(
+    () => getComputedStyle(document.querySelector('#editor')).scrollPaddingTop === '0px',
+    null,
+    { timeout: 5000 },
+  ).catch(() => {});
+  const insetWhenHidden = await layout.page.evaluate(
+    () => getComputedStyle(document.querySelector('#editor')).scrollPaddingTop,
+  );
+  check(
+    'production: hiding the formatting bar clears the caret inset',
+    insetWhenHidden === '0px',
+    insetWhenHidden,
+  );
+  await layout.send({ type: 'setFormattingBar', formattingBar: 'visible' });
+
   // The dark palette is only legible over the page's own opaque canvas: a page
   // that paints nothing gets the embedder's opaque base, which resolves light.
   // Opacity is asserted separately because a transparent canvas reports
@@ -575,7 +620,6 @@ try {
   };
   const isOpaque = (color) => !/^rgba\(/.test(color) || /,\s*1\s*\)$/.test(color);
 
-  await layout.page.setViewportSize({ width: 520, height: 640 });
   await layout.send({ type: 'setTheme', theme: 'dark' });
   for (const mode of ['rich', 'source']) {
     if (mode === 'source') await layout.send({ type: 'command', name: 'toggleMode' });

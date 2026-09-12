@@ -25,6 +25,12 @@ import '@milkdown/crepe/theme/common/toolbar.css';
 import '@milkdown/crepe/theme/common/table.css';
 import '@milkdown/crepe/theme/common/top-bar.css';
 
+/**
+ * ProseMirror's own default, kept for every edge the formatting bar does not
+ * cover, so overriding the top margin does not quietly change the others.
+ */
+const DEFAULT_SCROLL_MARGIN = 5;
+
 export interface RichEditorOptions {
   markdown: string;
   placeholder: string;
@@ -57,6 +63,10 @@ export class RichEditor {
    * eventually produced several openLink/focusChanged messages.
    */
   private listeners = new AbortController();
+
+  /** Watches the formatting bar's height; see `trackFormattingBar`. */
+  private barObserver: ResizeObserver | null = null;
+  private barHeight = -1;
 
   /**
    * Set by the first real user interaction inside the editor.
@@ -102,7 +112,56 @@ export class RichEditor {
     editor.wireUserInteraction();
     editor.wireLinks(options.onOpenLink);
     editor.wireFocus(options.onFocusChanged);
+    editor.trackFormattingBar();
     return editor;
+  }
+
+  /**
+   * Keeps the caret clear of the pinned formatting bar.
+   *
+   * Nothing that scrolls the caret knows the bar is pinned over the scrollport,
+   * so arrowing upwards used to park the caret behind it. Two mechanisms scroll
+   * the caret and each needs telling separately:
+   *
+   * - Plain cursor movement is handled natively by the browser, which honours
+   *   the scrollport's `scroll-padding-top`. That is what `--td-bar-height`
+   *   feeds (see `theme.css`), and it is the one that fixes arrow keys.
+   * - A transaction that asks to be scrolled into view goes through
+   *   ProseMirror's own arithmetic instead, which ignores `scroll-padding`.
+   *   `scrollThreshold` decides *whether* it scrolls, and without it a caret
+   *   hidden behind the bar still counts as visible because it is inside the
+   *   scrollport's box; `scrollMargin` decides where the caret then lands.
+   *
+   * The height is measured rather than assumed: the bar wraps to more rows as
+   * the drawer narrows, and reports zero while it is switched off, which is
+   * exactly the inset wanted in that case.
+   */
+  private trackFormattingBar(): void {
+    const bar = this.root.querySelector('.milkdown-top-bar');
+    if (!bar) return;
+
+    this.barObserver = new ResizeObserver(() => {
+      // The border-box height, rounded up: `clientHeight` would leave the caret
+      // a pixel under the bar's bottom border, and a wrapped row can land on a
+      // fractional height. Guarded because applying props re-renders, which
+      // could otherwise feed the observer its own echo.
+      const height = Math.ceil(bar.getBoundingClientRect().height);
+      if (this.state.destroyed || height === this.barHeight) return;
+      this.barHeight = height;
+      this.root.style.setProperty('--td-bar-height', `${this.barHeight}px`);
+      this.builder.editor.action((ctx) => {
+        ctx.get(editorViewCtx).setProps({
+          scrollThreshold: { top: this.barHeight, right: 0, bottom: 0, left: 0 },
+          scrollMargin: {
+            top: this.barHeight + DEFAULT_SCROLL_MARGIN,
+            right: DEFAULT_SCROLL_MARGIN,
+            bottom: DEFAULT_SCROLL_MARGIN,
+            left: DEFAULT_SCROLL_MARGIN,
+          },
+        });
+      });
+    });
+    this.barObserver.observe(bar);
   }
 
   /**
@@ -205,6 +264,9 @@ export class RichEditor {
   async destroy(): Promise<void> {
     this.state.destroyed = true;
     this.listeners.abort();
+    this.barObserver?.disconnect();
+    this.barObserver = null;
+    this.root.style.removeProperty('--td-bar-height');
     await this.builder.destroy();
     this.root.replaceChildren();
   }
