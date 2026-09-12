@@ -637,13 +637,16 @@ try {
   const editable = reachedEditable
     ? await layout.page.evaluate(() => {
         const style = getComputedStyle(document.activeElement);
-        return `${style.outlineWidth} ${style.outlineStyle}`;
+        return { width: style.outlineWidth, style: style.outlineStyle };
       })
     : null;
   check(
     'production: the editing surface keeps no focus ring of its own',
-    editable === '0px none',
-    editable ?? 'never tabbed into the editable',
+    // The style, not the width: with `outline-style: none` nothing is painted
+    // whatever the width computes to, and that width is a UA default that
+    // differs between platforms (0px locally, 3px on the CI runner).
+    editable !== null && (editable.style === 'none' || editable.width === '0px'),
+    editable ? `${editable.width} ${editable.style}` : 'never tabbed into the editable',
   );
 
   // Switching the bar back off has to take the inset with it, or a drawer with no
