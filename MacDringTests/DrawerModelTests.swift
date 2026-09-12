@@ -83,36 +83,70 @@ final class DrawerModelTests: XCTestCase {
 
     // MARK: Notes
 
-    /// `notes` is the editor's input on every update pass, so an edit that is not
-    /// mirrored here is handed straight back to the editor as the pre-edit text.
-    /// `NotesEditorHostSessionTests.testARefreshAfterAnEditSendsNothingWhenTheDrawerMirrorsIt`
-    /// runs the same mirror through the reconciler and shows what the miss costs.
-    func testNotesEditIsMirroredForTheOpenDocument() {
+    /// Records what `onNotesChanged` was called with, which is what `TabController`
+    /// persists against.
+    private func recordingModel() -> (DrawerModel, () -> [(String, UUID)]) {
         let model = DrawerModel()
+        var persisted: [(String, UUID)] = []
+        model.onNotesChanged = { text, id in persisted.append((text, id)) }
+        return (model, { persisted })
+    }
+
+    /// `notes` is the editor's input on every update pass, so an edit that is only
+    /// persisted is handed straight back to the editor as the pre-edit text.
+    /// `NotesEditorHostSessionTests.testARefreshAfterAnEditSendsNothingWhenTheDrawerMirrorsIt`
+    /// runs the same call through the reconciler and shows what the miss costs.
+    func testNotesEditForTheOpenDocumentIsMirroredAndPersisted() {
+        let (model, persisted) = recordingModel()
         let note = UUID()
         model.documentID = note
         model.notes = "# a"
 
-        model.recordNotesEdit("# a typed", forDocument: note)
+        model.handleNotesEdit("# a typed", forDocument: note)
+
         XCTAssertEqual(model.notes, "# a typed")
+        XCTAssertEqual(persisted().map(\.0), ["# a typed"])
+        XCTAssertEqual(persisted().map(\.1), [note])
     }
 
-    /// An edit the editor reported for the note the drawer has already left is still
-    /// persisted by the controller, but it is not this drawer's text any more.
-    func testNotesEditForAnotherDocumentIsIgnored() {
-        let model = DrawerModel()
+    /// An edit the editor reported for the note the drawer has already left: still
+    /// persisted, against that note, but it is not this drawer's text any more.
+    func testNotesEditForAnotherDocumentIsPersistedButNotMirrored() {
+        let (model, persisted) = recordingModel()
         model.documentID = UUID()
         model.notes = "# b"
+        let left = UUID()
 
-        model.recordNotesEdit("# a, edited just before the switch", forDocument: UUID())
-        XCTAssertEqual(model.notes, "# b")
+        model.handleNotesEdit("# a, edited just before the switch", forDocument: left)
+
+        XCTAssertEqual(model.notes, "# b", "the open note's text must not be overwritten")
+        XCTAssertEqual(persisted().map(\.1), [left], "the edit still belongs to the note it names")
     }
 
-    /// And with no notes tab open there is nothing to mirror into.
-    func testNotesEditWithNoOpenDocumentIsIgnored() {
-        let model = DrawerModel()
-        model.recordNotesEdit("# stray", forDocument: UUID())
+    /// With no notes tab open there is nothing to mirror into — but the edit is not
+    /// dropped, because the store is the last word on whether its note still exists.
+    func testNotesEditWithNoOpenDocumentIsStillPersisted() {
+        let (model, persisted) = recordingModel()
+
+        model.handleNotesEdit("# stray", forDocument: UUID())
+
         XCTAssertEqual(model.notes, "")
+        XCTAssertEqual(persisted().count, 1)
+    }
+
+    /// An edit that matches the text already shown still reaches the controller: a
+    /// pending quit is waiting on this callback to end its wait, and a flush that
+    /// reported no net change would otherwise hold the quit to its full timeout.
+    func testUnchangedNotesEditIsStillPersisted() {
+        let (model, persisted) = recordingModel()
+        let note = UUID()
+        model.documentID = note
+        model.notes = "# a"
+
+        model.handleNotesEdit("# a", forDocument: note)
+
+        XCTAssertEqual(model.notes, "# a")
+        XCTAssertEqual(persisted().count, 1, "the flush reply must still be acknowledged")
     }
 
     // MARK: Groups

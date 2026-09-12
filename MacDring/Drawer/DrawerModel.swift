@@ -212,9 +212,29 @@ final class DrawerModel: ObservableObject {
     /// An edit for another note — one the editor reported after the drawer moved on,
     /// which the controller still persists against that note — must not become the
     /// open note's text, so it is ignored here.
-    func recordNotesEdit(_ text: String, forDocument documentID: UUID) {
+    ///
+    /// Private on purpose: mirroring without persisting loses the edit, so the only
+    /// way in is `handleNotesEdit`, which does both.
+    private func recordNotesEdit(_ text: String, forDocument documentID: UUID) {
         guard documentID == self.documentID, text != notes else { return }
         notes = text
+    }
+
+    /// The single entry point for an edit the notes editor reported: mirror it into
+    /// `notes`, then hand it on to be persisted.
+    ///
+    /// One call rather than two at the call site, because the pairing *is* the fix.
+    /// Two adjacent statements say nothing about belonging together, and a call site
+    /// that persists without mirroring — a refactor of the pane, or a second editor
+    /// surface — silently brings the revert back.
+    ///
+    /// The mirror is guarded and the notify is not, which is deliberate on both
+    /// counts. An edit naming a note the drawer has already left still has to reach
+    /// the store for that note, and `TabController` ends a pending quit's wait on
+    /// this callback, so an edit it skipped would hold the quit to its timeout.
+    func handleNotesEdit(_ text: String, forDocument documentID: UUID) {
+        recordNotesEdit(text, forDocument: documentID)
+        onNotesChanged?(text, documentID)
     }
 
     /// The item occupying a grid slot, if any.

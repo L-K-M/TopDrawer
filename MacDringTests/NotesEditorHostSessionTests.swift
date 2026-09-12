@@ -71,10 +71,11 @@ final class NotesEditorHostSessionTests: XCTestCase {
         session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light)
         XCTAssertNotNil(session.nextMessage())
 
-        // The editor reports an edit: the drawer mirrors it and persists it.
+        // The editor reports an edit, and the drawer handles it the one way the pane
+        // does: mirror into the model, then persist.
         let edited = session.recordEditorChange("# a typed", documentID: tabA.uuidString,
                                                 editorRevision: 1)
-        model.recordNotesEdit("# a typed",
+        model.handleNotesEdit("# a typed",
                               forDocument: try XCTUnwrap(edited, "the edit is the shown note's"))
 
         // A screen change, another tab's mutation, a running-app update: the pane is

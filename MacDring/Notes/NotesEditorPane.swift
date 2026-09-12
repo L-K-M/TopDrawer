@@ -16,13 +16,11 @@ struct NotesEditorPane: View {
             documentID: model.documentID,
             markdown: model.notes,
             theme: NotesEditorTheme(isDark: colorScheme == .dark),
-            onChanged: { text, documentID in
-                // Mirror first, persist second: `model.notes` is this view's own input
-                // on the next update pass, so an un-mirrored edit comes straight back
-                // at the editor as a replacement (see `DrawerModel.recordNotesEdit`).
-                model.recordNotesEdit(text, forDocument: documentID)
-                model.onNotesChanged?(text, documentID)
-            },
+            // One call, because mirroring and persisting have to stay together:
+            // `model.notes` is this view's own input on the next update pass, so an
+            // edit that is only persisted comes straight back at the editor as a
+            // replacement (see `DrawerModel.handleNotesEdit`).
+            onChanged: { text, documentID in model.handleNotesEdit(text, forDocument: documentID) },
             onOpenLink: { model.onOpenNoteLink?($0) },
             registerFlush: { handler in model.requestNotesFlush = handler }
         )
