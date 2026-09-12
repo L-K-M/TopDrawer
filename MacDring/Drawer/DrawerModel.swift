@@ -196,6 +196,47 @@ final class DrawerModel: ObservableObject {
     /// Clear the recent items (for `.recents` tabs).
     var onClearRecents: (() -> Void)?
 
+    // MARK: Notes
+
+    /// Adopts an edit the notes editor reported, so `notes` keeps meaning "the
+    /// freshest text for the open note".
+    ///
+    /// This is not bookkeeping: `notes` is what the editor is handed back on every
+    /// update pass, and the drawer is invalidated constantly for unrelated reasons
+    /// (a screen or preference change, another tab's mutation). Leaving the copy the
+    /// drawer opened with in place would make the very next invalidation push it
+    /// back as a `replaceDocument` and revert what the user just typed — the store
+    /// alone cannot supply it, because saving a note deliberately does not
+    /// reconcile (`TabStore.setNotes`).
+    ///
+    /// An edit for another note — one the editor reported after the drawer moved on,
+    /// which the controller still persists against that note — must not become the
+    /// open note's text, so it is ignored here.
+    ///
+    /// Private on purpose: mirroring without persisting loses the edit, so the only
+    /// way in is `handleNotesEdit`, which does both.
+    private func recordNotesEdit(_ text: String, forDocument documentID: UUID) {
+        guard documentID == self.documentID, text != notes else { return }
+        notes = text
+    }
+
+    /// The single entry point for an edit the notes editor reported: mirror it into
+    /// `notes`, then hand it on to be persisted.
+    ///
+    /// One call rather than two at the call site, because the pairing *is* the fix.
+    /// Two adjacent statements say nothing about belonging together, and a call site
+    /// that persists without mirroring — a refactor of the pane, or a second editor
+    /// surface — silently brings the revert back.
+    ///
+    /// The mirror is guarded and the notify is not, which is deliberate on both
+    /// counts. An edit naming a note the drawer has already left still has to reach
+    /// the store for that note, and `TabController` ends a pending quit's wait on
+    /// this callback, so an edit it skipped would hold the quit to its timeout.
+    func handleNotesEdit(_ text: String, forDocument documentID: UUID) {
+        recordNotesEdit(text, forDocument: documentID)
+        onNotesChanged?(text, documentID)
+    }
+
     /// The item occupying a grid slot, if any.
     func item(atSlot slot: Int) -> DrawerItem? {
         items.first { $0.slot == slot }

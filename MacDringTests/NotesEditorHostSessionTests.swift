@@ -56,6 +56,34 @@ final class NotesEditorHostSessionTests: XCTestCase {
         XCTAssertEqual(session.markdown, "# a typed")
     }
 
+    /// The same invariant, but through the loop the drawer actually runs: the pane's
+    /// inputs are `DrawerModel`'s, not the reconciler's, so the edit has to reach the
+    /// model too. Without that mirror an unrelated invalidation — which the drawer
+    /// serves many times a second — re-evaluates the pane with the text the drawer
+    /// opened with, and the reconciler dutifully sends it as a replacement, reverting
+    /// what the user just typed.
+    func testARefreshAfterAnEditSendsNothingWhenTheDrawerMirrorsIt() throws {
+        let model = DrawerModel()
+        model.documentID = tabA
+        model.notes = "# a"
+
+        let session = readySession()
+        session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light)
+        XCTAssertNotNil(session.nextMessage())
+
+        // The editor reports an edit, and the drawer handles it the one way the pane
+        // does: mirror into the model, then persist.
+        let edited = session.recordEditorChange("# a typed", documentID: tabA.uuidString,
+                                                editorRevision: 1)
+        model.handleNotesEdit("# a typed",
+                              forDocument: try XCTUnwrap(edited, "the edit is the shown note's"))
+
+        // A screen change, another tab's mutation, a running-app update: the pane is
+        // re-evaluated with the model's inputs and must produce no message.
+        session.setDesired(documentID: model.documentID, markdown: model.notes, theme: .light)
+        XCTAssertNil(session.nextMessage(), "a refresh must not push the pre-edit text back")
+    }
+
     /// A different tab is a different document, and gets a fresh revision.
     func testSwitchingDocumentInitializesWithANewRevision() {
         let session = readySession()

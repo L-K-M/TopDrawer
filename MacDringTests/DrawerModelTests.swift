@@ -81,6 +81,79 @@ final class DrawerModelTests: XCTestCase {
                        .occupiedItem(id: topLevel.id, topLevelPlacementSlot: nil))
     }
 
+    // MARK: Notes
+
+    /// Records what `onNotesChanged` was called with, which is what `TabController`
+    /// persists against.
+    private func recordingModel() -> (DrawerModel, () -> [(String, UUID)]) {
+        let model = DrawerModel()
+        var persisted: [(String, UUID)] = []
+        model.onNotesChanged = { text, id in persisted.append((text, id)) }
+        return (model, { persisted })
+    }
+
+    /// `notes` is the editor's input on every update pass, so an edit that is only
+    /// persisted is handed straight back to the editor as the pre-edit text.
+    /// `NotesEditorHostSessionTests.testARefreshAfterAnEditSendsNothingWhenTheDrawerMirrorsIt`
+    /// runs the same call through the reconciler and shows what the miss costs.
+    func testNotesEditForTheOpenDocumentIsMirroredAndPersisted() {
+        let (model, persisted) = recordingModel()
+        let note = UUID()
+        model.documentID = note
+        model.notes = "# a"
+
+        model.handleNotesEdit("# a typed", forDocument: note)
+
+        XCTAssertEqual(model.notes, "# a typed")
+        XCTAssertEqual(persisted().map(\.0), ["# a typed"])
+        XCTAssertEqual(persisted().map(\.1), [note])
+    }
+
+    /// An edit the editor reported for the note the drawer has already left: still
+    /// persisted, against that note, but it is not this drawer's text any more.
+    func testNotesEditForAnotherDocumentIsPersistedButNotMirrored() {
+        let (model, persisted) = recordingModel()
+        model.documentID = UUID()
+        model.notes = "# b"
+        let left = UUID()
+
+        model.handleNotesEdit("# a, edited just before the switch", forDocument: left)
+
+        XCTAssertEqual(model.notes, "# b", "the open note's text must not be overwritten")
+        XCTAssertEqual(persisted().map(\.0), ["# a, edited just before the switch"],
+                       "the edit carries its own text, not the open note's")
+        XCTAssertEqual(persisted().map(\.1), [left], "the edit still belongs to the note it names")
+    }
+
+    /// With no notes tab open there is nothing to mirror into — but the edit is not
+    /// dropped, because the store is the last word on whether its note still exists.
+    func testNotesEditWithNoOpenDocumentIsStillPersisted() {
+        let (model, persisted) = recordingModel()
+
+        let orphan = UUID()
+        model.handleNotesEdit("# stray", forDocument: orphan)
+
+        XCTAssertEqual(model.notes, "")
+        XCTAssertEqual(persisted().map(\.0), ["# stray"])
+        XCTAssertEqual(persisted().map(\.1), [orphan])
+    }
+
+    /// An edit that matches the text already shown still reaches the controller: a
+    /// pending quit is waiting on this callback to end its wait, and a flush that
+    /// reported no net change would otherwise hold the quit to its full timeout.
+    func testUnchangedNotesEditIsStillPersisted() {
+        let (model, persisted) = recordingModel()
+        let note = UUID()
+        model.documentID = note
+        model.notes = "# a"
+
+        model.handleNotesEdit("# a", forDocument: note)
+
+        XCTAssertEqual(model.notes, "# a")
+        XCTAssertEqual(persisted().map(\.0), ["# a"], "the flush reply must still be acknowledged")
+        XCTAssertEqual(persisted().map(\.1), [note])
+    }
+
     // MARK: Groups
 
     func testVisibleItemsFollowsTheOpenGroup() {
