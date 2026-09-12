@@ -26,10 +26,14 @@ dist/editor.css
 
 A host application:
 
-1. loads `editor.html` with read access limited to that directory (on macOS,
-   `WKWebView.loadFileURL(_:allowingReadAccessTo:)` scoped to `dist/`; a
-   `WKURLSchemeHandler` serving only those three files, under a real origin,
-   would be tighter still);
+1. serves the three files, and only those three, under an origin of its own —
+   `topdrawer-editor://editor/editor.html` — so the page's `script-src 'self'`
+   has a document origin its subresources match and the web content gets no
+   file-system reach at all. That is what the macOS host does
+   (`MacDring/Notes/NotesEditorSchemeHandler.swift`, a `WKURLSchemeHandler`
+   over a directory of the three assets copied into the app bundle);
+   `loadFileURL(_:allowingReadAccessTo:)` scoped to `dist/` also works but is
+   looser on both counts;
 2. injects nothing: the page carries its own strict CSP (`default-src 'none'`,
    `connect-src 'none'`, no inline script) and no network access;
 3. sends host messages with `evaluateJavaScript("window.topdrawerEditor.handleMessage(<json>)")`;
