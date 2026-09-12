@@ -105,11 +105,12 @@ final class NotesEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigati
         // Force-touch/force-click previews fetch the linked page inside the web view,
         // which would put a network request where the app promises none.
         webView.allowsLinkPreview = false
-        // The drawer is a vibrancy panel; a white page background would flash over it
-        // while the editor loads. Public API (macOS 12+), not the private
-        // `drawsBackground` key. That key is also why the loaded page paints an opaque
-        // canvas of its own: without it WebKit puts an opaque white base behind a
-        // transparent page, which is what made the dark palette unreadable.
+        // The colour WebKit paints *under* the page: scroll bouncing, and the window
+        // between attach and first paint, where the drawer should show through rather
+        // than flash. Public API (macOS 12+). There is no public way to make a macOS
+        // WKWebView itself non-opaque (that is `_setDrawsBackground:`, SPI, unused
+        // here), so the loaded page paints its own opaque themed canvas instead; see
+        // EditorWeb/src/theme.css.
         webView.underPageBackgroundColor = .clear
         self.webView = webView
         // The drawer may hide at any moment; give it a way to ask for a pending edit.

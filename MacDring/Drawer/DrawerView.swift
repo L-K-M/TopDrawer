@@ -243,6 +243,8 @@ struct DrawerView: View {
             .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor)
                                   : AnyShapeStyle(HierarchicalShapeStyle.secondary))
             .help(help)
+            // Icon-only, so the tooltip text is also the only label VoiceOver has.
+            .accessibilityLabel(help)
     }
 
     /// A transient "Moved N items — Undo" banner, shown after a drop moved files into

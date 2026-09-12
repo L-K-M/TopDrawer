@@ -1,8 +1,8 @@
 /**
  * Top Drawer notes theme. Crepe's components consume `--crepe-color-*`
  * variables; we define both schemes ourselves (instead of shipping Crepe's
- * theme files) so the editor sits transparently on the drawer's vibrancy
- * background and follows the host's light/dark setting.
+ * theme files) so the editor paints its own opaque themed canvas and follows
+ * the host's light/dark setting.
  */
 
 :root {
@@ -41,7 +41,10 @@
   --crepe-color-selected: rgba(180, 83, 9, 0.16);
   --crepe-color-inline-area: rgba(0, 0, 0, 0.05);
   --crepe-base-font-size: 13px;
-  --td-canvas: #f6f3ee;
+  /* One step lighter than `--crepe-color-surface`, so the formatting bar reads as
+     its own band the way it already does in dark (a #201b16 canvas under a
+     #26221c bar). Identical values leave only the bar's 1px border. */
+  --td-canvas: #fdfbf7;
   color-scheme: light;
 }
 
@@ -84,11 +87,14 @@
    transparent page unless the web view opts out through the private
    `drawsBackground` key, so a transparent page reads as white in the drawer,
    which is unreadable against the dark palette. */
+html {
+  background: var(--td-canvas);
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--td-canvas);
   color: var(--crepe-color-on-background);
   font-family: var(--td-font);
 }
@@ -109,9 +115,11 @@ body {
   flex-direction: column;
 }
 
-/* The formatting bar is opt-in. Crepe assigns `style.display = ''` on every
-   editor update rather than an inline value, so a stylesheet rule decides. */
-.milkdown .milkdown-top-bar {
+/* The formatting bar is opt-in. Crepe assigns `style.display = ''` on every editor
+   update rather than an inline value, so a stylesheet rule decides. (0,4,0) beats
+   Crepe's own (0,2,0) `display: flex`, so hiding does not rest on this file being
+   imported last. */
+:root:not([data-td-formatting-bar='visible']) .milkdown .milkdown-top-bar {
   display: none;
 }
 

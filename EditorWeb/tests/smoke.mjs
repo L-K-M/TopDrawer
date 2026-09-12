@@ -231,17 +231,6 @@ try {
   const theme = await harness.page.evaluate(() => document.documentElement.dataset.tdTheme);
   check('harness: setTheme dark applied', theme === 'dark');
 
-  // The dark palette is only legible over a dark canvas. A transparent page is
-  // not enough: the embedder paints an opaque base behind it, which is white.
-  const canvas = await harness.page.evaluate(
-    () => getComputedStyle(document.documentElement).backgroundColor,
-  );
-  check(
-    'harness: dark theme paints a dark canvas',
-    canvas === 'rgb(32, 27, 22)',
-    canvas,
-  );
-
   // The formatting bar is opt-in. Section 3 covers what it does to the layout
   // once it is on; this only covers the host switching it.
   const barVisibility = async () =>
@@ -534,6 +523,83 @@ try {
     shortNote.gapBelowEditable === 0 && shortNote.overflow === 0,
     JSON.stringify(shortNote),
   );
+
+  // A notes drawer floors at `DrawerMetrics.notesSize`, where the bar wraps to
+  // several rows. That is the tallest the sticky item gets and the hardest case
+  // for its containing block.
+  await layout.page.setViewportSize({ width: 288, height: 400 });
+  await layout.send({
+    type: 'replaceDocument',
+    markdown: ['# Long note', ...Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`)].join('\n\n'),
+    revision: 3,
+  });
+  await layout.page.waitForFunction(
+    () => document.querySelector('.ProseMirror')?.textContent?.includes('Paragraph 200'),
+    null,
+    { timeout: 5000 },
+  );
+  const narrowOffsets = await layout.page.evaluate(() => {
+    const scroller = document.querySelector('#editor');
+    const bar = document.querySelector('.milkdown-top-bar');
+    const scrollportTop = scroller.getBoundingClientRect().top;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    return [0, scroller.clientHeight, Math.round(max / 2), max].map((offset) => {
+      scroller.scrollTop = offset;
+      return Math.round(bar.getBoundingClientRect().top - scrollportTop);
+    });
+  });
+  check(
+    'production: the wrapped formatting bar stays pinned in a minimum-size drawer',
+    narrowOffsets.every((offset) => offset === 0),
+    `bar top at 0/one-drawer/half/end: ${narrowOffsets.join(', ')}`,
+  );
+
+  // The dark palette is only legible over the page's own opaque canvas: a page
+  // that paints nothing gets the embedder's opaque base, which resolves light.
+  // Opacity is asserted separately because a transparent canvas reports
+  // `rgba(0, 0, 0, 0)`, which would otherwise score as black and pass. Both
+  // modes share `#editor`, so both are checked.
+  const relativeLuminance = (color) => {
+    const [r, g, b] = color
+      .match(/[\d.]+/g)
+      .slice(0, 3)
+      .map((value) => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrastRatio = (a, b) => {
+    const [high, low] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  };
+  const isOpaque = (color) => !/^rgba\(/.test(color) || /,\s*1\s*\)$/.test(color);
+
+  await layout.page.setViewportSize({ width: 520, height: 640 });
+  await layout.send({ type: 'setTheme', theme: 'dark' });
+  for (const mode of ['rich', 'source']) {
+    if (mode === 'source') await layout.send({ type: 'command', name: 'toggleMode' });
+    const selector = mode === 'source' ? '.cm-content' : '.ProseMirror';
+    await layout.page.waitForSelector(selector, { timeout: 15000 });
+    const paint = await layout.page.evaluate((sel) => {
+      const root = getComputedStyle(document.documentElement);
+      return {
+        canvas: root.backgroundColor,
+        scheme: root.colorScheme,
+        text: getComputedStyle(document.querySelector(sel)).color,
+      };
+    }, selector);
+    check(
+      `production: ${mode} mode declares a dark color-scheme`,
+      paint.scheme === 'dark',
+      paint.scheme,
+    );
+    check(
+      `production: ${mode} mode dark text is legible on an opaque canvas`,
+      isOpaque(paint.canvas) && contrastRatio(paint.text, paint.canvas) >= 4.5,
+      `${contrastRatio(paint.text, paint.canvas).toFixed(1)}:1 (${paint.text} on ${paint.canvas})`,
+    );
+  }
 
   if (failures.length) await dumpDiagnostics(harness, 'harness');
 } catch (error) {

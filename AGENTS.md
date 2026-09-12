@@ -43,6 +43,10 @@ xcodebuild -project MacDring.xcodeproj -scheme MacDring -destination 'platform=m
 Prefer building/running from Xcode during development so window behavior and the
 menu-bar item appear in a real GUI session.
 
+Editing anything under `EditorWeb/src/` means rebuilding and committing the bundle
+(`cd EditorWeb && npm ci && npm run build`): `dist/` is a reviewed artifact and CI
+fails on any diff against it.
+
 The Linux port builds with SwiftPM only: `swift build` at the root (the shared core,
 target `MacDring`) and `swift build --package-path linux` (daemon + shell). Its tests,
 the `.deb` packaging (`linux/packaging/build-deb.sh`), and the D-Bus interface are
@@ -93,7 +97,9 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 - Follow the Swift API Design Guidelines.
 - One type per file; file name matches the primary type. (Small exceptions:
   `PreferenceEnums.swift` groups four related UI enums; `DrawerItem.swift`
-  carries its `fromFileURL`/`fromLink` factory extension.)
+  carries its `fromFileURL`/`fromLink` factory extension;
+  `NotesEditorHostSession.swift` carries `NotesEditorTheme` and
+  `NotesEditorFormattingBar`, the two small enums its API is expressed in.)
 - Use `// MARK:` to organize sections.
 - Avoid force-unwraps outside tests.
 - Keep `EdgeLayout` **pure** (no global state, no AppKit beyond `CGGeometry`) so

@@ -72,6 +72,20 @@ describe('EditorSession', () => {
     expect(document.documentElement.dataset.tdTheme).toBe('light');
   });
 
+  it('follows a dark host appearance before the host sends one', () => {
+    const real = window.matchMedia;
+    // happy-dom answers every media query with `matches: false`, so the dark
+    // branch is only reachable with a stub. It is read once, at construction.
+    window.matchMedia = ((query: string) =>
+      ({ matches: query.includes('dark'), media: query }) as MediaQueryList) as typeof window.matchMedia;
+    try {
+      newSession();
+      expect(document.documentElement.dataset.tdTheme).toBe('dark');
+    } finally {
+      window.matchMedia = real;
+    }
+  });
+
   it('load + flush without edits sends no changed message', async () => {
     const { transport, container, session } = newSession();
     initialize(session, '# Note\n', 1);
