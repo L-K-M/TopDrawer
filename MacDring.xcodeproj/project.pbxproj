@@ -187,13 +187,13 @@
 			);
 			name = "Copy EditorWeb assets";
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.html",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.js",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.css",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/EditorWeb/editor.html",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/EditorWeb/editor.js",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/EditorWeb/editor.css",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\n# The editor is built and reviewed outside Xcode (EditorWeb/README.md); Xcode only\n# copies the three reviewed files, so the repository holds one copy of them and the\n# app cannot ship a stale bundle. Flat, by name: the page and the scheme handler\n# look them up in the resource directory.\nsrc=\"$SRCROOT/EditorWeb/dist\"\ndst=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$dst\"\nfor asset in editor.html editor.js editor.css; do\n  if [ ! -f \"$src/$asset\" ]; then\n    echo \"error: $src/$asset is missing; run 'cd EditorWeb && npm run build'\"\n    exit 1\n  fi\n  cp -f \"$src/$asset\" \"$dst/$asset\"\ndone\n";
+			shellScript = "set -eu\n# The editor is built and reviewed outside Xcode (EditorWeb/README.md); Xcode only\n# copies the three reviewed files, so the repository holds one copy of them and the\n# app cannot ship a stale bundle. Into an EditorWeb/ sub-directory of the resource\n# folder, which is where NotesEditorSchemeHandler.bundledDirectory() looks: that\n# directory is the whole of the web content's reach, so keeping the assets in one\n# of their own also keeps them clear of any other resource with the same name.\nsrc=\"$SRCROOT/EditorWeb/dist\"\ndst=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/EditorWeb\"\nmkdir -p \"$dst\"\nfor asset in editor.html editor.js editor.css; do\n  if [ ! -f \"$src/$asset\" ]; then\n    echo \"error: $src/$asset is missing; run 'cd EditorWeb && npm run build'\"\n    exit 1\n  fi\n  cp -f \"$src/$asset\" \"$dst/$asset\"\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

@@ -85,6 +85,11 @@ jobs:
       # with a build phase, and a silent failure there (a sandboxing change, a renamed
       # file, a phase dropped in a merge) would leave users with a blank notes drawer
       # that no unit test can see, so check the built product itself.
+      #
+      # The directory below is not free choice: it is the one
+      # `NotesEditorSchemeHandler.bundledDirectory()` opens, and the app logs a
+      # diagnostic and shows an empty drawer if the assets are anywhere else. Move
+      # the two together or this check stops meaning anything.
       - name: Verify the notes editor shipped in the app bundle
         run: |
           set -euo pipefail
@@ -94,7 +99,7 @@ jobs:
           test -n "$app" || { echo 'error: built app not found'; exit 1; }
           echo "app: $app"
           for asset in editor.html editor.js editor.css; do
-            path="$app/Contents/Resources/$asset"
+            path="$app/Contents/Resources/EditorWeb/$asset"
             test -s "$path" || { echo "error: missing or empty $path"; exit 1; }
             echo "ok: $asset ($(wc -c < "$path") bytes)"
           done
