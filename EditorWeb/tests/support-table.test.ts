@@ -62,11 +62,14 @@ describe('support table generation', () => {
     }
     lines.push('');
 
+    // Written before the assertion below, not after: a regressing fixture is exactly
+    // when the "YES — BUG" rows earn their keep, and an assertion that threw first
+    // would leave a stale all-green table on disk.
+    writeFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'SUPPORT.md'), lines.join('\n'));
+
     // Assert the tracked fact, not the formatted table: re-parsing the output
     // would pass if the marker text ever changed.
     expect(offenders, 'a load must not report a change').toEqual([]);
-
-    writeFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'SUPPORT.md'), lines.join('\n'));
   },
     // 16 fixtures x SETTLE_MS exceeds the 5 s default test timeout.
     30_000,
