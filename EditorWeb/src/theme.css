@@ -93,6 +93,13 @@ body {
   min-height: calc(100% - 20px);
 }
 
+/* The top margin on a heading (Crepe gives h1–h6 16–32px) separates it from
+   the block above; a first block has none, so the margin just reads as a gap
+   under the drawer header. Applies to any first block, not only headings. */
+.milkdown .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
 /* Crepe's reset removes every focus ring; restore it for interactive chrome
    (WCAG 2.4.7). This targets the same selector as Crepe's reset and is emitted
    later, so it wins the tie and covers every focusable control, including ones
