@@ -293,6 +293,13 @@ Unless explicitly instructed otherwise:
    checks pass on the latest commit, and no unresolved blockers or required
    human review requests remain.
 
+### Reviewer context limits
+
+The automated PR reviewer does not see the user's original prompt or
+conversation. It may suggest changes that go against or beyond what the
+user asked for. Do not implement such suggestions. Note each conflict and
+report it to the user at the end of the thread.
+
 ### Automated review stopping rules
 
 Judge findings by verified impact, not the reviewer's severity label.
