@@ -201,8 +201,11 @@ fall back to a full review.
 - Writing the code is not finishing the task. A task is finished when
   its changes are merged to main through a PR that passed CI and review,
   or when the user explicitly accepts a different end state.
-- Before editing, inspect the branch and working tree, fetch remote updates,
-  and fast-forward where safe. Never overwrite existing work to update.
+- Start every task on current code. Fetch first, then cut the task
+  branch from origin/main — never from a stale local branch or an old
+  checkout. To continue existing work, rebase or merge the latest
+  origin/main into it before editing. Never overwrite existing work to
+  update.
 - Resolve ambiguity before making consequential changes. State low-risk
   assumptions; ask when scope, safety, or expected behavior is unclear.
 - Keep changes focused. Do not modify unrelated code, formatting, or comments.
@@ -284,8 +287,8 @@ and verification procedure. State any inability to reproduce the failure.
 
 Unless explicitly instructed otherwise:
 
-1. Work on a focused branch and open a PR against main before reporting
-   the task as done.
+1. Work on a focused branch cut from the latest origin/main and open a PR
+   against main before reporting the task as done.
 2. Inspect CI results and completed review feedback for the latest commit.
    A successful reviewer job does not mean the review found no problems.
 3. Address important findings or explain why they do not apply. Handle minor
