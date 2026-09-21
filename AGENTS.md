@@ -198,6 +198,9 @@ fall back to a full review.
 ## Working practices
 
 - Follow explicit task instructions over the default workflow below.
+- Writing the code is not finishing the task. A task is finished when
+  its changes are merged to main through a PR that passed CI and review,
+  or when the user explicitly accepts a different end state.
 - Before editing, inspect the branch and working tree, fetch remote updates,
   and fast-forward where safe. Never overwrite existing work to update.
 - Resolve ambiguity before making consequential changes. State low-risk
@@ -281,7 +284,8 @@ and verification procedure. State any inability to reproduce the failure.
 
 Unless explicitly instructed otherwise:
 
-1. Work on a focused branch and open a PR against main.
+1. Work on a focused branch and open a PR against main before reporting
+   the task as done.
 2. Inspect CI results and completed review feedback for the latest commit.
    A successful reviewer job does not mean the review found no problems.
 3. Address important findings or explain why they do not apply. Handle minor
@@ -335,13 +339,24 @@ After two consecutive reviewer-integration failures, stop and report the
 review gap. Do not treat failures as approval. An explicit user instruction
 may waive review; report that waiver rather than claiming review passed.
 
-## Completion checklist
+## Ending a task
 
-- The requested behavior is implemented without unrelated changes.
-- Relevant checks pass for the latest code.
-- Important review findings are addressed or rejected with reasons.
-- Deferred suggestions, remaining risks, and validation gaps are disclosed.
-- The final response accurately states whether work is committed, pushed,
-  and merged.
+- A task ends with its changes merged to main — not with code written,
+  and not with a PR merely opened. An open PR is work in progress:
+  monitor CI on the latest commit, address review findings per the
+  stopping rules, and merge once the criteria are met.
+- Never finish with uncommitted changes or unpushed commits in the
+  worktree. Commit, push, and open or update the PR first.
+- If a step is impossible (missing push access, CI failure, reviewer
+  outage), report the exact blocker instead. Never present unreviewed or
+  unmerged work as finished.
+- Before finishing, confirm: the requested behavior is implemented
+  without unrelated changes; relevant checks pass on the latest code;
+  important review findings are addressed or rejected with reasons;
+  deferred suggestions, remaining risks, and validation gaps are
+  disclosed.
+- The final response states where the work stands: branch, PR, CI
+  status, review rounds completed, and whether it is merged.
 
 <!-- shared-rules:end -->
+
