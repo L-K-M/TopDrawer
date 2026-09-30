@@ -803,8 +803,10 @@ section 6.
 **Deliberately unchanged, with reasons** — don't "finish" these without a migration
 plan:
 
-- Bundle ID `ch.lkmc.MacDring`: changing it resets user defaults, saved
-  layouts, and Automation/permission grants. Keep, or ship a migration.
+- Bundle ID `com.macdring.MacDring`: changing it resets user defaults, saved
+  layouts, and Automation/permission grants. **Changed** to `ch.lkmc.MacDring`
+  in the namespace normalization — the reset was accepted; installs do not
+  upgrade in place, so there is no first-launch migration.
 - Application Support directory `MacDring/` (`TabStore.defaultStoreURL`): renaming
   it orphans every user's saved layout. Keep, or migrate on launch.
 - The Swift module: `PRODUCT_MODULE_NAME` is pinned to `MacDring`. (The rename sweep
