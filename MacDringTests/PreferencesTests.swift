@@ -11,7 +11,7 @@ final class PreferencesTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        suiteName = "com.macdring.tests.\(UUID().uuidString)"
+        suiteName = "ch.lkmc.MacDring.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
     }
 

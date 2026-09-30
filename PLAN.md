@@ -471,7 +471,7 @@ Mirrors Zap's clean module layout and **Xcode 16 file-system-synchronized groups
 `MacDringTests/` are picked up automatically — no `project.pbxproj` edits. Build settings
 match Zap: `MACOSX_DEPLOYMENT_TARGET = 13.0`, `GENERATE_INFOPLIST_FILE = YES`,
 `INFOPLIST_KEY_LSUIElement = YES`, `SWIFT_VERSION = 5.0`,
-`PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring`.
+`PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.MacDring`.
 
 ```
 MacDring/
