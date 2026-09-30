@@ -356,7 +356,7 @@
 				MARKETING_VERSION = 2.2.0;
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Top Drawer asks Finder to empty the Trash when you choose Empty Trash.";
-				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.MacDring;
 				PRODUCT_MODULE_NAME = MacDring;
 				PRODUCT_NAME = "Top Drawer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -382,7 +382,7 @@
 				MARKETING_VERSION = 2.2.0;
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Top Drawer asks Finder to empty the Trash when you choose Empty Trash.";
-				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDring;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.MacDring;
 				PRODUCT_MODULE_NAME = MacDring;
 				PRODUCT_NAME = "Top Drawer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -398,7 +398,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 2.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDringTests;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.MacDringTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -414,7 +414,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 2.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.macdring.MacDringTests;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.MacDringTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
