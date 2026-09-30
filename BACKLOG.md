@@ -803,10 +803,6 @@ section 6.
 **Deliberately unchanged, with reasons** — don't "finish" these without a migration
 plan:
 
-- Bundle ID `com.macdring.MacDring`: changing it resets user defaults, saved
-  layouts, and Automation/permission grants. **Changed** to `ch.lkmc.MacDring`
-  in the namespace normalization — the reset was accepted; installs do not
-  upgrade in place, so there is no first-launch migration.
 - Application Support directory `MacDring/` (`TabStore.defaultStoreURL`): renaming
   it orphans every user's saved layout. Keep, or migrate on launch.
 - The Swift module: `PRODUCT_MODULE_NAME` is pinned to `MacDring`. (The rename sweep
@@ -815,6 +811,11 @@ plan:
 - Code identifiers (`RecentsSource.macDring`, `includesMacDring`, `MacDringMain`):
   `.macDring` is a persisted raw value in saved documents; rename only with Xcode.
 - Frame autosave name `MacDringSettingsWindow`: a defaults key.
+
+Done and removed from the list: the bundle ID — `com.macdring.MacDring` changed to
+`ch.lkmc.MacDring` in the namespace normalization. The reset it warned about (user
+defaults, saved layouts, Automation/permission grants) was accepted; installs do
+not upgrade in place, so there is no first-launch migration.
 
 ### Early history (pre-review batches)
 
