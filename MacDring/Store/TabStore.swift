@@ -590,6 +590,15 @@ final class TabStore: ObservableObject {
         }
     }
 
+    /// Persist on drag completion without reconciling the editor mid-interaction.
+    func setNotesSize(_ size: NotesDrawerSize?, forTab tabID: UUID) {
+        guard let tab = tab(id: tabID), tab.kind == .notes, tab.notesSize != size else { return }
+        mutate(notifyChange: false) {
+            guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            $0.tabs[i].notesSize = size
+        }
+    }
+
     // MARK: Persistence
 
     private func mutate(notifyChange: Bool = true, _ change: (inout LauncherDocument) -> Void) {

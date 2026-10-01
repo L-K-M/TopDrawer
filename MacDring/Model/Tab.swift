@@ -15,7 +15,7 @@ struct Tab: Codable, Identifiable, Equatable {
 
     /// The drawer's grid size for this tab (width = columns, height = rows). Items
     /// are placed within this grid; it grows if items are placed beyond it. For a
-    /// notes tab it sizes the text area.
+    /// notes tab it supplies the initial size until the drawer is resized.
     var gridColumns: Int {
         didSet {
             let bounded = PersistedLayoutBounds.clampedGridColumns(gridColumns)
@@ -42,6 +42,9 @@ struct Tab: Codable, Identifiable, Equatable {
 
     /// The note text for a `.notes` tab.
     var notes: String
+
+    /// The persisted notes-drawer size for a `.notes` tab (nil until resized).
+    var notesSize: NotesDrawerSize?
 
     /// The linked directory for a `.folder` tab (bookmark + resolved-path fallback).
     var folderBookmark: Data?
@@ -75,6 +78,7 @@ struct Tab: Codable, Identifiable, Equatable {
          kind: TabKind = .items,
          layout: DrawerLayout = .grid,
          notes: String = "",
+         notesSize: NotesDrawerSize? = nil,
          folderBookmark: Data? = nil,
          folderURL: URL? = nil,
          folderSort: FolderSort = .name,
@@ -95,6 +99,7 @@ struct Tab: Codable, Identifiable, Equatable {
         self.kind = kind
         self.layout = layout
         self.notes = notes
+        self.notesSize = notesSize
         self.folderBookmark = folderBookmark
         self.folderURL = folderURL
         self.folderSort = folderSort
@@ -135,6 +140,7 @@ struct Tab: Codable, Identifiable, Equatable {
         // `.grid`, the layout the global default used to be.
         layout = c.decodeLenient(DrawerLayout.self, forKey: .layout, fallback: .grid)
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        notesSize = c.decodeLenient(NotesDrawerSize?.self, forKey: .notesSize, fallback: nil)
         folderBookmark = try c.decodeIfPresent(Data.self, forKey: .folderBookmark)
         folderURL = try c.decodeIfPresent(URL.self, forKey: .folderURL)
         folderSort = c.decodeLenient(FolderSort.self, forKey: .folderSort, fallback: .name)
@@ -145,7 +151,7 @@ struct Tab: Codable, Identifiable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, colorHex, glyph, anchor, items, behavior, hotkey
-        case gridColumns, gridRows, locked, kind, layout, notes, folderBookmark, folderURL
+        case gridColumns, gridRows, locked, kind, layout, notes, notesSize, folderBookmark, folderURL
         case folderSort, folderShowsHidden, recentsSource, iconStyles
     }
 }

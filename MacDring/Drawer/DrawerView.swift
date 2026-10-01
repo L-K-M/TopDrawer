@@ -103,12 +103,10 @@ struct DrawerView: View {
     private var bodyContent: some View {
         switch model.kind {
         case .notes:
-            // The bundled web editor fills the drawer. Its text insets are its own, so
-            // it bleeds to the drawer's edges; the resolution happens inside (see
-            // NotesEditorHostSession), not here.
+            // Leave a narrow gutter for resize handles, clear of text and scrollbars.
             NotesEditorPane(model: model, preferences: preferences)
-                .padding(.horizontal, -14)
-                .padding(.bottom, -14)
+                .padding(.horizontal, -14 + DrawerMetrics.notesResizeInset)
+                .padding(.bottom, -14 + DrawerMetrics.notesResizeInset)
         case .items, .folder, .disks, .network, .cloud, .recents, .fresh:
             if model.isSearching { searchResultsList }
             else if model.items.isEmpty { emptyState }

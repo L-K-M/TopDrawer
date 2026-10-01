@@ -5,6 +5,37 @@ final class DrawerMetricsTests: XCTestCase {
 
     private let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
 
+    func testSavedNotesSizeIsIndependentOfIconAndGridSettings() {
+        let preferred = NotesDrawerSize(width: 620, height: 430)!
+        let small = DrawerMetrics.notesSize(preferredSize: preferred, columns: 1, rows: 1, iconSize: 32, in: visible)
+        let large = DrawerMetrics.notesSize(preferredSize: preferred, columns: 12, rows: 16, iconSize: 128, in: visible)
+        XCTAssertEqual(small, CGSize(width: 620, height: 430))
+        XCTAssertEqual(small, large)
+    }
+
+    func testLegacyNotesRetainGridDerivedInitialSize() {
+        XCTAssertEqual(DrawerMetrics.notesSize(columns: 4, rows: 2, iconSize: 64, in: visible),
+                       CGSize(width: 396, height: 238))
+    }
+
+    func testSavedNotesSizeIsClampedTransiently() {
+        let preferred = NotesDrawerSize(width: 620, height: 430)!
+        let smallScreen = CGRect(x: 0, y: 0, width: 400, height: 300)
+        XCTAssertEqual(DrawerMetrics.notesSize(preferredSize: preferred, columns: 4, rows: 2, iconSize: 64, in: smallScreen),
+                       CGSize(width: 400, height: 300))
+        XCTAssertEqual(DrawerMetrics.notesSize(preferredSize: preferred, columns: 4, rows: 2, iconSize: 64, in: visible),
+                       CGSize(width: 620, height: 430))
+    }
+
+    func testNotesMinimumSizeAndTinyDisplayClamp() {
+        let preferred = NotesDrawerSize(width: 1, height: 1)!
+        XCTAssertEqual(DrawerMetrics.notesSize(preferredSize: preferred, columns: 1, rows: 1, iconSize: 32, in: visible),
+                       DrawerMetrics.notesMinimumSize)
+        let tiny = CGRect(x: 0, y: 0, width: 10, height: 10)
+        XCTAssertEqual(DrawerMetrics.notesSize(preferredSize: preferred, columns: 1, rows: 1, iconSize: 32, in: tiny), tiny.size)
+        XCTAssertEqual(DrawerMetrics.notesSize(columns: 1, rows: 1, iconSize: 32, in: tiny), .zero)
+    }
+
     func testGridWidthScalesWithColumns() {
         let two = DrawerMetrics.contentSize(itemCount: 8, maxSlot: 7, configuredRows: 2, layout: .grid, iconSize: 64, columns: 2, in: visible)
         let four = DrawerMetrics.contentSize(itemCount: 8, maxSlot: 7, configuredRows: 2, layout: .grid, iconSize: 64, columns: 4, in: visible)

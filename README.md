@@ -26,6 +26,8 @@ Jetty all draw it.
 
 - **Edge tabs → drawers.** Colored tabs anchored to any screen edge; click (or
   hover) to open a drawer.
+- **Resizable notes drawers.** Drag an exposed edge or corner to resize your
+  scratchpad. Each notes tab remembers its size across restarts.
 - **Eight tab types** — an **items** tab (apps, files, folders, links arranged freely
   in a grid with gaps), a **notes** tab (a live Markdown scratchpad: type formatted
   text, tick off task items, and show the formatting bar from the drawer header

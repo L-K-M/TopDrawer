@@ -210,6 +210,81 @@ final class LauncherDocumentCodableTests: XCTestCase {
         XCTAssertEqual(decoded.tabs.first?.title, "Good")
     }
 
+    func testNotesDrawerSizeRoundTrips() throws {
+        let size = try XCTUnwrap(NotesDrawerSize(width: 620, height: 430, tabPosition: 0.25))
+        let notes = Tab(title: "Scratch", colorHex: "#FFD60A",
+                        anchor: ScreenAnchor(displayUUID: "U", edge: .left, position: 0.4),
+                        kind: .notes, notes: "remember the milk", notesSize: size)
+        let document = LauncherDocument(tabs: [notes])
+
+        let decoded = try JSONDecoder().decode(LauncherDocument.self, from: JSONEncoder().encode(document))
+
+        XCTAssertEqual(decoded, document)
+        XCTAssertEqual(decoded.tabs.first?.notesSize, size)
+    }
+
+    func testNotesDrawerSizeInitValidatesDimensionsAndAlignment() {
+        XCTAssertNotNil(NotesDrawerSize(width: 620, height: 430))
+        XCTAssertEqual(NotesDrawerSize(width: 620, height: 430)?.tabPosition, 0.5)
+        XCTAssertNotNil(NotesDrawerSize(width: 620, height: 430, tabPosition: 0))
+        XCTAssertNotNil(NotesDrawerSize(width: 620, height: 430, tabPosition: 1))
+        XCTAssertNil(NotesDrawerSize(width: 0, height: 430))
+        XCTAssertNil(NotesDrawerSize(width: -10, height: 430))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: 0))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: -5))
+        XCTAssertNil(NotesDrawerSize(width: .infinity, height: 430))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: .nan))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: 430, tabPosition: -0.1))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: 430, tabPosition: 1.1))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: 430, tabPosition: .nan))
+        XCTAssertNil(NotesDrawerSize(width: 620, height: 430, tabPosition: .infinity))
+    }
+
+    func testLegacyTabWithoutNotesSizeDecodesNil() throws {
+        // A notes tab persisted before the size field existed has no size.
+        let legacy = #"""
+        {"tabs":[{"title":"Scratch","kind":"notes","notes":"remember the milk",
+          "anchor":{"displayUUID":"D","edge":"left","position":0.4}}]}
+        """#.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(LauncherDocument.self, from: legacy)
+        let tab = try XCTUnwrap(decoded.tabs.first)
+        XCTAssertNil(tab.notesSize)
+        XCTAssertEqual(tab.notes, "remember the milk")
+    }
+
+    func testNotesSizeWithoutTabPositionDefaultsToHalf() throws {
+        let json = #"""
+        {"tabs":[{"title":"Scratch","kind":"notes","notes":"remember",
+          "notesSize":{"width":620,"height":430},
+          "anchor":{"displayUUID":"D","edge":"left","position":0.4}}]}
+        """#.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(LauncherDocument.self, from: json)
+        XCTAssertEqual(decoded.tabs.first?.notesSize, NotesDrawerSize(width: 620, height: 430, tabPosition: 0.5))
+    }
+
+    func testMalformedNotesSizeFallsBackToNilPreservingTab() throws {
+        // An unreadable optional size must never lose the tab or its text.
+        let raws = [
+            #""notesSize":{"width":-10,"height":430}"#,          // negative dimension
+            #""notesSize":{"width":620,"height":0}"#,            // zero dimension
+            #""notesSize":{"width":"wide","height":430}"#,      // wrong type
+            #""notesSize":{"width":620,"height":430,"tabPosition":2}"#,  // alignment out of range
+            #""notesSize":{"width":620}"#,                      // missing dimension
+            #""notesSize":null"#,                                // explicit null
+        ]
+        for raw in raws {
+            let json = #"{"tabs":[{"title":"Scratch","kind":"notes","notes":"remember the milk",\#(raw),"anchor":{"displayUUID":"D","edge":"left","position":0.4}}]}"#.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(LauncherDocument.self, from: json)
+            let tab = try XCTUnwrap(decoded.tabs.first, "raw=\(raw)")
+            XCTAssertNil(tab.notesSize, "raw=\(raw)")
+            XCTAssertEqual(tab.title, "Scratch", "raw=\(raw)")
+            XCTAssertEqual(tab.kind, .notes, "raw=\(raw)")
+            XCTAssertEqual(tab.notes, "remember the milk", "raw=\(raw)")
+        }
+    }
+
     func testEmptyDocumentDecodes() throws {
         let decoded = try JSONDecoder().decode(LauncherDocument.self, from: "{}".data(using: .utf8)!)
         XCTAssertTrue(decoded.tabs.isEmpty)
