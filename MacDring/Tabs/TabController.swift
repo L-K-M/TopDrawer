@@ -1002,7 +1002,7 @@ final class TabController {
             guard let self, let id = self.openTabID, let wc = self.tabWindows[id],
                   let tab = self.store.tab(id: id), self.effectiveBehavior(tab).openOnHover else { return }
             let mouse = NSEvent.mouseLocation
-            if !self.drawer.frame.contains(mouse), !wc.window.frame.contains(mouse) { self.scheduleHoverClose() }
+            if !self.drawer.frame.contains(mouse), !wc.frame.contains(mouse) { self.scheduleHoverClose() }
         }
         drawer.model.onLaunch = { [weak self] item in self?.launch(item) }
         drawer.model.onRemoveItem = { [weak self] item in
