@@ -272,9 +272,8 @@ final class DrawerWindowController {
            session.documentID != tab.id || edge != currentEdge || tabFrame != currentTabFrame
                || screen.visibleFrame != session.visibleFrame {
             // Finish against the old geometry before changing displays or placement.
-            let liveSize = notesDrawerSize
             finishResize()
-            if session.documentID == tab.id { refreshedTab.notesSize = liveSize }
+            if session.documentID == tab.id { refreshedTab.notesSize = notesDrawerSize }
         }
         apply(tab: refreshedTab, preserveLiveNotes: true)
         model.edge = edge

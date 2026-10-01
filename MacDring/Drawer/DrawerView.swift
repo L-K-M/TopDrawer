@@ -103,7 +103,7 @@ struct DrawerView: View {
     private var bodyContent: some View {
         switch model.kind {
         case .notes:
-            // Leave a narrow gutter for resize handles, clear of text and scrollbars.
+            // Cancel the drawer's padding, retaining a gutter for resize handles.
             NotesEditorPane(model: model, preferences: preferences)
                 .padding(.horizontal, -14 + DrawerMetrics.notesResizeInset)
                 .padding(.bottom, -14 + DrawerMetrics.notesResizeInset)
