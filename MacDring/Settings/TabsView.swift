@@ -223,18 +223,29 @@ private struct TabEditor: View {
             }
 
             Section("Drawer") {
-                if currentTab.kind != .notes {
+                if currentTab.kind == .notes {
+                    if let size = currentTab.notesSize {
+                        LabeledContent("Size") {
+                            Text("\(size.width, specifier: "%.0f") × \(size.height, specifier: "%.0f") pt")
+                        }
+                    }
+                    Button("Reset Drawer Size") {
+                        store.updateTab(id: tab.id) { $0.notesSize = nil }
+                    }
+                    .disabled(currentTab.notesSize == nil)
+                    Text("Drag a free edge or corner of the open drawer to resize it. Each notes tab remembers its size.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
                     Picker("Layout", selection: tabBinding(\.layout)) {
                         ForEach(DrawerLayout.allCases) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    // Ranges match General's new-tab defaults and Preferences' clamps.
+                    Stepper("Columns: \(currentTab.gridColumns)", value: tabBinding(\.gridColumns), in: 1...12)
+                    Stepper("Rows: \(currentTab.gridRows)", value: tabBinding(\.gridRows), in: 1...16)
+                    Text("Layout and size for the drawer. Items can be placed anywhere in the grid, with gaps. The list layout shows entries top-to-bottom and adds a date column for the Fresh, Recents, and folder tabs.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                // Ranges match the General pane's new-tab defaults (and Preferences'
-                // clamps): a tab created at 12×16 must be editable back up here.
-                Stepper("Columns: \(currentTab.gridColumns)", value: tabBinding(\.gridColumns), in: 1...12)
-                Stepper("Rows: \(currentTab.gridRows)", value: tabBinding(\.gridRows), in: 1...16)
-                Text("Layout and size for the drawer. Items can be placed anywhere in the grid, with gaps; for a notes tab the columns/rows size the text area. The list layout shows entries top-to-bottom and adds a date column for the Fresh, Recents, and folder tabs.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Behavior") {

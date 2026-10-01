@@ -1080,4 +1080,78 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(store.tab(id: tab.id)!.items.count, 2)   // group + C, unchanged
         XCTAssertTrue(store.tab(id: tab.id)!.items.contains { $0.id == c.id && $0.kind != .group })
     }
+
+    // MARK: Notes drawer size
+
+    private func makeNotesTab(_ title: String = "Scratch") -> Tab {
+        Tab(title: title,
+            colorHex: "#FFD60A",
+            anchor: ScreenAnchor(displayUUID: "D1", edge: .left, position: 0.4),
+            gridColumns: 6, gridRows: 3,
+            kind: .notes, notes: "remember the milk")
+    }
+
+    func testSetNotesSizePersistsAndReloadsPreservingTab() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeNotesTab()
+        store.addTab(tab)
+        let size = try XCTUnwrap(NotesDrawerSize(width: 620, height: 430, tabPosition: 0.25))
+        store.setNotesSize(size, forTab: tab.id)
+        store.saveNow()
+
+        let reloaded = TabStore(storeURL: storeURL)
+        let saved = try XCTUnwrap(reloaded.tabs.first { $0.id == tab.id })
+        XCTAssertEqual(saved.notesSize, size)
+        XCTAssertEqual(saved.notes, "remember the milk")
+        XCTAssertEqual(saved.anchor, tab.anchor)
+        XCTAssertEqual(saved.gridColumns, 6)
+        XCTAssertEqual(saved.gridRows, 3)
+        XCTAssertEqual(saved.kind, .notes)
+    }
+
+    func testSetNotesSizeDoesNotFireOnChange() throws {
+        let store = TabStore(storeURL: storeURL)
+        let tab = makeNotesTab()
+        store.addTab(tab)
+
+        var changes = 0
+        store.onChange = { changes += 1 }
+        let size = try XCTUnwrap(NotesDrawerSize(width: 620, height: 430))
+        store.setNotesSize(size, forTab: tab.id)
+
+        XCTAssertEqual(store.tab(id: tab.id)?.notesSize, size)
+        XCTAssertEqual(changes, 0)
+    }
+
+    func testSetNotesSizeIgnoresUnknownNonNotesAndNoOpWrites() throws {
+        let store = TabStore(storeURL: storeURL)
+        let notes = makeNotesTab("Scratch")
+        let plain = makeTab("Plain")
+        store.addTab(notes)
+        store.addTab(plain)
+
+        var changes = 0
+        store.onChange = { changes += 1 }
+        let size = try XCTUnwrap(NotesDrawerSize(width: 620, height: 430, tabPosition: 0.25))
+        let before = store.document
+
+        store.setNotesSize(size, forTab: UUID())
+        store.setNotesSize(size, forTab: plain.id)
+        store.setNotesSize(nil, forTab: notes.id)
+        XCTAssertEqual(store.document, before)
+        XCTAssertNil(store.tab(id: notes.id)?.notesSize)
+        XCTAssertNil(store.tab(id: plain.id)?.notesSize)
+
+        store.setNotesSize(size, forTab: notes.id)
+        XCTAssertEqual(store.tab(id: notes.id)?.notesSize, size)
+        let written = store.document
+
+        store.setNotesSize(size, forTab: notes.id)
+        XCTAssertEqual(store.document, written)
+        XCTAssertEqual(changes, 0)
+
+        store.setNotesSize(nil, forTab: notes.id)
+        XCTAssertNil(store.tab(id: notes.id)?.notesSize)
+        XCTAssertEqual(store.tab(id: notes.id)?.notes, "remember the milk")
+    }
 }

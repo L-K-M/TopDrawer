@@ -14,6 +14,9 @@ enum DrawerMetrics {
     static let headerHeight: CGFloat = 30
     static let gridSpacing: CGFloat = 12
     static let gridInterColumn: CGFloat = 10
+    static let notesMinimumSize = CGSize(width: 260, height: 180)
+    static let notesResizeInset: CGFloat = 6
+    private static let screenInset: CGFloat = 16
     /// Extra height reserved for the filter field (plus its stack gap) when a drawer
     /// is searchable, so the grid still fits without a scroll bar. See `contentSize`.
     static let searchBarHeight: CGFloat = 40
@@ -27,15 +30,17 @@ enum DrawerMetrics {
     /// columns fit — see `ItemView`).
     static let listMinWidth: CGFloat = 220
 
-    /// Size for a notes drawer, derived from the tab's grid dimensions (so the
-    /// Columns/Rows steppers also size the text area), clamped to the screen.
-    static func notesSize(columns: Int, rows: Int, iconSize: CGFloat, in visibleFrame: CGRect) -> CGSize {
+    /// A saved notes size wins over the legacy grid-derived initial size.
+    /// Screen clamping is transient: a smaller display must not erase the saved size.
+    static func notesSize(preferredSize: NotesDrawerSize? = nil, columns: Int, rows: Int,
+                          iconSize: CGFloat, in visibleFrame: CGRect) -> CGSize {
         let columns = PersistedLayoutBounds.clampedGridColumns(columns)
         let rows = PersistedLayoutBounds.clampedGridRows(rows)
-        let width = padding + CGFloat(columns) * (iconSize + 28)
-        let height = padding + headerHeight + CGFloat(rows) * (iconSize + 26)
-        return CGSize(width: min(max(width, 260), visibleFrame.width - 16),
-                      height: min(max(height, 180), visibleFrame.height - 16))
+        let width = preferredSize.map { CGFloat($0.width) } ?? (padding + CGFloat(columns) * (iconSize + 28))
+        let height = preferredSize.map { CGFloat($0.height) } ?? (padding + headerHeight + CGFloat(rows) * (iconSize + 26))
+        let inset = preferredSize == nil ? screenInset : 0
+        return CGSize(width: min(max(width, notesMinimumSize.width), max(0, visibleFrame.width - inset)),
+                      height: min(max(height, notesMinimumSize.height), max(0, visibleFrame.height - inset)))
     }
 
     /// The list layout's width for `columns` configured columns at `iconSize`: the
@@ -115,7 +120,7 @@ enum DrawerMetrics {
         // Reserve room for the filter field when the drawer shows one, so its extra
         // height doesn't push the items under a scroll bar.
         if searchable { size.height += searchBarHeight }
-        return CGSize(width: min(size.width, visibleFrame.width - 16),
-                      height: min(size.height, visibleFrame.height - 16))
+        return CGSize(width: min(size.width, visibleFrame.width - screenInset),
+                      height: min(size.height, visibleFrame.height - screenInset))
     }
 }

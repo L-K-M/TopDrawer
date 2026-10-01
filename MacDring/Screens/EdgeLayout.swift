@@ -107,27 +107,30 @@ enum EdgeLayout {
 
     /// Frame for an opening drawer: it sits **flush against the screen edge**
     /// (like a physical drawer sliding out), sized `contentSize` (capped to the
-    /// screen) and centered along the edge on the tab. The tab then rides on the
+    /// screen) and centered on the tab by default. Notes can retain a resized
+    /// along-edge alignment via `tabPosition`. The tab then rides on the
     /// drawer's inner face — see `openedTabFrame`. This is the "drawer pushes the
     /// tab inward" behavior.
-    static func openDrawerFrame(edge: Edge, tabFrame: CGRect, contentSize: CGSize, in visibleFrame: CGRect) -> CGRect {
+    static func openDrawerFrame(edge: Edge, tabFrame: CGRect, contentSize: CGSize,
+                                tabPosition: Double = 0.5, in visibleFrame: CGRect) -> CGRect {
         let w = min(contentSize.width, visibleFrame.width)
         let h = min(contentSize.height, visibleFrame.height)
+        let position = CGFloat(ScreenAnchor.clampPosition(tabPosition))
         switch edge {
         case .left:
             return CGRect(x: visibleFrame.minX,
-                          y: alignVertical(center: tabFrame.midY, height: h, in: visibleFrame),
+                          y: alignVertical(tabFrame: tabFrame, height: h, position: position, in: visibleFrame),
                           width: w, height: h)
         case .right:
             return CGRect(x: visibleFrame.maxX - w,
-                          y: alignVertical(center: tabFrame.midY, height: h, in: visibleFrame),
+                          y: alignVertical(tabFrame: tabFrame, height: h, position: position, in: visibleFrame),
                           width: w, height: h)
         case .top:
-            return CGRect(x: alignHorizontal(center: tabFrame.midX, width: w, in: visibleFrame),
+            return CGRect(x: alignHorizontal(tabFrame: tabFrame, width: w, position: position, in: visibleFrame),
                           y: visibleFrame.maxY - h,
                           width: w, height: h)
         case .bottom:
-            return CGRect(x: alignHorizontal(center: tabFrame.midX, width: w, in: visibleFrame),
+            return CGRect(x: alignHorizontal(tabFrame: tabFrame, width: w, position: position, in: visibleFrame),
                           y: visibleFrame.minY,
                           width: w, height: h)
         }
@@ -266,12 +269,16 @@ enum EdgeLayout {
         }
     }
 
-    private static func alignVertical(center: CGFloat, height: CGFloat, in vf: CGRect) -> CGFloat {
-        clamp(center - height / 2, vf.minY, vf.maxY - height)
+    private static func alignVertical(tabFrame: CGRect, height: CGFloat, position: CGFloat, in vf: CGRect) -> CGFloat {
+        let origin = tabFrame.midY - height * (1 - position)
+        guard height >= tabFrame.height else { return clamp(origin, vf.minY, vf.maxY - height) }
+        return clamp(origin, max(vf.minY, tabFrame.maxY - height), min(vf.maxY - height, tabFrame.minY))
     }
 
-    private static func alignHorizontal(center: CGFloat, width: CGFloat, in vf: CGRect) -> CGFloat {
-        clamp(center - width / 2, vf.minX, vf.maxX - width)
+    private static func alignHorizontal(tabFrame: CGRect, width: CGFloat, position: CGFloat, in vf: CGRect) -> CGFloat {
+        let origin = tabFrame.midX - width * position
+        guard width >= tabFrame.width else { return clamp(origin, vf.minX, vf.maxX - width) }
+        return clamp(origin, max(vf.minX, tabFrame.maxX - width), min(vf.maxX - width, tabFrame.minX))
     }
 
     // MARK: Position inversion

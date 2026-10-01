@@ -519,7 +519,8 @@ final class TabController {
     }
 
     private func scheduleHoverClose() {
-        pendingHoverClose?.cancel()
+        cancelHoverClose()
+        guard !drawer.isResizing else { return }
         let work = DispatchWorkItem { [weak self] in self?.closeDrawer() }
         pendingHoverClose = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
@@ -988,6 +989,21 @@ final class TabController {
     // MARK: Drawer wiring & launching
 
     private func wireDrawer() {
+        drawer.onFrameChanged = { [weak self] frame in
+            guard let self, let id = self.openTabID, let wc = self.tabWindows[id],
+                  let tab = self.store.tab(id: id) else { return }
+            wc.applyFrame(EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
+                                                    restingTabFrame: wc.restingFrame, drawerFrame: frame))
+        }
+        drawer.onNotesSizeChanged = { [weak self] size, documentID in
+            self?.store.setNotesSize(size, forTab: documentID)
+        }
+        drawer.onResizeEnded = { [weak self] in
+            guard let self, let id = self.openTabID, let wc = self.tabWindows[id],
+                  let tab = self.store.tab(id: id), self.effectiveBehavior(tab).openOnHover else { return }
+            let mouse = NSEvent.mouseLocation
+            if !self.drawer.frame.contains(mouse), !wc.frame.contains(mouse) { self.scheduleHoverClose() }
+        }
         drawer.model.onLaunch = { [weak self] item in self?.launch(item) }
         drawer.model.onRemoveItem = { [weak self] item in
             guard let self, let id = self.openTabID else { return }
@@ -1634,6 +1650,7 @@ final class TabController {
 
     /// Persists immediately and tears down all windows/hotkeys (called on quit).
     func saveAndTeardown() {
+        drawer.finishResize()
         store.saveNow()
         stopMonitoring()
         stopRevealMonitoring()

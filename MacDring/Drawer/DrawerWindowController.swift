@@ -115,7 +115,7 @@ private final class KeyableDrawerPanel: NSPanel {
 }
 
 /// Owns the single shared drawer panel, positions it adjacent to whichever tab
-/// is open (growing away from the edge), and keeps it sized to its content.
+/// is open (growing away from the edge), and sizes it to content or a notes resize.
 /// Non-activating so it never steals focus from the user's frontmost app.
 final class DrawerWindowController {
 
@@ -123,6 +123,25 @@ final class DrawerWindowController {
     private let preferences: Preferences
     private let panel: NSPanel
     private let hostingView: DrawerHostingView
+    private let resizeView: NotesDrawerResizeView
+
+    var onFrameChanged: ((CGRect) -> Void)?
+    var onNotesSizeChanged: ((NotesDrawerSize, UUID) -> Void)?
+    var onResizeEnded: (() -> Void)?
+
+    private struct ResizeSession {
+        let documentID: UUID
+        let handle: NotesDrawerResize.Handle
+        let initialMouse: CGPoint
+        let initialFrame: CGRect
+        let originalSize: NotesDrawerSize?
+        let visibleFrame: CGRect
+    }
+    private var resizeSession: ResizeSession?
+    private var notesDrawerSize: NotesDrawerSize?
+    private var isOpening = false
+    private var presentationGeneration: UInt = 0
+    var isResizing: Bool { resizeSession != nil }
 
     private(set) var isVisible = false
     /// The drawer's fully-open (flush-to-edge) frame for the current tab. The tab
@@ -163,8 +182,14 @@ final class DrawerWindowController {
         container.autoresizesSubviews = true
         hosting.frame = container.bounds
         container.addSubview(hosting)
+        let resizeView = NotesDrawerResizeView(frame: container.bounds)
+        resizeView.autoresizingMask = [.width, .height]
+        resizeView.isHidden = true
+        container.addSubview(resizeView)
+        self.resizeView = resizeView
         panel.contentView = container
         self.panel = panel
+        resizeView.onEvent = { [weak self] event in self?.handleResize(event) }
     }
 
     /// The drawer's window — used by the controller to test click-outside hits.
@@ -180,6 +205,10 @@ final class DrawerWindowController {
     /// + small inward slide. The slide stays on the drawer's own screen, so it
     /// never bleeds onto an adjacent display at a shared edge.
     func show(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen, duration: TimeInterval) {
+        finishResize()
+        presentationGeneration &+= 1
+        let generation = presentationGeneration
+        isOpening = duration > 0
         panel.level = preferences.tabWindowLevel.drawerWindowLevel
         apply(tab: tab)
         model.clearSearch()   // each open starts unfiltered
@@ -188,18 +217,23 @@ final class DrawerWindowController {
         currentEdge = edge
         currentScreen = screen
         currentTabFrame = tabFrame
+        resizeView.edge = edge
         openFrame = computeOpenFrame(in: screen.visibleFrame)
 
         if duration > 0 {
             panel.setFrame(EdgeLayout.nudgedDrawerFrame(edge: edge, openFrame: openFrame, by: Self.nudge), display: false)
             panel.alphaValue = 0
             present(over: screen)
-            NSAnimationContext.runAnimationGroup { context in
+            NSAnimationContext.runAnimationGroup({ context in
                 context.duration = duration
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrame(openFrame, display: true)
                 panel.animator().alphaValue = 1
-            }
+            }, completionHandler: { [weak self] in
+                guard let self, self.isVisible, self.presentationGeneration == generation else { return }
+                self.isOpening = false
+                self.resizeView.isHidden = self.model.kind != .notes
+            })
         } else {
             panel.alphaValue = 1
             panel.setFrame(openFrame, display: true)
@@ -233,11 +267,20 @@ final class DrawerWindowController {
     /// the editor's selection / in-flight input. See BACKLOG.md's legacy ID index (B7).
     func refresh(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen) {
         guard isVisible else { return }
-        apply(tab: tab, preserveLiveNotes: true)
+        var refreshedTab = tab
+        if let session = resizeSession,
+           session.documentID != tab.id || edge != currentEdge || tabFrame != currentTabFrame
+               || screen.visibleFrame != session.visibleFrame {
+            // Finish against the old geometry before changing displays or placement.
+            finishResize()
+            if session.documentID == tab.id { refreshedTab.notesSize = notesDrawerSize }
+        }
+        apply(tab: refreshedTab, preserveLiveNotes: true)
         model.edge = edge
         currentEdge = edge
         currentScreen = screen
         currentTabFrame = tabFrame
+        resizeView.edge = edge
         openFrame = computeOpenFrame(in: screen.visibleFrame)
         panel.setFrame(openFrame, display: true)
     }
@@ -264,6 +307,10 @@ final class DrawerWindowController {
     /// Hides the drawer over `duration` seconds with a fade + small inward slide.
     func hide(duration: TimeInterval) {
         guard isVisible else { return }
+        finishResize()
+        presentationGeneration &+= 1
+        isOpening = false
+        resizeView.isHidden = true
         isVisible = false
         // Ask the notes editor for any edit still in its debounce window before the
         // panel goes away. `visibilitychange` is not dependable here: the web view is
@@ -332,6 +379,8 @@ final class DrawerWindowController {
         model.rows = max(1, tab.gridRows)
         model.locked = tab.locked
         model.kind = tab.kind
+        resizeView.isHidden = tab.kind != .notes || isOpening
+        if !isResizing { notesDrawerSize = tab.notesSize }
         model.layout = tab.layout
         model.canClearRecents = tab.kind == .recents
             && tab.recentsSource.includesMacDring
@@ -410,8 +459,8 @@ final class DrawerWindowController {
     private func computeOpenFrame(in visibleFrame: CGRect) -> CGRect {
         let size: CGSize
         if model.kind == .notes {
-            size = DrawerMetrics.notesSize(columns: model.columns, rows: model.rows,
-                                           iconSize: CGFloat(preferences.iconSize), in: visibleFrame)
+            size = DrawerMetrics.notesSize(preferredSize: notesDrawerSize, columns: model.columns, rows: model.rows,
+                                            iconSize: CGFloat(preferences.iconSize), in: visibleFrame)
         } else {
             size = DrawerMetrics.contentSize(
                 itemCount: model.items.count,
@@ -438,15 +487,84 @@ final class DrawerWindowController {
         } else {
             content.width = max(content.width, minExtent)
         }
-        let frame = EdgeLayout.openDrawerFrame(edge: currentEdge, tabFrame: currentTabFrame, contentSize: content, in: visibleFrame)
+        if model.kind == .notes {
+            let maximum = NotesDrawerResize.maximumSize(edge: currentEdge, tabFrame: currentTabFrame, in: visibleFrame)
+            content.width = min(content.width, maximum.width)
+            content.height = min(content.height, maximum.height)
+        }
+        let frame = EdgeLayout.openDrawerFrame(edge: currentEdge, tabFrame: currentTabFrame, contentSize: content,
+                                                tabPosition: model.kind == .notes ? notesDrawerSize?.tabPosition ?? 0.5 : 0.5,
+                                                in: visibleFrame)
+        updateSquareCorners(for: frame)
+        return frame
+    }
 
+    private func updateSquareCorners(for frame: CGRect) {
         // When the drawer is clamped toward a screen edge the tab is no longer
         // centered on it and ends up beside an inner corner; square that corner so
         // the tab still joins flush (the minExtent run only covers the centered case).
         let corners = EdgeLayout.drawerInnerCornersToSquare(edge: currentEdge, tabFrame: currentTabFrame,
-                                                            drawerFrame: frame, radius: radius)
-        model.squareInnerStart = corners.start
-        model.squareInnerEnd = corners.end
-        return frame
+                                                            drawerFrame: frame, radius: CGFloat(preferences.cornerRadius))
+        if model.squareInnerStart != corners.start { model.squareInnerStart = corners.start }
+        if model.squareInnerEnd != corners.end { model.squareInnerEnd = corners.end }
+    }
+
+    // MARK: Notes resizing
+
+    private func handleResize(_ event: NotesDrawerResizeView.Event) {
+        switch event {
+        case let .began(handle, mouse):
+            guard isVisible, !isOpening, model.kind == .notes, let documentID = model.documentID,
+                  let screen = currentScreen else { return }
+            // Use the settled frame as the drag's origin.
+            panel.setFrame(openFrame, display: true)
+            panel.alphaValue = 1
+            resizeSession = ResizeSession(documentID: documentID, handle: handle, initialMouse: mouse,
+                                            initialFrame: openFrame, originalSize: notesDrawerSize,
+                                            visibleFrame: screen.visibleFrame)
+            model.onMouseEntered?()
+        case let .dragged(mouse):
+            updateResize(to: mouse)
+        case let .ended(mouse):
+            updateResize(to: mouse)
+            finishResize()
+        }
+    }
+
+    private func updateResize(to mouse: CGPoint) {
+        guard let session = resizeSession else { return }
+        var minimum = DrawerMetrics.notesMinimumSize
+        let tabExtent = (currentEdge.isVertical ? currentTabFrame.height : currentTabFrame.width)
+            + 2 * CGFloat(preferences.cornerRadius)
+        if currentEdge.isVertical { minimum.height = max(minimum.height, tabExtent) }
+        else { minimum.width = max(minimum.width, tabExtent) }
+
+        let frame = NotesDrawerResize.frame(handle: session.handle, initialFrame: session.initialFrame,
+                                             translation: CGSize(width: mouse.x - session.initialMouse.x,
+                                                                 height: mouse.y - session.initialMouse.y),
+                                             minimumSize: minimum, tabFrame: currentTabFrame, edge: currentEdge,
+                                             in: session.visibleFrame)
+        guard frame != openFrame,
+              let size = NotesDrawerSize(width: Double(frame.width), height: Double(frame.height),
+                                           tabPosition: NotesDrawerResize.tabPosition(edge: currentEdge,
+                                                                                       tabFrame: currentTabFrame,
+                                                                                       drawerFrame: frame)) else { return }
+        notesDrawerSize = size
+        openFrame = frame
+        updateSquareCorners(for: frame)
+        panel.setFrame(frame, display: true)
+        onFrameChanged?(frame)
+    }
+
+    /// Also called before termination saves, so an unfinished drag is persisted.
+    func finishResize() {
+        guard let session = resizeSession else { return }
+        resizeSession = nil
+        if openFrame != session.initialFrame, let notesDrawerSize {
+            onNotesSizeChanged?(notesDrawerSize, session.documentID)
+        } else {
+            notesDrawerSize = session.originalSize
+        }
+        onResizeEnded?()
     }
 }

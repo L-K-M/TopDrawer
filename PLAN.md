@@ -147,6 +147,7 @@ struct Tab: Codable, Identifiable {
     var locked: Bool                       // if set, the tab can't be dragged to a new spot
     var kind: TabKind                      // .items | .notes | .folder | .disks | .network | .cloud | .recents | .fresh
     var notes: String                      // text for a .notes tab
+    var notesSize: NotesDrawerSize?         // logical-point size + normalized tab alignment
     var folderBookmark: Data?; var folderURL: URL?   // linked dir for a .folder tab
     var recentsSource: RecentsSource       // .recents source: .macDring | .system | .both
     var iconStyles: [String: IconStyle]    // per-path generated-icon overrides for live items
@@ -287,6 +288,15 @@ must not steal focus or churn the active-app order).
   (unless "keep open"/pinned), or — optionally — when the pointer leaves (hover mode).
 - **Sizing:** deterministic via `DrawerMetrics` (item count + appearance), not SwiftUI
   `fittingSize`, then clamped to the target screen's `visibleFrame`.
+- **Notes resizing:** AppKit handles on the three exposed sides and two inward
+  corners resize live, keeping the screen edge and opposite side fixed. The tab
+  rides the inward face and remains within the drawer's span. `notesSize` stores
+  width/height in logical points and normalized tab alignment, never absolute
+  coordinates. Existing notes retain their grid-derived initial size until resized.
+  Screen clamping preserves the saved preference, including on a smaller display.
+  Drag completion persists without reconciling the editor; hover-close is suspended
+  during the drag. Position locking still allows resizing. Settings can reset the
+  saved size. The editor has a narrow gutter clear of the handles and scrollbars.
 
 ### Multi-monitor & layout (`EdgeLayout`)
 - A pure, unit-testable function: given a `ScreenAnchor`, an `NSScreen.visibleFrame`, and
@@ -636,6 +646,9 @@ MacDring/
 >   selected** (`SettingsRouter`); **Settings** content fills/resizes with its window.
 > - **Per-tab drawer grid** — each tab sets its drawer's `gridColumns` × `gridRows`
 >   (Tabs editor); new tabs default from General → New tab defaults.
+> - **Resizable notes drawers:** exposed edges/corners resize the editor live.
+>   Per-tab size and normalized alignment restore across restarts; the tab follows
+>   the inward face. Notes settings offer Reset Drawer Size instead of grid steppers.
 > - **Locked tabs** — a `locked` tab ignores drag-to-reposition. The **open drawer's
 >   header** shows a **lock toggle** and a **gear** (Configure Tab…); the
 >   always-visible pill stays uncluttered.
