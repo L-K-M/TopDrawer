@@ -7,6 +7,13 @@ Screen-edge tabs that open drawers of your apps, files, folders, and links. Insp
 
 **Latest release:** v<!-- version -->2.3.0<!-- /version --> · [Download](https://github.com/L-K-M/TopDrawer/releases/latest)
 
+The build is ad-hoc signed and not notarized. After moving **Top Drawer** to
+Applications, run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Top Drawer.app"
+```
+
 ![Screenshot](screenshot.png)
 
 Tabs sit against the edges of your screens. Click one and a
