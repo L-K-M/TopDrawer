@@ -111,8 +111,8 @@ jobs:
 
       - name: Package zip + DMG
         run: |
-          ZIP="$RUNNER_TEMP/$ASSET_BASE-$VERSION.zip"
-          DMG="$RUNNER_TEMP/$ASSET_BASE-$VERSION.dmg"
+          ZIP="$RUNNER_TEMP/$ASSET_BASE-$VERSION-macos-universal.zip"
+          DMG="$RUNNER_TEMP/$ASSET_BASE-$VERSION-macos-universal.dmg"
           ditto -c -k --keepParent "$APP_PATH" "$ZIP"
           # create-dmg can exit non-zero on a headless runner even on success — verify the file.
           create-dmg \

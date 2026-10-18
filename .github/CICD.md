@@ -46,7 +46,7 @@ The workflow then:
 2. builds the Release configuration with `CODE_SIGNING_ALLOWED=NO`;
 3. **ad-hoc signs** the app (`codesign --sign -`) — this needs no certificate or key but is
    required for the app to launch on Apple Silicon;
-4. packages `TopDrawer-1.2.0.dmg` and `TopDrawer-1.2.0.zip`;
+4. packages `TopDrawer-1.2.0-macos-universal.dmg` and `TopDrawer-1.2.0-macos-universal.zip`;
 5. publishes a GitHub Release named `Top Drawer 1.2.0` with auto-generated notes (plus the
    Gatekeeper instructions below) and both files attached;
 6. in parallel, builds the Linux `.deb`, smoke-tests it, and attaches it to the same release
