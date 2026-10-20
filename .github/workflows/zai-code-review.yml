@@ -55,11 +55,16 @@ jobs:
         # of #89 still fits.
         timeout-minutes: 170
         # Pin privileged third-party actions to an immutable commit.
-        # ed5d384 = v0.0.14. Verify before bumping:
-        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.14^{}'
-        uses: L-K-M/zai-code-review@ed5d384eaa86b049fed3331ddb4c1ec08fd555f4
+        # 13a9ddb = v0.0.15. Verify before bumping:
+        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.15*'
+        uses: L-K-M/zai-code-review@13a9ddba4ff2e2086dbd91af184f74dee6587c17
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
+          # Xiaomi MiMo reviews the chunks Z.ai still fails on (rate limits,
+          # outages). An empty MIMO_API_KEY secret disables the fallback.
+          FALLBACK_API_KEY: ${{ secrets.MIMO_API_KEY }}
+          FALLBACK_API_URL: https://token-plan-sgp.xiaomimimo.com/v1/chat/completions
+          FALLBACK_MODEL: mimo-v2.6-pro
           ZAI_MODEL: glm-5.3
           ZAI_MODEL_FAST: glm-5.3-flash
           ZAI_REASONING_EFFORT: high
