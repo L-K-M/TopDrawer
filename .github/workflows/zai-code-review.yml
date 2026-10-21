@@ -23,7 +23,9 @@ concurrency:
 jobs:
   review:
     name: Review PR with GLM 5.3
-    runs-on: ubuntu-latest
+    # A ZAI_REVIEW_RUNNER repository variable (e.g. truenas) moves the review
+    # to self-hosted runners with that label; unset, GitHub hosts it.
+    runs-on: ${{ vars.ZAI_REVIEW_RUNNER || 'ubuntu-latest' }}
     # Backstop only. The review step below carries the real budget and is
     # shorter, so it always fires first. That keeps running out of time a step
     # failure, which the reporting step can act on, and leaves "cancelled" to
