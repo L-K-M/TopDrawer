@@ -17,7 +17,10 @@ struct NotesEditorLinkInteraction {
                            as activation: Activation) -> URL? {
         guard insertion >= 0, insertion <= storage.length else { return nil }
         let text = storage.string
-        if editingLink?.text != text { editingLink = nil }
+        // Canonically equivalent strings can still move UTF-16 link ranges.
+        if let editingLink, !editingLink.text.utf16.elementsEqual(text.utf16) {
+            self.editingLink = nil
+        }
 
         let candidates = [insertion, insertion - 1].filter { $0 >= 0 && $0 < storage.length }
         let native = nativeLink(at: candidates, in: storage, text: text)

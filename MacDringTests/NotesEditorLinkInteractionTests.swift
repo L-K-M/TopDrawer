@@ -77,5 +77,24 @@ final class NotesEditorLinkInteractionTests: XCTestCase {
         storage.removeAttribute(.link, range: range)
         XCTAssertEqual(interaction.activate(at: 1, in: storage, as: .open), new)
     }
+
+    func testUnicodeNormalizationChangesInvalidateUTF16Ranges() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/note"))
+        let original = "e\u{301} link"
+        let replacement = "é link"
+        XCTAssertEqual(original, replacement)
+        XCTAssertNotEqual(original.utf16.count, replacement.utf16.count)
+        let storage = NSTextStorage(string: original)
+        let range = (original as NSString).range(of: "link")
+        storage.addAttribute(.link, value: url, range: range)
+        var interaction = NotesEditorLinkInteraction()
+        _ = interaction.activate(at: range.location, in: storage, as: .edit)
+
+        storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: replacement)
+        let insideLink = (replacement as NSString).range(of: "link").location + 1
+
+        XCTAssertNil(interaction.activate(at: insideLink, in: storage, as: .open))
+        XCTAssertEqual(storage.string, replacement)
+    }
 }
 #endif
