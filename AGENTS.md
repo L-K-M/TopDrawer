@@ -21,7 +21,7 @@ view.
 - **Persistence:** a Codable `LauncherDocument` as JSON in
   `~/Library/Application Support/MacDring/launcher.json`; app-wide settings in
   `UserDefaults`.
-- **Min target:** macOS 13 (Ventura). **Built with Xcode 16+** (uses
+- **Min target:** macOS 14 (Sonoma). **Built with Xcode 16+** (uses
   `UnevenRoundedRectangle`, `SMAppService`, file-system-synchronized groups).
 - **App type:** menu-bar agent (`LSUIElement = true`, `.accessory` policy, no
   Dock icon).
@@ -84,13 +84,14 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
   inward-rounded/edge-sharp tab pill + drawer, and `ClassicTabShape`);
   `ActivationPolicy` (the shared `.regular`↔`.accessory` revert guard);
   `IconRenderer` (draws an `IconStyle` to an `NSImage`).
-- `Notes/` — the notes tab's editor. `NotesEditorBridge` (the wire protocol and its
+- `Notes/` — `NotesEditorNativeView` hosts swift-markdown-engine.
+  `NotesEditorBridge` (the earlier web editor's wire protocol and its
   JavaScript encoding) and `NotesEditorHostSession` (the host-side reconciler that
   decides *when* the editor is told about a document) are Foundation-only and run on
   both platforms' test jobs; `NotesEditorWebView` (WKWebView adapter),
   `NotesEditorSchemeHandler` (serves the bundled assets over a custom scheme),
-  `NotesEditorMessageProxy` and `NotesEditorPane` are macOS-only. The editor itself
-  is the bundled web asset in `EditorWeb/`, copied into the app by a build phase.
+  `NotesEditorMessageProxy` and `NotesEditorPane` are macOS-only. `EditorWeb/`
+  retains the web editor's standalone harness; it is no longer bundled in the app.
 
 ## Conventions
 
@@ -107,10 +108,15 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 
 ## Dependencies
 
-Exactly one: [`PictKit`](https://github.com/L-K-M/Pict), a first-party SwiftPM
+[`PictKit`](https://github.com/L-K-M/Pict) is a first-party SwiftPM
 package holding the shared icon store and resolution ladder that Zap, Jetty and
 the Pict editor also use. Top Drawer **reads** it and writes nothing — editing
 lives in Pict, which needs no permissions and can be sandboxed.
+
+Notes use the core `MarkdownEngine` product from
+[`swift-markdown-engine`](https://github.com/nodes-app/swift-markdown-engine),
+pinned to `0.14.0` in the Xcode project. Its optional highlighting and LaTeX
+products are not linked. The Linux SwiftPM manifest does not resolve it.
 
 Icon precedence in `ItemView.resolveIcon`, top rung first:
 
@@ -153,7 +159,7 @@ also a feature: two items pointing at one app are allowed to differ.
   drag-and-drop need a **real GUI session** and are verified manually.
 - **When `xcodebuild` hangs** at the `clang -v -E -dM` probe (a known Xcode 26.5
   `SWBBuildService` deadlock — see `PLAN.md §12`), you can still: **type-check** the
-  whole module with `xcrun --sdk macosx swiftc -typecheck -target arm64-apple-macos13.0
+  whole module with `xcrun --sdk macosx swiftc -typecheck -target arm64-apple-macos14.0
   $(find Top Drawer -name '*.swift')`, and **regenerate the app icon** with `swift
   Tools/GenerateAppIcon.swift` — both invoke the compiler directly and don't touch the
   wedged build service. Fix the build service with `sudo xcodebuild -runFirstLaunch`.
@@ -362,4 +368,3 @@ may waive review; report that waiver rather than claiming review passed.
   status, review rounds completed, and whether it is merged.
 
 <!-- shared-rules:end -->
-

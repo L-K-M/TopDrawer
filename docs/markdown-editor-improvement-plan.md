@@ -2,6 +2,43 @@
 
 *Research date: 2026-08-24. This document plans the work; it does not change the current editor.*
 
+## Native macOS editor, October 2026
+
+macOS 14+ now uses the core `MarkdownEngine` product from
+[swift-markdown-engine](https://github.com/nodes-app/swift-markdown-engine),
+pinned to `0.14.0`. Top Drawer now requires macOS 14: Xcode rejects importing
+the package in a macOS 13 target, even behind availability guards. The earlier
+web editor remains as a standalone harness; Linux will need its own integration.
+
+`NotesEditorPane` selects the editor. `NotesEditorNativeView` hosts the package's
+SwiftUI wrapper, supplies formatting commands, and routes edits through
+`DrawerModel.handleNotesEdit`. Each tab mounts its own editor identity, isolating
+undo and deferred callbacks. Native text-change notifications and close/quit
+flushes preserve the last edit before the engine's asynchronous binding fires.
+Untouched Markdown is never serialized on opening or closing. Images and LaTeX
+have no rendering services, so opening a note does not fetch attachments.
+
+The native editor uses system appearance and a transparent background. Its local
+event monitor limits link opening to explicit Cmd/Ctrl-clicks on HTTP(S) URLs;
+the context menu offers editing actions without AppKit's direct link-opening
+actions. It does not activate the app or install a global keyboard monitor.
+
+Native integration tests cover untouched source, immediate flushes, wiki-link
+IDs, document switching, selection preservation, undo and link activation after
+clicking to edit (including stale destinations). Verify these in a real
+drawer before release:
+
+- Type, immediately close or quit, then reopen. Repeat while composing with an IME.
+- Switch notes while typing; confirm each note retains its own text and undo
+  cannot affect another note. Undo history resets when changing notes.
+- Toggle the formatting bar; use its buttons and Cmd-B/Cmd-I without losing selection.
+- Edit nested lists, task boxes, tables, links, Unicode and pasted Markdown.
+- Plain-click links to edit; Cmd/Ctrl-click HTTP(S) to open. Check that file and
+  custom-scheme links do not launch anything, including through the context menu.
+- Drag-select across links, double-click a linked word and Shift-click to extend
+  selection. Ctrl-click a web link opens it; secondary-click opens the editing menu.
+- Check light/dark appearance, VoiceOver, resizing, Spaces and fullscreen.
+
 ## Summary
 
 Top Drawer's notes surface should become a single, continuously editable Markdown view rather than switching between a plain `TextEditor` and a limited preview. The best route to the same editing experience on macOS and Linux is a small, locally bundled web editor embedded in **WKWebView** on macOS and **WebKitGTK 6.0** on Linux.

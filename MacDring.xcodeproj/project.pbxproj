@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AA0000000000000000000032 /* PictKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000031 /* PictKit */; };
+		AA0000000000000000000036 /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000035 /* MarkdownEngine */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000032 /* PictKit in Frameworks */,
+				AA0000000000000000000036 /* MarkdownEngine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,7 +79,6 @@
 				AA000000000000000000000A /* Sources */,
 				AA000000000000000000000B /* Frameworks */,
 				AA000000000000000000000C /* Resources */,
-				AA0000000000000000000033 /* Copy EditorWeb assets */,
 			);
 			buildRules = (
 			);
@@ -89,6 +90,7 @@
 			name = MacDring;
 			packageProductDependencies = (
 				AA0000000000000000000031 /* PictKit */,
+				AA0000000000000000000035 /* MarkdownEngine */,
 			);
 			productName = MacDring;
 			productReference = AA0000000000000000000006 /* Top Drawer.app */;
@@ -145,6 +147,7 @@
 			mainGroup = AA0000000000000000000002;
 			packageReferences = (
 				AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */,
+				AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
 			);
 			productRefGroup = AA0000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -172,30 +175,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		AA0000000000000000000033 /* Copy EditorWeb assets */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 0;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/EditorWeb/dist/editor.html",
-				"$(SRCROOT)/EditorWeb/dist/editor.js",
-				"$(SRCROOT)/EditorWeb/dist/editor.css",
-			);
-			name = "Copy EditorWeb assets";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/EditorWeb/editor.html",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/EditorWeb/editor.js",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/EditorWeb/editor.css",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -eu\n# The editor is built and reviewed outside Xcode (EditorWeb/README.md); Xcode only\n# copies the three reviewed files, so the repository holds one copy of them and the\n# app cannot ship a stale bundle. Into an EditorWeb/ sub-directory of the resource\n# folder, which is where NotesEditorSchemeHandler.bundledDirectory() looks: that\n# directory is the whole of the web content's reach, so keeping the assets in one\n# of their own also keeps them clear of any other resource with the same name.\nsrc=\"$SRCROOT/EditorWeb/dist\"\ndst=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/EditorWeb\"\nmkdir -p \"$dst\"\nfor asset in editor.html editor.js editor.css; do\n  if [ ! -f \"$src/$asset\" ]; then\n    echo \"error: $src/$asset is missing; run 'cd EditorWeb && npm run build'\"\n    exit 1\n  fi\n  cp -f \"$src/$asset\" \"$dst/$asset\"\ndone\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA000000000000000000000A /* Sources */ = {
@@ -274,7 +253,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -329,7 +308,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -425,6 +404,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nodes-app/swift-markdown-engine";
+			requirement = {
+				kind = exactVersion;
+				version = 0.14.0;
+			};
+		};
 		AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/L-K-M/Pict";
@@ -436,6 +423,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000000035 /* MarkdownEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */;
+			productName = MarkdownEngine;
+		};
 		AA0000000000000000000031 /* PictKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */;

@@ -16,7 +16,7 @@ Top Drawer (repository: MacDring) is a Swift/Xcode macOS app with a Linux port i
 
 Runs a single **Build & Test** job on `macos-14`. In-progress runs for the same ref are cancelled when a new commit is pushed.
 
-- Runs `scripts/check-notes-protocol-version.sh` first, which fails if the app and the bundled web editor disagree on the notes bridge protocol version. It runs here rather than in `editor-web.yml` because that workflow is path-filtered to `EditorWeb/**` and would miss a Swift-only change.
+- Runs `scripts/check-notes-protocol-version.sh` first, which checks the legacy web editor's bridge protocol pins. It runs here rather than in `editor-web.yml` because that workflow is path-filtered to `EditorWeb/**` and would miss a Swift-only change. The macOS app now uses the native editor; its integration tests run with the rest of the macOS suite.
 - Selects **Xcode 16.2** via `maxim-lobanov/setup-xcode` — pinned so a runner-image bump can't silently change the toolchain.
 - Installs `xcbeautify` (for readable build logs).
 - Runs `xcodebuild clean test` against the `MacDring` scheme in `MacDring.xcodeproj`, destination `platform=macOS`, with `CODE_SIGNING_ALLOWED=NO` (no signing needed for CI), writing results to `TestResults.xcresult`.
