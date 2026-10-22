@@ -37,6 +37,7 @@ struct NotesEditorNativeView: NSViewRepresentable {
         private weak var textView: NSTextView?
         private var changeObserver: NSObjectProtocol?
         private var eventMonitor: Any?
+        private var linkInteraction = NotesEditorLinkInteraction()
         private let notificationPrefix = "TopDrawer.notes.\(UUID().uuidString)"
 
         fileprivate init(_ parent: NotesEditorNativeView) {
@@ -211,22 +212,13 @@ struct NotesEditorNativeView: NSViewRepresentable {
             let point = textView.convert(event.locationInWindow, from: nil)
             guard textView.visibleRect.contains(point), let storage = textView.textStorage else { return event }
             let insertion = textView.characterIndexForInsertion(at: point)
-            let candidates = [insertion, insertion - 1].filter { $0 >= 0 && $0 < storage.length }
-            var linkRange = NSRange()
-            guard let index = candidates.first(where: {
-                storage.attribute(.link, at: $0, effectiveRange: nil) != nil
-            }), let link = storage.attribute(.link, at: index, effectiveRange: &linkRange) else { return event }
-
-            let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
-            if !modifiers.intersection([.command, .control]).isEmpty,
-               let url, NotesEditorProtocol.isWebURL(url) {
+            let activation: NotesEditorLinkInteraction.Activation =
+                modifiers.intersection([.command, .control]).isEmpty ? .edit : .open
+            if let url = linkInteraction.activate(at: insertion, in: storage, as: activation) {
                 parent.onOpenLink(url)
                 return nil
             }
-            // 0.14 opens links even on plain clicks. Remove only clickability for
-            // this edit gesture; pass mouseDown through for native drag/word selection.
-            // The engine restores link attributes when it next styles this paragraph.
-            storage.removeAttribute(.link, range: linkRange)
+            // Keep the original gesture for native drag, word and Shift selection.
             return event
         }
 
