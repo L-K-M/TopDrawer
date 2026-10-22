@@ -87,7 +87,7 @@ Jetty all draw it.
 
 ## Build & Run
 
-Requires **Xcode 16+** and **macOS 13+**.
+Requires **Xcode 16+** and **macOS 14+**.
 
 ```bash
 # Build
@@ -115,16 +115,9 @@ and inline code. Cmd-B and Cmd-I work with the bar hidden. Cmd/Ctrl-click an
 HTTP(S) link to open it in your browser. Notes remain Markdown in the existing
 JSON document; opening a note does not rewrite it.
 
-macOS 13 retains the web editor in `EditorWeb/`, loaded by a `WKWebView` from the
-app bundle. Xcode copies its reviewed bundle (`EditorWeb/dist/editor.html`,
-`editor.js`, `editor.css`) into the app with a "Copy EditorWeb assets" build
-phase, so a normal build needs no extra steps and the repository holds one copy of
-those files.
-
-The web bundle also carries a raw-Markdown source mode, but nothing in the app reaches
-it yet: switching modes is a host message (`command: toggleMode`) that only the
-standalone harness sends. `EditorWeb/README.md` describes both modes because it
-documents the bundle, not what the app currently exposes.
+The earlier web editor remains in `EditorWeb/` with its standalone harness and
+tests. It is no longer copied into the macOS app. Its raw-source mode is available
+in that harness, not in the native notes drawer.
 
 After changing anything under `EditorWeb/src/`, rebuild the bundle and commit the
 result along with the source change:

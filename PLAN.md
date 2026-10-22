@@ -118,7 +118,7 @@ screen edges and a transient **drawer window** that expands from whichever tab i
 (`NSPanel`, `NSStatusItem`, `NSVisualEffectView`); `NSWorkspace` for launching; Carbon
 `RegisterEventHotKey` for optional hotkeys; `SMAppService` for launch-at-login. Document
 persisted as Codable JSON in Application Support; global prefs in `UserDefaults`.
-**Targets macOS 13+.**
+**Targets macOS 14+.**
 
 ---
 
@@ -478,8 +478,8 @@ Colors persist as hex via a reused **`ColorHex`** helper (`NSColor(hex:)` / `.he
 
 Mirrors Zap's clean module layout and **Xcode 16 file-system-synchronized groups**
 (`PBXFileSystemSynchronizedRootGroup`), so new files under `MacDring/` and
-`MacDringTests/` are picked up automatically — no `project.pbxproj` edits. Build settings
-match Zap: `MACOSX_DEPLOYMENT_TARGET = 13.0`, `GENERATE_INFOPLIST_FILE = YES`,
+`MacDringTests/` are picked up automatically — no `project.pbxproj` edits. Build settings:
+`MACOSX_DEPLOYMENT_TARGET = 14.0`, `GENERATE_INFOPLIST_FILE = YES`,
 `INFOPLIST_KEY_LSUIElement = YES`, `SWIFT_VERSION = 5.0`,
 `PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.MacDring`.
 
@@ -664,12 +664,10 @@ MacDring/
 >   "screen" outline with **two tabs** protruding from its right edge. The **About**
 >   pane shows the real app icon.
 > - **Tab types** (`TabKind`) — besides the default **items** tab, a **notes** tab
->   (macOS 14+ uses swift-markdown-engine 0.14.0 in a native TextKit 2 view;
->   macOS 13 retains the bundled web editor from `EditorWeb/`. Both persist
->   Markdown via `setNotes`; the formatting bar is off by default and
+>   (uses swift-markdown-engine 0.14.0 in a native TextKit 2 view;
+>   Markdown persists via `setNotes`; the formatting bar is off by default and
 >   toggled from a header button, app-wide via `Preferences.notesFormattingBarVisible`;
->   the web fallback paints its own opaque themed canvas, so its drawer is the one
->   drawer that does not follow `Preferences.drawerTranslucency`;
+>   the editor's transparent background follows `Preferences.drawerTranslucency`;
 >   see `docs/markdown-editor-improvement-plan.md`), a
 >   **folder** tab (drawer shows a directory's live contents,
 >   read-only: launch + reveal, with an Open-in-Finder header button; per-tab sort

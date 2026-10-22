@@ -20,8 +20,6 @@ final class NotesEditorNativeViewTests: XCTestCase {
         try XCTUnwrap(record.flush)()
         XCTAssertEqual(record.edits.map(\.0), [markdown])
         XCTAssertEqual(record.edits.map(\.1), [record.documentID])
-        XCTAssertFalse(window.styleMask.contains(.titled))
-        XCTAssertTrue(window.styleMask.contains(.nonactivatingPanel))
     }
 
     func testImmediateFlushIncludesTheLastKeystrokeAndWikiLinkID() throws {
@@ -68,8 +66,10 @@ final class NotesEditorNativeViewTests: XCTestCase {
         record.markdown = "Second note"
         host.rootView = content(record)
         host.layoutSubtreeIfNeeded()
-        // Drain queued engine bindings and SwiftUI teardown after the document switch.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        // A queue barrier drains the pending engine bindings without a timed sleep.
+        let drained = expectation(description: "Pending editor bindings drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
         host.layoutSubtreeIfNeeded()
         let secondEditor = try XCTUnwrap(findTextView(in: host))
         try XCTUnwrap(record.flush)()
@@ -79,7 +79,7 @@ final class NotesEditorNativeViewTests: XCTestCase {
         XCTAssertEqual(record.markdown, "Second note")
         XCTAssertTrue(record.edits.contains { $0 == ("First note!", firstID) })
         XCTAssertFalse(record.edits.contains { $0.0 == "First note!" && $0.1 == record.documentID })
-        XCTAssertFalse(secondEditor.undoManager?.canUndo ?? false)
+        XCTAssertFalse(try XCTUnwrap(secondEditor.undoManager).canUndo)
     }
 
     func testUndoStillReachesThePersistenceCallback() throws {

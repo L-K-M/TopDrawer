@@ -123,12 +123,13 @@ struct NotesEditorNativeView: NSViewRepresentable {
         // MARK: Editing and lifecycle
 
         private func attachTextView(in view: NSView) {
-            guard textView == nil, let editor = Self.findTextView(in: view) else { return }
+            guard textView == nil, let window = view.window,
+                  let editor = Self.findTextView(in: view) else { return }
             textView = editor
             editor.setAccessibilityLabel("Note")
             editor.isAutomaticDataDetectionEnabled = false
             editor.isAutomaticLinkDetectionEnabled = false
-            view.window?.makeFirstResponder(editor)
+            window.makeFirstResponder(editor)
 
             changeObserver = NotificationCenter.default.addObserver(
                 forName: NSText.didChangeNotification, object: editor, queue: .main
@@ -211,20 +212,22 @@ struct NotesEditorNativeView: NSViewRepresentable {
             guard textView.visibleRect.contains(point), let storage = textView.textStorage else { return event }
             let insertion = textView.characterIndexForInsertion(at: point)
             let candidates = [insertion, insertion - 1].filter { $0 >= 0 && $0 < storage.length }
-            guard let link = candidates.lazy.compactMap({
-                storage.attribute(.link, at: $0, effectiveRange: nil)
-            }).first else { return event }
+            var linkRange = NSRange()
+            guard let index = candidates.first(where: {
+                storage.attribute(.link, at: $0, effectiveRange: nil) != nil
+            }), let link = storage.attribute(.link, at: index, effectiveRange: &linkRange) else { return event }
 
             let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
             if !modifiers.intersection([.command, .control]).isEmpty,
                let url, NotesEditorProtocol.isWebURL(url) {
                 parent.onOpenLink(url)
-            } else {
-                textView.window?.makeKey()
-                textView.window?.makeFirstResponder(textView)
-                textView.setSelectedRange(NSRange(location: insertion, length: 0))
+                return nil
             }
-            return nil
+            // 0.14 opens links even on plain clicks. Remove only clickability for
+            // this edit gesture; pass mouseDown through for native drag/word selection.
+            // The engine restores link attributes when it next styles this paragraph.
+            storage.removeAttribute(.link, range: linkRange)
+            return event
         }
 
         private static func findTextView(in view: NSView) -> NSTextView? {

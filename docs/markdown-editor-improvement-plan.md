@@ -6,9 +6,9 @@
 
 macOS 14+ now uses the core `MarkdownEngine` product from
 [swift-markdown-engine](https://github.com/nodes-app/swift-markdown-engine),
-pinned to `0.14.0`. macOS 13 retains the bundled web editor. The earlier
-cross-platform recommendation below remains the web fallback's rationale; Linux
-will need its own editor integration.
+pinned to `0.14.0`. Top Drawer now requires macOS 14: Xcode rejects importing
+the package in a macOS 13 target, even behind availability guards. The earlier
+web editor remains as a standalone harness; Linux will need its own integration.
 
 `NotesEditorPane` selects the editor. `NotesEditorNativeView` hosts the package's
 SwiftUI wrapper, supplies formatting commands, and routes edits through
@@ -34,8 +34,9 @@ drawer before release:
 - Edit nested lists, task boxes, tables, links, Unicode and pasted Markdown.
 - Plain-click links to edit; Cmd/Ctrl-click HTTP(S) to open. Check that file and
   custom-scheme links do not launch anything, including through the context menu.
+- Drag-select across links, double-click a linked word and Shift-click to extend
+  selection. Ctrl-click a web link opens it; secondary-click opens the editing menu.
 - Check light/dark appearance, VoiceOver, resizing, Spaces and fullscreen.
-- On macOS 13, check that the bundled web fallback still opens and saves notes.
 
 ## Summary
 
