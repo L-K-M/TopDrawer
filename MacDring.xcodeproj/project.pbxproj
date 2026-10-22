@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AA0000000000000000000032 /* PictKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000031 /* PictKit */; };
+		AA0000000000000000000036 /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000035 /* MarkdownEngine */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000032 /* PictKit in Frameworks */,
+				AA0000000000000000000036 /* MarkdownEngine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +91,7 @@
 			name = MacDring;
 			packageProductDependencies = (
 				AA0000000000000000000031 /* PictKit */,
+				AA0000000000000000000035 /* MarkdownEngine */,
 			);
 			productName = MacDring;
 			productReference = AA0000000000000000000006 /* Top Drawer.app */;
@@ -145,6 +148,7 @@
 			mainGroup = AA0000000000000000000002;
 			packageReferences = (
 				AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */,
+				AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
 			);
 			productRefGroup = AA0000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -425,6 +429,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nodes-app/swift-markdown-engine";
+			requirement = {
+				kind = exactVersion;
+				version = 0.14.0;
+			};
+		};
 		AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/L-K-M/Pict";
@@ -436,6 +448,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000000035 /* MarkdownEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */;
+			productName = MarkdownEngine;
+		};
 		AA0000000000000000000031 /* PictKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */;

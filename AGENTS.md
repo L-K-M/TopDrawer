@@ -84,13 +84,14 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
   inward-rounded/edge-sharp tab pill + drawer, and `ClassicTabShape`);
   `ActivationPolicy` (the shared `.regular`↔`.accessory` revert guard);
   `IconRenderer` (draws an `IconStyle` to an `NSImage`).
-- `Notes/` — the notes tab's editor. `NotesEditorBridge` (the wire protocol and its
+- `Notes/` — `NotesEditorNativeView` hosts swift-markdown-engine on macOS 14+;
+  macOS 13 retains the web editor. `NotesEditorBridge` (the wire protocol and its
   JavaScript encoding) and `NotesEditorHostSession` (the host-side reconciler that
   decides *when* the editor is told about a document) are Foundation-only and run on
   both platforms' test jobs; `NotesEditorWebView` (WKWebView adapter),
   `NotesEditorSchemeHandler` (serves the bundled assets over a custom scheme),
-  `NotesEditorMessageProxy` and `NotesEditorPane` are macOS-only. The editor itself
-  is the bundled web asset in `EditorWeb/`, copied into the app by a build phase.
+  `NotesEditorMessageProxy` and `NotesEditorPane` are macOS-only. The web fallback
+  is bundled in `EditorWeb/`, copied into the app by a build phase.
 
 ## Conventions
 
@@ -107,10 +108,15 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 
 ## Dependencies
 
-Exactly one: [`PictKit`](https://github.com/L-K-M/Pict), a first-party SwiftPM
+[`PictKit`](https://github.com/L-K-M/Pict) is a first-party SwiftPM
 package holding the shared icon store and resolution ladder that Zap, Jetty and
 the Pict editor also use. Top Drawer **reads** it and writes nothing — editing
 lives in Pict, which needs no permissions and can be sandboxed.
+
+Notes on macOS 14+ use the core `MarkdownEngine` product from
+[`swift-markdown-engine`](https://github.com/nodes-app/swift-markdown-engine),
+pinned to `0.14.0` in the Xcode project. Its optional highlighting and LaTeX
+products are not linked. The Linux SwiftPM manifest does not resolve it.
 
 Icon precedence in `ItemView.resolveIcon`, top rung first:
 
@@ -362,4 +368,3 @@ may waive review; report that waiver rather than claiming review passed.
   status, review rounds completed, and whether it is merged.
 
 <!-- shared-rules:end -->
-

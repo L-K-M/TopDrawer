@@ -664,10 +664,11 @@ MacDring/
 >   "screen" outline with **two tabs** protruding from its right edge. The **About**
 >   pane shows the real app icon.
 > - **Tab types** (`TabKind`) — besides the default **items** tab, a **notes** tab
->   (drawer is the bundled web editor from `EditorWeb/`; edits arrive over the bridge
->   and persist via `setNotes`; the editor's formatting bar is off by default and
+>   (macOS 14+ uses swift-markdown-engine 0.14.0 in a native TextKit 2 view;
+>   macOS 13 retains the bundled web editor from `EditorWeb/`. Both persist
+>   Markdown via `setNotes`; the formatting bar is off by default and
 >   toggled from a header button, app-wide via `Preferences.notesFormattingBarVisible`;
->   the editor paints its own opaque themed canvas, so a notes drawer is the one
+>   the web fallback paints its own opaque themed canvas, so its drawer is the one
 >   drawer that does not follow `Preferences.drawerTranslucency`;
 >   see `docs/markdown-editor-improvement-plan.md`), a
 >   **folder** tab (drawer shows a directory's live contents,
