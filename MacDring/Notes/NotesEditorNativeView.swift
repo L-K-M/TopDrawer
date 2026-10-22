@@ -29,6 +29,13 @@ struct NotesEditorNativeView: NSViewRepresentable {
 
     final class Coordinator {
         private static let horizontalInset: CGFloat = 14
+
+        // Give headings a clear hierarchy without shrinking below body text.
+        private static let headingStyle = HeadingStyle(
+            fontMultipliers: [2.4, 2.0, 1.6, 1.35, 1.15, 1.0],
+            topSpacingEm: [0.6, 0.5, 0.4, 0.35, 0.3, 0.25]
+        )
+
         private var parent: NotesEditorNativeView
         private var markdown: String
         private var hasEdits = false
@@ -78,6 +85,7 @@ struct NotesEditorNativeView: NSViewRepresentable {
 
             let configuration = MarkdownEditorConfiguration(
                 services: MarkdownEditorServices(bus: bus),
+                headings: Self.headingStyle,
                 textInsets: TextInsets(horizontal: Self.horizontalInset, vertical: 10),
                 extensions: [StrikethroughExtension()]
             )
