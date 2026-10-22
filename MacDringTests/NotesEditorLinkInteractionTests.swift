@@ -44,7 +44,38 @@ final class NotesEditorLinkInteractionTests: XCTestCase {
 
         XCTAssertNil(interaction.activate(at: 2, in: storage, as: .open))
         XCTAssertNil(interaction.activate(at: 0, in: NSTextStorage(), as: .edit))
+        XCTAssertNil(interaction.activate(at: -1, in: storage, as: .open))
+        XCTAssertNil(interaction.activate(at: Int.max, in: storage, as: .open))
         XCTAssertEqual(storage.string, "Plain text")
+    }
+
+    func testEditingInvalidatesTheRememberedDestinationAndRange() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/old"))
+        let storage = NSTextStorage(string: "link")
+        let range = NSRange(location: 0, length: storage.length)
+        storage.addAttribute(.link, value: url, range: range)
+        var interaction = NotesEditorLinkInteraction()
+        _ = interaction.activate(at: 1, in: storage, as: .edit)
+
+        storage.replaceCharacters(in: range, with: "x")
+
+        XCTAssertNil(interaction.activate(at: 0, in: storage, as: .open))
+        XCTAssertEqual(storage.string, "x")
+    }
+
+    func testFreshEngineLinkTakesPrecedenceOverTheRememberedDestination() throws {
+        let old = try XCTUnwrap(URL(string: "https://example.com/old"))
+        let new = try XCTUnwrap(URL(string: "https://example.com/new"))
+        let storage = NSTextStorage(string: "link")
+        let range = NSRange(location: 0, length: storage.length)
+        storage.addAttribute(.link, value: old, range: range)
+        var interaction = NotesEditorLinkInteraction()
+        _ = interaction.activate(at: 1, in: storage, as: .edit)
+
+        storage.addAttribute(.link, value: new, range: range)
+        XCTAssertEqual(interaction.activate(at: 1, in: storage, as: .open), new)
+        storage.removeAttribute(.link, range: range)
+        XCTAssertEqual(interaction.activate(at: 1, in: storage, as: .open), new)
     }
 }
 #endif

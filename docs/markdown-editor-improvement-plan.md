@@ -24,7 +24,8 @@ the context menu offers editing actions without AppKit's direct link-opening
 actions. It does not activate the app or install a global keyboard monitor.
 
 Native integration tests cover untouched source, immediate flushes, wiki-link
-IDs, document switching, selection preservation and undo. Verify these in a real
+IDs, document switching, selection preservation, undo and link activation after
+clicking to edit (including stale destinations). Verify these in a real
 drawer before release:
 
 - Type, immediately close or quit, then reopen. Repeat while composing with an IME.
