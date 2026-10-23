@@ -194,6 +194,19 @@ final class LauncherDocumentCodableTests: XCTestCase {
         XCTAssertEqual(TabKind.folder.defaultLayout, .grid)
     }
 
+    func testClipboardTabRoundTripsWithoutHistory() throws {
+        let tab = Tab(title: "Clipboard", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "U", edge: .right, position: 0.5),
+                      kind: .clipboard, layout: TabKind.clipboard.defaultLayout)
+        let data = try JSONEncoder().encode(LauncherDocument(tabs: [tab]))
+        let decoded = try JSONDecoder().decode(LauncherDocument.self, from: data)
+
+        XCTAssertEqual(decoded.tabs, [tab])
+        XCTAssertEqual(TabKind.clipboard.defaultLayout, .list)
+        XCTAssertTrue(decoded.tabs[0].items.isEmpty)
+        XCTAssertEqual(decoded.tabs[0].notes, "")
+    }
+
     func testOneMalformedTabIsDroppedNotTheWholeDocument() throws {
         // The first tab is missing its required `anchor`; the second is valid.
         // The bad record should be skipped while the good one survives — losing a

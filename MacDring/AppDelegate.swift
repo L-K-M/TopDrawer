@@ -166,6 +166,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         newFresh.target = self
         menu.addItem(newFresh)
 
+        let newClipboard = NSMenuItem(title: "New Clipboard Tab…", action: #selector(newClipboardTab), keyEquivalent: "")
+        newClipboard.target = self
+        menu.addItem(newClipboard)
+
         menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(title: "Top Drawer Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -246,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func newCloudTab() { newTabWindow.show(kind: .cloud) }
     @objc private func newRecentsTab() { newTabWindow.show(kind: .recents) }
     @objc private func newFreshTab() { newTabWindow.show(kind: .fresh) }
+    @objc private func newClipboardTab() { newTabWindow.show(kind: .clipboard) }
 
     @objc private func openSettings() {
         settingsWindow.show(selectTab: nil)

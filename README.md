@@ -35,7 +35,7 @@ Jetty all draw it.
   hover) to open a drawer.
 - **Resizable notes drawers.** Drag an exposed edge or corner to resize your
   scratchpad. Each notes tab remembers its size across restarts.
-- **Eight tab types** — an **items** tab (apps, files, folders, links arranged freely
+- **Nine tab types** — an **items** tab (apps, files, folders, links arranged freely
   in a grid with gaps), a **notes** tab (a live Markdown scratchpad: type formatted
   text, tick off task items, and show the formatting bar from the drawer header
   when you want the buttons), a **folder**
@@ -43,9 +43,11 @@ Jetty all draw it.
   ejectable volumes), a **network** tab (your mounted network shares), a **cloud** tab
   (your cloud drives — iCloud, Dropbox, …), a **recents** tab (what you've recently
   opened — from Top Drawer, the whole Mac via Spotlight, or both), and a **fresh** tab
-  (files that just arrived — downloads, copies, saves). See the docs for the
+  (files that just arrived — downloads, copies, saves), and a **clipboard** tab
+  (your last 50 text copies, kept in memory; click to copy again). See the docs for the
   [network & cloud](docs/network-and-cloud-drives.md) and
-  [recents & fresh](docs/recents-and-fresh.md) tabs.
+  [recents & fresh](docs/recents-and-fresh.md) and
+  [clipboard history](docs/clipboard-history.md) tabs.
 - **Holds anything launchable** — applications, files, folders, and URLs. One
   click opens them.
 - **Drag-and-drop to add.** Drop files or apps from Finder — or a link dragged from
@@ -161,7 +163,7 @@ the research and plan behind it.
    an item** in its drawer → *Customize Icon…* to give it a colored folder/tile +
    SF Symbol icon.
 5. Use the menu bar → **New Items / Notes / Folder / Disks / Network / Cloud /
-   Recents / Fresh Tab…** to add more (a small dialog sets the name, color, type, and
+   Recents / Fresh / Clipboard Tab…** to add more (a small dialog sets the name, color, type, and
    folder), or **Top Drawer Settings…** to manage everything. A **Disks** tab lists your
    mounted ejectable volumes; a **Network** tab lists your mounted network shares (click
    to open, eject from the menu); a **Cloud** tab lists your cloud drives such as iCloud
@@ -170,6 +172,11 @@ the research and plan behind it.
    *Source*); a **Fresh** tab lists files that just arrived (downloads, copies, saves).
    See [network & cloud](docs/network-and-cloud-drives.md) and
    [recents & fresh](docs/recents-and-fresh.md).
+6. For clipboard history on macOS, choose **New Clipboard Tab…**. Copy text in any
+   app, open the drawer, then click an entry and paste with **⌘V**. Type to filter;
+   **↑/↓** and **Return** select and copy. The header's trash button clears history.
+   History is shared across Clipboard tabs and cleared on quit or when the last
+   Clipboard tab is removed. Images and files are not recorded.
 
 ### Customizing
 

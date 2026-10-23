@@ -236,14 +236,18 @@ private struct TabEditor: View {
                     Text("Drag a free edge or corner of the open drawer to resize it. Each notes tab remembers its size.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Picker("Layout", selection: tabBinding(\.layout)) {
-                        ForEach(DrawerLayout.allCases) { Text($0.displayName).tag($0) }
+                    if currentTab.kind != .clipboard {
+                        Picker("Layout", selection: tabBinding(\.layout)) {
+                            ForEach(DrawerLayout.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                     // Ranges match General's new-tab defaults and Preferences' clamps.
                     Stepper("Columns: \(currentTab.gridColumns)", value: tabBinding(\.gridColumns), in: 1...12)
                     Stepper("Rows: \(currentTab.gridRows)", value: tabBinding(\.gridRows), in: 1...16)
-                    Text("Layout and size for the drawer. Items can be placed anywhere in the grid, with gaps. The list layout shows entries top-to-bottom and adds a date column for the Fresh, Recents, and folder tabs.")
+                    Text(currentTab.kind == .clipboard
+                         ? "Columns and rows set the drawer's size. Clipboard entries appear in a scrolling list."
+                         : "Layout and size for the drawer. Items can be placed anywhere in the grid, with gaps. The list layout shows entries top-to-bottom and adds a date column for the Fresh, Recents, and folder tabs.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -263,7 +267,8 @@ private struct TabEditor: View {
                     Text("On").tag(BehaviorMode.on)
                     Text("Off").tag(BehaviorMode.off)
                 }
-                Toggle("Keep open after launching an item", isOn: tabBinding(\.behavior.keepOpenAfterLaunch))
+                Toggle(currentTab.kind == .clipboard ? "Keep open after copying" : "Keep open after launching an item",
+                       isOn: tabBinding(\.behavior.keepOpenAfterLaunch))
                 Picker("When idle", selection: tabBinding(\.behavior.concealment)) {
                     ForEach(TabConcealment.allCases) { Text($0.displayName).tag($0) }
                 }
@@ -359,6 +364,12 @@ private struct TabEditor: View {
             if currentTab.kind == .fresh {
                 Section("Fresh") {
                     Text("The drawer lists files that recently arrived on this Mac — downloaded, copied, or saved into your Downloads, Desktop, or Documents — newest first, via Spotlight. Read-only; click one to open it. No special permission needed. If Spotlight is unreliable on this Mac, Settings → General can add a direct check of those folders too (macOS then asks once per folder).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if currentTab.kind == .clipboard {
+                Section("Clipboard") {
+                    Text("Keeps the last \(ClipboardHistoryStore.limit) distinct text copies in memory, newest first. Click an entry to copy it, then paste in your app. Marked confidential or transient copies and text over \(ClipboardHistoryStore.maximumTextBytes / 1024) KiB are skipped. Clear history from the drawer header; quitting or removing the last Clipboard tab also clears it.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

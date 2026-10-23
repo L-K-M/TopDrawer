@@ -682,8 +682,20 @@ MacDring/
 >   **recents** tab (drawer lists targets recently opened from MacDring via
 >   `RecentsLister`/`RecentsStore`, read-only: re-open, or clear from the header).
 >   See [docs/network-and-cloud-drives.md](docs/network-and-cloud-drives.md).
+> - **Clipboard history** (`TabKind.clipboard`, macOS): a dedicated searchable
+>   list of copied plain text. `ClipboardMonitor` owns `NSPasteboard` access and
+>   polls its change count every 0.5 seconds on the main run loop, only while a
+>   Clipboard tab exists. `ClipboardHistoryStore` keeps 50 distinct entries of at
+>   most 256 KiB each in memory, shared across Clipboard tabs. Confidential,
+>   transient, and auto-generated markers are excluded. The drawer copies an
+>   entry without activating the app; the user pastes with Cmd-V. Existing local
+>   key navigation and keep-open behavior apply. Remove/Clear, quit, or removing
+>   the last Clipboard tab discard history; no clipboard payload is persisted.
+>   The entry/store and search tests run through SwiftPM; pasteboard integration
+>   tests use isolated named pasteboards on macOS. See
+>   [docs/clipboard-history.md](docs/clipboard-history.md) for GUI verification.
 > - **New Tab modal** — the menu bar has **New Items / Notes / Folder / Disks /
->   Network / Cloud / Recents Tab…** entries; each opens a small dialog (`NewTabView`)
+>   Network / Cloud / Recents / Fresh / Clipboard Tab…** entries; each opens a small dialog (`NewTabView`)
 >   to set the name, color, type, and (for a folder) the directory, then creates it.
 > - **Spring-loaded file drops** — hovering a tab while dragging opens its drawer;
 >   the drawer's hosting view (`DrawerHostingView`, an **AppKit `NSDraggingDestination`**)

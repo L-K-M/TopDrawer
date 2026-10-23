@@ -6,6 +6,13 @@ Top Drawer does not operate an account or analytics service, and it does not sel
 
 Everything the app knows stays on the user's Mac. Tabs, their items, and notes are stored as JSON in `~/Library/Application Support/MacDring/launcher.json`, and app-wide settings live in macOS user defaults under the `ch.lkmc.MacDring` domain (`com.macdring.MacDring` before the identifier change; that older domain is not migrated). MacDring is the app's former name, which the Application Support folder keeps, so existing installs retain their saved tabs, items, and notes. The history behind Recents tabs is recorded locally, and Fresh and Recents tabs otherwise read the Mac's own Spotlight index. Layout exports are written only to a file the user chooses. Nothing is synced or uploaded.
 
+Clipboard history on macOS records text only while a Clipboard tab exists. Up to
+50 distinct copies, each at most 256 KiB, stay in memory and never enter saved
+layouts or exports. Copies marked confidential, transient, or auto-generated are
+skipped. Unmarked sensitive text may be recorded. Remove individual entries or
+clear history from the drawer; quitting or removing the last Clipboard tab also
+clears it. Clearing history does not change the system clipboard.
+
 Top Drawer makes exactly two kinds of network request:
 
 - **Update checks.** On launch and about once a day — and whenever the user picks *Check for Updates…* — it asks GitHub's public releases API over HTTPS whether a newer version exists. The request carries no account, identifier, or system profile; the only app-specific field is the bundle identifier sent as the required User-Agent header. Like any network request, GitHub receives ordinary connection metadata such as the source IP address. Automatic checks can be turned off in Settings. If the user chooses **Download** for an offered update, the release archive is fetched over HTTPS into `~/Downloads`; nothing installs automatically.

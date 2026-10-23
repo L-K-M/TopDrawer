@@ -1,0 +1,12 @@
+import Foundation
+
+/// Session-only plain text. Clipboard contents never enter the launcher document.
+struct ClipboardEntry: Identifiable, Equatable {
+    let id: UUID
+    let text: String
+    let date: Date
+
+    private static let previewLength = 160
+
+    var preview: String { String(text.prefix(Self.previewLength)) }
+}
