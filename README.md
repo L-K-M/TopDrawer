@@ -35,17 +35,19 @@ Jetty all draw it.
   hover) to open a drawer.
 - **Resizable notes drawers.** Drag an exposed edge or corner to resize your
   scratchpad. Each notes tab remembers its size across restarts.
-- **Eight tab types** — an **items** tab (apps, files, folders, links arranged freely
+- **Nine tab types** — an **items** tab (apps, files, folders, links arranged freely
   in a grid with gaps), a **notes** tab (a live Markdown scratchpad: type formatted
   text, tick off task items, and show the formatting bar from the drawer header
   when you want the buttons), a **folder**
   tab (a live, read-only view of a directory's contents), a **disks** tab (your mounted
   ejectable volumes), a **network** tab (your mounted network shares), a **cloud** tab
   (your cloud drives — iCloud, Dropbox, …), a **recents** tab (what you've recently
-  opened — from Top Drawer, the whole Mac via Spotlight, or both), and a **fresh** tab
-  (files that just arrived — downloads, copies, saves). See the docs for the
-  [network & cloud](docs/network-and-cloud-drives.md) and
-  [recents & fresh](docs/recents-and-fresh.md) tabs.
+  opened — from Top Drawer, the whole Mac via Spotlight, or both), a **fresh** tab
+  (files that just arrived — downloads, copies, saves), and a **clipboard** tab
+  (your last 50 distinct text copies, kept in memory; click to copy again). See the
+  docs for the [network & cloud](docs/network-and-cloud-drives.md),
+  [recents & fresh](docs/recents-and-fresh.md), and
+  [clipboard history](docs/clipboard-history.md) tabs.
 - **Holds anything launchable** — applications, files, folders, and URLs. One
   click opens them.
 - **Drag-and-drop to add.** Drop files or apps from Finder — or a link dragged from
@@ -161,7 +163,7 @@ the research and plan behind it.
    an item** in its drawer → *Customize Icon…* to give it a colored folder/tile +
    SF Symbol icon.
 5. Use the menu bar → **New Items / Notes / Folder / Disks / Network / Cloud /
-   Recents / Fresh Tab…** to add more (a small dialog sets the name, color, type, and
+   Recents / Fresh / Clipboard Tab…** to add more (a small dialog sets the name, color, type, and
    folder), or **Top Drawer Settings…** to manage everything. A **Disks** tab lists your
    mounted ejectable volumes; a **Network** tab lists your mounted network shares (click
    to open, eject from the menu); a **Cloud** tab lists your cloud drives such as iCloud
@@ -170,6 +172,11 @@ the research and plan behind it.
    *Source*); a **Fresh** tab lists files that just arrived (downloads, copies, saves).
    See [network & cloud](docs/network-and-cloud-drives.md) and
    [recents & fresh](docs/recents-and-fresh.md).
+6. For clipboard history on macOS, choose **New Clipboard Tab…**. Copy text in any
+   app, open the drawer, click an entry to copy it, then paste with **⌘V**. Type to filter;
+   **↑/↓** and **Return** select and copy. The header's trash button clears history.
+   History is shared across Clipboard tabs and cleared on quit or when the last
+   Clipboard tab is removed. Images and files are not recorded.
 
 ### Customizing
 
@@ -196,7 +203,7 @@ Top Drawer needs **no special permissions** for its core features — launching 
 `NSWorkspace`, and optional hotkeys use Carbon (no Accessibility grant). It ships
 as a menu-bar agent (`LSUIElement`).
 
-Two optional features are the exception, and each asks only when you choose to use it:
+Optional features ask only when you choose to use them:
 
 - **Empty Trash** asks Finder to empty the Trash via Apple Events, so the first time
   you use it macOS prompts once to allow Top Drawer to control Finder (the app carries
@@ -207,3 +214,6 @@ Two optional features are the exception, and each asks only when you choose to u
   permission-free Spotlight index — for Macs where Spotlight is off or unreliable.
   Turning it on makes macOS ask once per folder for access; left off, Fresh tabs stay
   Spotlight-only and never prompt.
+- **Clipboard history** reads copied text while a Clipboard tab exists. On macOS
+  15.4+, the system may ask for clipboard access. Its per-app clipboard setting
+  controls background recording; this feature needs no Accessibility permission.

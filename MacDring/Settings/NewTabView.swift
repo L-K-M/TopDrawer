@@ -53,6 +53,10 @@ struct NewTabView: View {
                         }
                     }
                 }
+                if kind == .clipboard {
+                    Text("Records copied text while a Clipboard tab exists. macOS may ask for clipboard access. History is shared by Clipboard tabs and cleared when you quit or remove the last one.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -87,6 +91,7 @@ struct NewTabView: View {
         case .cloud: return "Cloud"
         case .recents: return "Recents"
         case .fresh: return "Fresh"
+        case .clipboard: return "Clipboard"
         }
     }
 

@@ -21,6 +21,7 @@ import PackageDescription
 // The pure-core files that compile on Linux today (all `Model/` except ColorHex
 // and Preferences — both AppKit/SwiftUI — plus the layout/search/update math).
 let macDringSources: [String] = [
+    "Model/ClipboardEntry.swift",
     "Model/DrawerGrouping.swift",
     "Model/DrawerItem.swift",
     "Model/Edge.swift",
@@ -55,6 +56,7 @@ let macDringSources: [String] = [
     "Common/ObservationCompat.swift",
     "Store/TabStore.swift",
     "Store/RecentsStore.swift",
+    "Store/ClipboardHistoryStore.swift",
     "Store/FolderLister.swift",
     "Model/Preferences.swift",
     "Drawer/DrawerModel.swift",
@@ -121,6 +123,8 @@ let macDringSources: [String] = [
 ]
 
 let macDringTestsSources: [String] = [
+    "ClipboardHistoryStoreTests.swift",
+    "ClipboardMonitorTests.swift",
     "EdgeLayoutTests.swift",
     "ScreenAnchorTests.swift",
     "LauncherDocumentCodableTests.swift",

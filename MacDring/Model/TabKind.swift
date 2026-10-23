@@ -19,6 +19,8 @@ enum TabKind: String, Codable, CaseIterable, Identifiable {
     /// A live listing of files that recently arrived on the Mac (downloaded, copied,
     /// or saved) — the "Fresh" pile, ranked by date added.
     case fresh
+    /// A session-only history of copied text, shared across Clipboard tabs.
+    case clipboard
 
     var id: String { rawValue }
 
@@ -32,12 +34,13 @@ enum TabKind: String, Codable, CaseIterable, Identifiable {
         case .cloud: return "Cloud"
         case .recents: return "Recents"
         case .fresh: return "Fresh"
+        case .clipboard: return "Clipboard"
         }
     }
 
     var defaultLayout: DrawerLayout {
         switch self {
-        case .recents, .fresh:
+        case .recents, .fresh, .clipboard:
             return .list
         case .items, .notes, .folder, .disks, .network, .cloud:
             return .grid

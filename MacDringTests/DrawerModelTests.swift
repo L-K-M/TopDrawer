@@ -3,6 +3,70 @@ import XCTest
 
 final class DrawerModelTests: XCTestCase {
 
+    // MARK: Clipboard
+
+    func testClipboardSearchMatchesFullTextAndPreservesRecency() {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        let text = String(repeating: "x", count: 200) + " CAFÉ"
+        let entries = [ClipboardEntry(id: UUID(), text: text, date: Date()),
+                       ClipboardEntry(id: UUID(), text: "café earlier", date: Date()),
+                       ClipboardEntry(id: UUID(), text: "unrelated", date: Date())]
+        model.clipboardEntries = entries
+        model.searchQuery = " cafe "
+
+        XCTAssertTrue(model.isSearchable)
+        XCTAssertEqual(model.clipboardSearchResults.map(\.id), Array(entries.prefix(2)).map(\.id))
+        XCTAssertEqual(model.selectedItemID, entries[0].id)
+    }
+
+    func testClipboardKeyboardSelectionCopiesWithoutLaunching() {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        model.clipboardEntries = [ClipboardEntry(id: UUID(), text: "match newest", date: Date()),
+                                  ClipboardEntry(id: UUID(), text: "match earlier", date: Date())]
+        var copied: [UUID] = []
+        model.onCopyClipboardEntry = { copied.append($0) }
+        model.onLaunch = { _ in XCTFail("Clipboard text must never launch") }
+        model.searchQuery = "match"
+        model.moveSelection(down: true)
+        model.launchSelection()
+
+        XCTAssertEqual(copied, [model.clipboardEntries[1].id])
+        model.clipboardEntries.removeLast()
+        XCTAssertEqual(model.selectedItemID, model.clipboardEntries.first?.id)
+        model.launchSelection()
+        XCTAssertEqual(copied.last, model.clipboardEntries.first?.id)
+
+        model.searchQuery = "missing"
+        model.launchSelection()
+        XCTAssertEqual(copied.count, 2)
+        model.clearSearch()
+        XCTAssertNil(model.selectedItemID)
+        model.launchSelection()
+        XCTAssertEqual(copied.count, 3)
+    }
+
+    func testClearingClipboardHistoryClearsSelection() {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        model.clipboardEntries = [ClipboardEntry(id: UUID(), text: "copy", date: Date())]
+        model.searchQuery = "copy"
+        XCTAssertNotNil(model.selectedItemID)
+        model.clipboardEntries = []
+        XCTAssertNil(model.selectedItemID)
+        XCTAssertTrue(model.isSearchable)
+    }
+
+    func testHistoryChangesClearStaleCopyErrors() {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        model.clipboardEntries = [ClipboardEntry(id: UUID(), text: "copy", date: Date())]
+        model.clipboardError = "Copy failed"
+        model.clipboardEntries = []
+        XCTAssertNil(model.clipboardError)
+    }
+
     func testItemAtSlotFindsByGridSlotIncludingGaps() {
         let model = DrawerModel()
         let a = DrawerItem(kind: .file, displayName: "A", slot: 0)

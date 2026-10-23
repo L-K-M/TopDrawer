@@ -67,6 +67,15 @@ final class DrawerModel: ObservableObject {
     /// Whether the open `.recents` drawer has Top Drawer-owned history that the header
     /// clear button can actually remove. System Spotlight recents are read-only.
     @Published var canClearRecents = false
+    @Published var clipboardEntries: [ClipboardEntry] = [] {
+        didSet {
+            if clipboardError != nil { clipboardError = nil }
+            guard kind == .clipboard, let selectedItemID,
+                  !clipboardSearchResults.contains(where: { $0.id == selectedItemID }) else { return }
+            self.selectedItemID = clipboardSearchResults.first?.id
+        }
+    }
+    @Published var clipboardError: String?
     /// Whether the live listing was capped (a folder with more than `FolderLister.limit`
     /// entries) — drives the header's "300+" truncation badge.
     @Published var itemsTruncated = false
@@ -94,7 +103,7 @@ final class DrawerModel: ObservableObject {
     /// drawer's filter field, which is auto-focused on open; changing it re-selects the
     /// top result so Return launches a sensible default.
     @Published var searchQuery = "" {
-        didSet { if searchQuery != oldValue { selectedItemID = searchResults.first?.id } }
+        didSet { if searchQuery != oldValue { selectedItemID = searchResultIDs.first } }
     }
     /// The keyboard-selected result while searching (Up/Down/Return nav).
     @Published var selectedItemID: UUID?
@@ -108,14 +117,27 @@ final class DrawerModel: ObservableObject {
     /// current grid/list with flattened results, including matching group children.
     var displayedItems: [DrawerItem] { isSearching ? searchResults : visibleItems }
 
-    /// Whether this drawer offers search — a non-notes listing with enough items to
-    /// be worth filtering (counting items inside groups too). Gates both the search
-    /// bar and keystroke capture.
-    var isSearchable: Bool { kind != .notes && items.flattenedLaunchable().count >= DrawerSearch.minItemsToShow }
+    /// Clipboard search stays visible as its history grows; item listings offer it
+    /// once enough items exist (including group children).
+    var isSearchable: Bool {
+        kind == .clipboard || (kind != .notes && items.flattenedLaunchable().count >= DrawerSearch.minItemsToShow)
+    }
     var isSearching: Bool { !searchQuery.isEmpty }
     /// The items matching the current query — groups flattened to their children so
     /// type-to-find reaches inside them (prefix matches first; see `DrawerSearch`).
     var searchResults: [DrawerItem] { DrawerSearch.filter(items.flattenedLaunchable(), query: searchQuery) }
+
+    var clipboardSearchResults: [ClipboardEntry] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return clipboardEntries }
+        return clipboardEntries.filter {
+            $0.text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive], locale: .current) != nil
+        }
+    }
+
+    private var searchResultIDs: [UUID] {
+        kind == .clipboard ? clipboardSearchResults.map(\.id) : searchResults.map(\.id)
+    }
 
     /// Clears the query and selection (the search bar's ✕, or Esc while searching).
     func clearSearch() {
@@ -125,7 +147,7 @@ final class DrawerModel: ObservableObject {
 
     /// Moves the keyboard selection among the current results.
     func moveSelection(down: Bool) {
-        let ids = searchResults.map(\.id)
+        let ids = searchResultIDs
         let current = selectedItemID.flatMap { ids.firstIndex(of: $0) }
         if let next = DrawerSearch.nextIndex(count: ids.count, current: current, down: down) {
             selectedItemID = ids[next]
@@ -134,6 +156,12 @@ final class DrawerModel: ObservableObject {
 
     /// Launches the selected result (Return) — or the top result if none is selected.
     func launchSelection() {
+        if kind == .clipboard {
+            let results = clipboardSearchResults
+            let target = selectedItemID.flatMap { id in results.first { $0.id == id } } ?? results.first
+            if let target { onCopyClipboardEntry?(target.id) }
+            return
+        }
         let results = searchResults
         let target = selectedItemID.flatMap { id in results.first { $0.id == id } } ?? results.first
         if let target { onLaunch?(target) }
@@ -195,6 +223,9 @@ final class DrawerModel: ObservableObject {
     var onOpenFolder: (() -> Void)?
     /// Clear the recent items (for `.recents` tabs).
     var onClearRecents: (() -> Void)?
+    var onCopyClipboardEntry: ((UUID) -> Void)?
+    var onRemoveClipboardEntry: ((UUID) -> Void)?
+    var onClearClipboardHistory: (() -> Void)?
 
     // MARK: Notes
 

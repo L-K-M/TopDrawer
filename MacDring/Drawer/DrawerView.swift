@@ -107,6 +107,8 @@ struct DrawerView: View {
             NotesEditorPane(model: model, preferences: preferences)
                 .padding(.horizontal, -14 + DrawerMetrics.notesResizeInset)
                 .padding(.bottom, -14 + DrawerMetrics.notesResizeInset)
+        case .clipboard:
+            ClipboardHistoryView(model: model)
         case .items, .folder, .disks, .network, .cloud, .recents, .fresh:
             if model.isSearching { searchResultsList }
             else if model.items.isEmpty { emptyState }
@@ -199,7 +201,7 @@ struct DrawerView: View {
             if model.kind != .notes {
                 // A trailing "+" when the listing was capped (e.g. a folder with
                 // more than `FolderLister.limit` entries): "300+".
-                Text("\(model.items.count)\(model.itemsTruncated ? "+" : "")")
+                Text("\(model.kind == .clipboard ? model.clipboardEntries.count : model.items.count)\(model.itemsTruncated ? "+" : "")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .help(model.itemsTruncated ? "Showing the first \(model.items.count) items" : "")
@@ -223,6 +225,10 @@ struct DrawerView: View {
             }
             if model.kind == .recents, model.canClearRecents {
                 headerButton("trash", help: "Clear recent items") { model.onClearRecents?() }
+            }
+            if model.kind == .clipboard {
+                headerButton("trash", help: "Clear clipboard history") { model.onClearClipboardHistory?() }
+                    .disabled(model.clipboardEntries.isEmpty)
             }
             headerButton(model.locked ? "lock.fill" : "lock.open",
                          help: model.locked ? "Unlock this tab's position" : "Lock this tab's position") {

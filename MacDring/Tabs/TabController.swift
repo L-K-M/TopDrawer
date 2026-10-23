@@ -11,6 +11,8 @@ final class TabController {
     private let preferences: Preferences
     private let registry: DisplayRegistry
     private let drawer: DrawerWindowController
+    private let clipboardHistory = ClipboardHistoryStore()
+    private lazy var clipboardMonitor = ClipboardMonitor(history: clipboardHistory)
 
     /// Presents the generated-icon editor (built lazily on first use).
     private lazy var iconEditor = IconEditorWindowController()
@@ -170,6 +172,9 @@ final class TabController {
         self.drawer = DrawerWindowController(preferences: preferences)
 
         wireDrawer()
+        clipboardHistory.$entries
+            .sink { [weak self] entries in self?.drawer.model.clipboardEntries = entries }
+            .store(in: &cancellables)
         startVolumeMonitoring()
         startRunningAppMonitoring()
         startTrashWatch()
@@ -246,6 +251,15 @@ final class TabController {
         refreshOpenDrawer()
         refreshConcealment(animated: false)
         updateFreshBadgeTimer()
+        updateClipboardMonitoring()
+    }
+
+    private func updateClipboardMonitoring() {
+        if store.tabs.contains(where: { $0.kind == .clipboard }) {
+            clipboardMonitor.start()
+        } else {
+            clipboardMonitor.stop()
+        }
     }
 
     /// Spaces tabs that share a display + edge so they don't render on top of each
@@ -440,6 +454,7 @@ final class TabController {
         let duration = animationDuration
         // The drawer slides out flush against the screen edge (centered on the
         // tab's resting position); the tab slides onto the drawer's inner face.
+        if tab.kind == .clipboard { clipboardMonitor.captureChanges() }
         drawer.show(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen, duration: duration)
         let openedTab = EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                   restingTabFrame: wc.restingFrame,
@@ -875,8 +890,8 @@ final class TabController {
         }
 
         switch tab.kind {
-        case .notes, .disks, .network, .cloud, .recents, .fresh:
-            return   // notes take no drops; the live listings (Disks/Network/Cloud/Recents/Fresh) are read-only
+        case .notes, .disks, .network, .cloud, .recents, .fresh, .clipboard:
+            return   // only items and folder tabs accept drops
         case .folder:
             guard let directory = FolderLister.resolveFolder(tab) else { return }
             moveFilesWithUndo(fileURLs, into: directory)
@@ -1093,6 +1108,22 @@ final class TabController {
             RecentsStore.shared.clear()
             if self.openTabID.flatMap({ self.store.tab(id: $0) })?.kind == .recents { self.refreshOpenDrawer() }
         }
+        drawer.model.onCopyClipboardEntry = { [weak self] id in self?.copyClipboardEntry(id) }
+        drawer.model.onRemoveClipboardEntry = { [weak self] id in self?.clipboardHistory.remove(id: id) }
+        drawer.model.onClearClipboardHistory = { [weak self] in
+            self?.clipboardMonitor.clearHistory()
+            self?.drawer.model.clipboardError = nil
+        }
+    }
+
+    private func copyClipboardEntry(_ id: UUID) {
+        guard let tabID = openTabID, let tab = store.tab(id: tabID), tab.kind == .clipboard else { return }
+        guard clipboardMonitor.copyEntry(id: id) else {
+            drawer.model.clipboardError = "Couldn't copy this entry. Try again."
+            return
+        }
+        drawer.model.clipboardError = nil
+        if !tab.behavior.keepOpenAfterLaunch { closeDrawer() }
     }
 
     private func launch(_ item: DrawerItem) {
@@ -1629,11 +1660,11 @@ final class TabController {
             }
             return nil
         case 125, 126:   // Down, Up — move the result selection while filtering
-            guard model.isSearching else { return event }
+            guard model.isSearching || model.kind == .clipboard else { return event }
             model.moveSelection(down: event.keyCode == 125)
             return nil
         case 36, 76:   // Return, Enter — launch the selected result
-            guard model.isSearching else { return event }
+            guard model.isSearching || model.kind == .clipboard else { return event }
             model.launchSelection()
             return nil
         default:
@@ -1657,6 +1688,7 @@ final class TabController {
         stopVolumeMonitoring()
         stopFolderWatch()
         stopRunningAppMonitoring()
+        clipboardMonitor.stop()
         freshBadgeTimer?.invalidate()
         freshBadgeTimer = nil
         freshBadgeSpotlight.cancel()

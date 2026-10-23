@@ -41,14 +41,11 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
     }
 
     /// The model iff this drag is acceptable here (items/folder tab + has file URLs
-    /// or web links). Notes, Disks, Network, Cloud, Recents, and Fresh tabs are
-    /// read-only live listings, so they take no drops. A folder tab whose directory
+    /// or web links). Other tab kinds take no drops. A folder tab whose directory
     /// is unset or unresolvable takes none either — advertising a copy drop that
     /// `handleFileDrop` would then silently swallow is worse than refusing it.
     private func droppableModel(_ sender: NSDraggingInfo) -> DrawerModel? {
-        guard let model, model.kind != .notes, model.kind != .disks,
-              model.kind != .network, model.kind != .cloud, model.kind != .recents,
-              model.kind != .fresh,
+        guard let model, model.kind == .items || model.kind == .folder,
               !(model.kind == .folder && model.folderURL == nil),
               sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self],
                                                       options: pasteboardOptions(for: model))
@@ -385,6 +382,8 @@ final class DrawerWindowController {
         model.canClearRecents = tab.kind == .recents
             && tab.recentsSource.includesMacDring
             && !RecentsStore.shared.items.isEmpty
+        // Like the undo toast, a clipboard error belongs to this drawer session.
+        if !preserveLiveNotes { model.clipboardError = nil }
         switch tab.kind {
         case .items:
             model.items = tab.items
@@ -444,6 +443,11 @@ final class DrawerWindowController {
                 model.notes = tab.notes
             }
             model.folderURL = nil
+        case .clipboard:
+            model.items = []
+            model.notes = ""
+            model.folderURL = nil
+            model.layout = .list
         }
         // Every kind passes through here, so the notes editor learns that the open
         // tab changed — and, for a refresh of the same tab, that it did not. Only a
