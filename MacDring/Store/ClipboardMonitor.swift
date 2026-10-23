@@ -38,10 +38,9 @@ final class ClipboardMonitor {
     }
 
     func stop(reason: StopReason = .lastTabRemoved) {
-        if reason == .quit {
-            guard timer != nil else { return }
-            captureChanges()
-        }
+        // Starting with no Clipboard tab must not erase a retained archive.
+        guard timer != nil else { return }
+        if reason == .quit { captureChanges() }
         timer?.invalidate()
         timer = nil
         lastChangeCount = nil

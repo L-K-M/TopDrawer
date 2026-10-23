@@ -176,6 +176,21 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(restored.entries.map(\.text), ["pending at quit", "recorded"])
     }
 
+    func testStopBeforeStartPreservesRestoredHistory() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clipboard-inactive-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("history.json")
+        let saved = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        saved.record("saved history")
+        saved.saveNow()
+        let archive = try Data(contentsOf: url)
+        let (_, history, monitor) = makeMonitor(storeURL: url, retention: .acrossRestarts)
+
+        monitor.stop()
+        XCTAssertEqual(history.entries, saved.entries)
+        XCTAssertEqual(try Data(contentsOf: url), archive)
+    }
+
     func testRemovingLastTabDeletesSavedHistoryAndStopsCapture() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("clipboard-removal-tests-\(UUID().uuidString)", isDirectory: true)
