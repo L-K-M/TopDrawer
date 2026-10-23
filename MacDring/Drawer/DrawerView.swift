@@ -228,7 +228,7 @@ struct DrawerView: View {
             }
             if model.kind == .clipboard {
                 headerButton("trash", help: "Clear clipboard history") { model.onClearClipboardHistory?() }
-                    .disabled(model.clipboardEntries.isEmpty)
+                    .disabled(model.clipboardEntries.isEmpty && model.clipboardPersistenceError == nil)
             }
             headerButton(model.locked ? "lock.fill" : "lock.open",
                          help: model.locked ? "Unlock this tab's position" : "Lock this tab's position") {

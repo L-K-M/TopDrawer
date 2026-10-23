@@ -1,17 +1,22 @@
 # Top Drawer Privacy Policy
 
-Effective August 16, 2026
+Effective October 23, 2026
 
 Top Drawer does not operate an account or analytics service, and it does not sell personal data. It contains no advertising, telemetry, or tracking.
 
 Everything the app knows stays on the user's Mac. Tabs, their items, and notes are stored as JSON in `~/Library/Application Support/MacDring/launcher.json`, and app-wide settings live in macOS user defaults under the `ch.lkmc.MacDring` domain (`com.macdring.MacDring` before the identifier change; that older domain is not migrated). MacDring is the app's former name, which the Application Support folder keeps, so existing installs retain their saved tabs, items, and notes. The history behind Recents tabs is recorded locally, and Fresh and Recents tabs otherwise read the Mac's own Spotlight index. Layout exports are written only to a file the user chooses. Nothing is synced or uploaded.
 
 Clipboard history on macOS records text only while a Clipboard tab exists. Up to
-50 distinct copies, each at most 256 KiB, stay in memory and never enter saved
-layouts or exports. Copies marked confidential, transient, or auto-generated are
-skipped. Unmarked sensitive text may be recorded. Remove individual entries or
-clear history from the drawer; quitting or removing the last Clipboard tab also
-clears it. Clearing history does not change the system clipboard.
+50 distinct copies, each at most 256 KiB, never enter saved layouts or exports.
+History stays in memory and clears on quit by default. **Keep history after
+quitting** in Settings opts into saving it as unencrypted JSON in
+`~/Library/Application Support/MacDring/Clipboard/history.json`, in an owner-only
+directory. Turning the setting off deletes the saved copy but keeps the current
+session's entries. Remove and Clear update saved history too; removing the last
+Clipboard tab erases both memory and saved history. Backups may retain older
+copies. Copies marked confidential, transient, or auto-generated are skipped.
+Unmarked sensitive text may be recorded. Clearing history does not change the
+system clipboard.
 On macOS 15.4+, system clipboard privacy controls apply, and macOS may ask for
 clipboard access. You can change the app's clipboard access in System Settings.
 

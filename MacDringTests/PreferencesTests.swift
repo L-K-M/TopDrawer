@@ -60,6 +60,16 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(Preferences(defaults: defaults).notesFormattingBarVisible)
     }
 
+    func testClipboardRetentionDefaultsOffAndRoundTrips() {
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertFalse(prefs.persistClipboardHistory)
+
+        prefs.persistClipboardHistory = true
+        XCTAssertTrue(Preferences(defaults: defaults).persistClipboardHistory)
+        prefs.persistClipboardHistory = false
+        XCTAssertFalse(Preferences(defaults: defaults).persistClipboardHistory)
+    }
+
     func testDrawerTranslucencyBackingOpacityRunsTranslucentToSolid() {
         XCTAssertEqual(DrawerTranslucency.translucent.backingOpacity, 0)
         XCTAssertLessThan(DrawerTranslucency.translucent.backingOpacity, DrawerTranslucency.frosted.backingOpacity)

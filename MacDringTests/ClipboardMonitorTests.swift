@@ -4,13 +4,18 @@ import XCTest
 @testable import MacDring
 
 final class ClipboardMonitorTests: XCTestCase {
-    private func makeMonitor() -> (NSPasteboard, ClipboardHistoryStore, ClipboardMonitor) {
+    private func makeMonitor(storeURL: URL? = nil, retention: ClipboardHistoryStore.Retention = .sessionOnly)
+        -> (NSPasteboard, ClipboardHistoryStore, ClipboardMonitor) {
         let pasteboard = NSPasteboard(name: .init("ch.lkmc.MacDring.tests.clipboard.\(UUID().uuidString)"))
-        let history = ClipboardHistoryStore()
+        let url = storeURL ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("clipboard-monitor-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("history.json")
+        let history = ClipboardHistoryStore(storeURL: url, retention: retention)
         let monitor = ClipboardMonitor(history: history, pasteboard: pasteboard)
         addTeardownBlock {
             monitor.stop()
             pasteboard.releaseGlobally()
+            try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         }
         return (pasteboard, history, monitor)
     }
@@ -152,6 +157,42 @@ final class ClipboardMonitorTests: XCTestCase {
         write("after restart", to: pasteboard)
         monitor.captureChanges()
         XCTAssertEqual(history.entries.map(\.text), ["after restart"])
+    }
+
+    func testQuitFlushesAnUnpolledCopyAndPreservesTheArchiveOnRepeatedStop() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clipboard-quit-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("history.json")
+        let (pasteboard, history, monitor) = makeMonitor(storeURL: url, retention: .acrossRestarts)
+        monitor.start()
+        write("recorded", to: pasteboard)
+        monitor.captureChanges()
+        write("pending at quit", to: pasteboard)
+        monitor.stop(reason: .quit)
+        monitor.stop(reason: .quit)
+
+        XCTAssertTrue(history.entries.isEmpty)
+        let restored = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        XCTAssertEqual(restored.entries.map(\.text), ["pending at quit", "recorded"])
+    }
+
+    func testRemovingLastTabDeletesSavedHistoryAndStopsCapture() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clipboard-removal-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("history.json")
+        let (pasteboard, history, monitor) = makeMonitor(storeURL: url, retention: .acrossRestarts)
+        monitor.start()
+        write("recorded", to: pasteboard)
+        monitor.captureChanges()
+        history.saveNow()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+
+        monitor.stop()
+        write("while stopped", to: pasteboard)
+        monitor.captureChanges()
+        XCTAssertTrue(history.entries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts).entries.isEmpty)
     }
 }
 #endif

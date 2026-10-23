@@ -11,7 +11,7 @@ final class TabController {
     private let preferences: Preferences
     private let registry: DisplayRegistry
     private let drawer: DrawerWindowController
-    private let clipboardHistory = ClipboardHistoryStore()
+    private let clipboardHistory: ClipboardHistoryStore
     private lazy var clipboardMonitor = ClipboardMonitor(history: clipboardHistory)
 
     /// Presents the generated-icon editor (built lazily on first use).
@@ -166,6 +166,8 @@ final class TabController {
          hotkeyRegistrar: GlobalHotkeyRegistering = CarbonHotkeyRegistrar()) {
         self.store = store
         self.preferences = preferences
+        self.clipboardHistory = ClipboardHistoryStore(
+            retention: preferences.persistClipboardHistory ? .acrossRestarts : .sessionOnly)
         self.registry = registry
         self.trashService = trashService
         self.hotkeyRegistrar = hotkeyRegistrar
@@ -174,6 +176,16 @@ final class TabController {
         wireDrawer()
         clipboardHistory.$entries
             .sink { [weak self] entries in self?.drawer.model.clipboardEntries = entries }
+            .store(in: &cancellables)
+        clipboardHistory.$persistenceError
+            .sink { [weak self] error in self?.drawer.model.clipboardPersistenceError = error }
+            .store(in: &cancellables)
+        // Apply the value synchronously so disabling retention immediately deletes it,
+        // even if quit arrives before the general preference reconcile is delivered.
+        preferences.$persistClipboardHistory.removeDuplicates()
+            .sink { [weak self] persist in
+                self?.clipboardHistory.setRetention(persist ? .acrossRestarts : .sessionOnly)
+            }
             .store(in: &cancellables)
         startVolumeMonitoring()
         startRunningAppMonitoring()
@@ -1688,7 +1700,7 @@ final class TabController {
         stopVolumeMonitoring()
         stopFolderWatch()
         stopRunningAppMonitoring()
-        clipboardMonitor.stop()
+        clipboardMonitor.stop(reason: .quit)
         freshBadgeTimer?.invalidate()
         freshBadgeTimer = nil
         freshBadgeSpotlight.cancel()

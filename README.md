@@ -175,8 +175,10 @@ the research and plan behind it.
 6. For clipboard history on macOS, choose **New Clipboard Tab…**. Copy text in any
    app, open the drawer, click an entry to copy it, then paste with **⌘V**. Type to filter;
    **↑/↓** and **Return** select and copy. The header's trash button clears history.
-   History is shared across Clipboard tabs and cleared on quit or when the last
-   Clipboard tab is removed. Images and files are not recorded.
+   History is shared across Clipboard tabs. Enable **Settings → Tabs → Clipboard →
+   Keep history after quitting** to retain it across restarts; otherwise quit clears
+   it. Removing the last Clipboard tab always clears history. Images and files are
+   not recorded.
 
 ### Customizing
 

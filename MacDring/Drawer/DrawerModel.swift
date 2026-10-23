@@ -76,6 +76,7 @@ final class DrawerModel: ObservableObject {
         }
     }
     @Published var clipboardError: String?
+    @Published var clipboardPersistenceError: String?
     /// Whether the live listing was capped (a folder with more than `FolderLister.limit`
     /// entries) — drives the header's "300+" truncation badge.
     @Published var itemsTruncated = false

@@ -689,8 +689,14 @@ MacDring/
 >   most 256 KiB each in memory, shared across Clipboard tabs. Confidential,
 >   transient, and auto-generated markers are excluded. The drawer copies an
 >   entry without activating the app; the user pastes with Cmd-V. Existing local
->   key navigation and keep-open behavior apply. Remove/Clear, quit, or removing
->   the last Clipboard tab discard history; no clipboard payload is persisted.
+>   key navigation and keep-open behavior apply. History is session-only by default.
+>   The app-wide `persistClipboardHistory` preference enables atomic, debounced
+>   saves to `MacDring/Clipboard/history.json` in Application Support, with a private
+>   directory and file and no backup. Quit captures any pending copy and flushes
+>   before dropping memory. Disabling retention deletes the archive but keeps
+>   current entries; Remove/Clear and last-tab removal update disk too. Restore
+>   validates entry size, uniqueness, and count; errors are shown in the drawer.
+>   Clipboard payloads never enter launcher saves or layout exports.
 >   The entry/store and search tests run through SwiftPM; pasteboard integration
 >   tests use isolated named pasteboards on macOS. See
 >   [docs/clipboard-history.md](docs/clipboard-history.md) for GUI verification.

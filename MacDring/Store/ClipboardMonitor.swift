@@ -2,6 +2,8 @@ import AppKit
 
 /// Owns pasteboard access on the main run loop, only while a Clipboard tab exists.
 final class ClipboardMonitor {
+    enum StopReason { case lastTabRemoved, quit }
+
     private static let pollingInterval: TimeInterval = 0.5
     private static let excludedTypes: Set<NSPasteboard.PasteboardType> = [
         .fileURL,
@@ -35,11 +37,19 @@ final class ClipboardMonitor {
         self.timer = timer
     }
 
-    func stop() {
+    func stop(reason: StopReason = .lastTabRemoved) {
+        if reason == .quit {
+            guard timer != nil else { return }
+            captureChanges()
+        }
         timer?.invalidate()
         timer = nil
         lastChangeCount = nil
-        history.clear()
+        if reason == .quit {
+            history.finishSession()
+        } else {
+            history.clear()
+        }
     }
 
     /// Also called on drawer open so a recent copy needn't wait for the next tick.

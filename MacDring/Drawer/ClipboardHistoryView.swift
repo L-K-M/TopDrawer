@@ -9,6 +9,9 @@ struct ClipboardHistoryView: View {
             if let error = model.clipboardError {
                 Text(error).font(.callout).foregroundStyle(.red)
             }
+            if let error = model.clipboardPersistenceError {
+                Text(error).font(.callout).foregroundStyle(.red)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     if model.clipboardEntries.isEmpty {
@@ -31,7 +34,7 @@ struct ClipboardHistoryView: View {
                     if let id { proxy.scrollTo(id, anchor: .center) }
                 }
             }
-            Text("Click to copy, then paste with ⌘V. History stays in memory.")
+            Text("Click to copy, then paste with ⌘V.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
