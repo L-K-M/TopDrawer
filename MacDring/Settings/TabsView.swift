@@ -369,7 +369,10 @@ private struct TabEditor: View {
             }
             if currentTab.kind == .clipboard {
                 Section("Clipboard") {
-                    Text("Keeps the last \(ClipboardHistoryStore.limit) distinct text copies in memory, newest first. Click an entry to copy it, then paste in your app. Marked confidential or transient copies and text over \(ClipboardHistoryStore.maximumTextBytes / 1024) KiB are skipped. Clear history from the drawer header; quitting or removing the last Clipboard tab also clears it.")
+                    Toggle("Keep history after quitting", isOn: $preferences.persistClipboardHistory)
+                    Text("Applies to all Clipboard tabs. Off by default. When enabled, history is saved as unencrypted text in Application Support. Turning this off deletes the saved copy but keeps this session's entries.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Keeps the last \(ClipboardHistoryStore.limit) distinct text copies, newest first. Click an entry to copy it, then paste in your app. Marked confidential or transient copies and text over \(ClipboardHistoryStore.maximumTextBytes / 1024) KiB are skipped. Clearing history or removing the last Clipboard tab erases both memory and saved history.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

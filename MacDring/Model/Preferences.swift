@@ -45,6 +45,7 @@ final class Preferences: ObservableObject {
         static let disconnectPolicy = DisconnectPolicy.park
         static let freshDirectScan = false
         static let notesFormattingBarVisible = false
+        static let persistClipboardHistory = false
     }
 
     private enum Key {
@@ -68,6 +69,7 @@ final class Preferences: ObservableObject {
         static let disconnectPolicy = "disconnectPolicy"
         static let freshDirectScan = "freshDirectScan"
         static let notesFormattingBarVisible = "notesFormattingBarVisible"
+        static let persistClipboardHistory = "persistClipboardHistory"
         static let launchAtLogin = "launchAtLogin"
     }
 
@@ -178,6 +180,11 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(notesFormattingBarVisible, forKey: Key.notesFormattingBarVisible) }
     }
 
+    /// Opt-in: save the shared text history across app restarts.
+    @Published var persistClipboardHistory: Bool {
+        didSet { defaults.set(persistClipboardHistory, forKey: Key.persistClipboardHistory) }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet {
             guard !isSyncingLaunchAtLogin else { return }
@@ -217,6 +224,8 @@ final class Preferences: ObservableObject {
         freshDirectScan = defaults.object(forKey: Key.freshDirectScan) as? Bool ?? Default.freshDirectScan
         notesFormattingBarVisible = defaults.object(forKey: Key.notesFormattingBarVisible) as? Bool
             ?? Default.notesFormattingBarVisible
+        persistClipboardHistory = defaults.object(forKey: Key.persistClipboardHistory) as? Bool
+            ?? Default.persistClipboardHistory
 
         launchAtLogin = loginItem.isEnabled()
             ?? (defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false)
