@@ -149,7 +149,9 @@ final class ClipboardHistoryStore: ObservableObject {
                 restored.append(entry)
             }
             entries = restored
-        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+        } catch let error as CocoaError
+            where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            // Darwin FileHandle and corelibs Foundation use different missing-file codes.
             return
         } catch {
             // Preserve an unreadable archive until the user explicitly clears it.

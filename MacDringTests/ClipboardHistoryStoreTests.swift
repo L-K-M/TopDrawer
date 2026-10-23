@@ -116,6 +116,12 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertNil(restored.persistenceError)
     }
 
+    func testMissingArchiveStartsWithoutARestoreError() {
+        let history = ClipboardHistoryStore(storeURL: makeStoreURL(), retention: .acrossRestarts)
+        XCTAssertTrue(history.entries.isEmpty)
+        XCTAssertNil(history.persistenceError)
+    }
+
     func testEnablingRetentionSavesCurrentHistoryAndDisablingDeletesOnlyTheArchive() {
         let url = makeStoreURL()
         let history = ClipboardHistoryStore(storeURL: url)
