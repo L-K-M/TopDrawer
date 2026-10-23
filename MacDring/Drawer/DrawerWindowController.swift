@@ -382,6 +382,7 @@ final class DrawerWindowController {
         model.canClearRecents = tab.kind == .recents
             && tab.recentsSource.includesMacDring
             && !RecentsStore.shared.items.isEmpty
+        // Like the undo toast, a clipboard error belongs to this drawer session.
         if !preserveLiveNotes { model.clipboardError = nil }
         switch tab.kind {
         case .items:

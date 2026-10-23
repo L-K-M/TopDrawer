@@ -8,5 +8,8 @@ struct ClipboardEntry: Identifiable, Equatable {
 
     private static let previewLength = 160
 
-    var preview: String { String(text.prefix(Self.previewLength)) }
+    var preview: String {
+        let prefix = text.prefix(Self.previewLength)
+        return String(prefix) + (prefix.endIndex == text.endIndex ? "" : "…")
+    }
 }

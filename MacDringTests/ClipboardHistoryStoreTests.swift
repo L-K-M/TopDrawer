@@ -68,7 +68,14 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         history.record(text)
         let entry = try XCTUnwrap(history.entries.first)
 
-        XCTAssertEqual(entry.preview, String(text.prefix(160)))
+        XCTAssertEqual(entry.preview, String(text.prefix(160)) + "…")
         XCTAssertEqual(entry.text, text)
+    }
+
+    func testPreviewAtTheLimitIsNotMarkedTruncated() throws {
+        let history = ClipboardHistoryStore()
+        let text = String(repeating: "a", count: 160)
+        history.record(text)
+        XCTAssertEqual(try XCTUnwrap(history.entries.first).preview, text)
     }
 }

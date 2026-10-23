@@ -58,6 +58,15 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertTrue(model.isSearchable)
     }
 
+    func testHistoryChangesClearStaleCopyErrors() {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        model.clipboardEntries = [ClipboardEntry(id: UUID(), text: "copy", date: Date())]
+        model.clipboardError = "Copy failed"
+        model.clipboardEntries = []
+        XCTAssertNil(model.clipboardError)
+    }
+
     func testItemAtSlotFindsByGridSlotIncludingGaps() {
         let model = DrawerModel()
         let a = DrawerItem(kind: .file, displayName: "A", slot: 0)

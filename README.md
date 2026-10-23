@@ -42,11 +42,11 @@ Jetty all draw it.
   tab (a live, read-only view of a directory's contents), a **disks** tab (your mounted
   ejectable volumes), a **network** tab (your mounted network shares), a **cloud** tab
   (your cloud drives — iCloud, Dropbox, …), a **recents** tab (what you've recently
-  opened — from Top Drawer, the whole Mac via Spotlight, or both), and a **fresh** tab
+  opened — from Top Drawer, the whole Mac via Spotlight, or both), a **fresh** tab
   (files that just arrived — downloads, copies, saves), and a **clipboard** tab
-  (your last 50 text copies, kept in memory; click to copy again). See the docs for the
-  [network & cloud](docs/network-and-cloud-drives.md) and
-  [recents & fresh](docs/recents-and-fresh.md) and
+  (your last 50 distinct text copies, kept in memory; click to copy again). See the
+  docs for the [network & cloud](docs/network-and-cloud-drives.md),
+  [recents & fresh](docs/recents-and-fresh.md), and
   [clipboard history](docs/clipboard-history.md) tabs.
 - **Holds anything launchable** — applications, files, folders, and URLs. One
   click opens them.
@@ -173,7 +173,7 @@ the research and plan behind it.
    See [network & cloud](docs/network-and-cloud-drives.md) and
    [recents & fresh](docs/recents-and-fresh.md).
 6. For clipboard history on macOS, choose **New Clipboard Tab…**. Copy text in any
-   app, open the drawer, then click an entry and paste with **⌘V**. Type to filter;
+   app, open the drawer, click an entry to copy it, then paste with **⌘V**. Type to filter;
    **↑/↓** and **Return** select and copy. The header's trash button clears history.
    History is shared across Clipboard tabs and cleared on quit or when the last
    Clipboard tab is removed. Images and files are not recorded.
@@ -203,7 +203,7 @@ Top Drawer needs **no special permissions** for its core features — launching 
 `NSWorkspace`, and optional hotkeys use Carbon (no Accessibility grant). It ships
 as a menu-bar agent (`LSUIElement`).
 
-Two optional features are the exception, and each asks only when you choose to use it:
+Optional features ask only when you choose to use them:
 
 - **Empty Trash** asks Finder to empty the Trash via Apple Events, so the first time
   you use it macOS prompts once to allow Top Drawer to control Finder (the app carries
@@ -214,3 +214,6 @@ Two optional features are the exception, and each asks only when you choose to u
   permission-free Spotlight index — for Macs where Spotlight is off or unreliable.
   Turning it on makes macOS ask once per folder for access; left off, Fresh tabs stay
   Spotlight-only and never prompt.
+- **Clipboard history** reads copied text while a Clipboard tab exists. On macOS
+  15.4+, the system may ask for clipboard access. Its per-app clipboard setting
+  controls background recording; this feature needs no Accessibility permission.

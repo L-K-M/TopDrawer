@@ -12,7 +12,8 @@ drawer closed. Copies made before recording starts are excluded.
 - Right-click an entry to remove it. The header's trash button clears all history
   without changing your current system clipboard.
 - **Settings → Tabs → Keep open after copying** leaves the drawer open after a
-  copy. Columns and rows set its size; entries scroll in a list.
+  copy. In the same tab's **Drawer** settings, **Columns** and **Rows** set its size;
+  entries scroll in a list.
 
 All Clipboard tabs share the last **50 distinct text copies**. Repeated text moves
 to the front. Each entry is limited to **256 KiB**; larger copies are skipped,
@@ -25,6 +26,11 @@ transient, or auto-generated are skipped, including the legacy 1Password marker.
 Unmarked text can still contain sensitive information; use Remove or Clear to
 discard it. Recording polls every half-second, so rapid intervening copies can
 be missed. The experimental Linux frontend does not record clipboard history.
+
+On macOS 15.4+, the system may ask for clipboard access. To record copies in the
+background, allow Top Drawer in the system's per-app clipboard settings. Denying
+access prevents recording; existing history can still be cleared. This follows
+[Apple's pasteboard access controls](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum).
 
 ## Manual verification
 
@@ -42,3 +48,5 @@ Requires a macOS GUI session:
    history starts empty. Quit and relaunch; verify history is empty again.
 6. Check light/dark appearance, each screen edge, another display, and an app's
    full-screen Space. Verify scrolling, search, and the riding tab's placement.
+7. On macOS 15.4+, verify the clipboard prompt and allow/deny behavior in System
+   Settings. CI's macOS 14 runner does not exercise these privacy controls.

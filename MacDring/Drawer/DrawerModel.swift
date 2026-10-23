@@ -69,6 +69,7 @@ final class DrawerModel: ObservableObject {
     @Published var canClearRecents = false
     @Published var clipboardEntries: [ClipboardEntry] = [] {
         didSet {
+            if clipboardError != nil { clipboardError = nil }
             guard kind == .clipboard, let selectedItemID,
                   !clipboardSearchResults.contains(where: { $0.id == selectedItemID }) else { return }
             self.selectedItemID = clipboardSearchResults.first?.id

@@ -12,12 +12,14 @@ layouts or exports. Copies marked confidential, transient, or auto-generated are
 skipped. Unmarked sensitive text may be recorded. Remove individual entries or
 clear history from the drawer; quitting or removing the last Clipboard tab also
 clears it. Clearing history does not change the system clipboard.
+On macOS 15.4+, system clipboard privacy controls apply, and macOS may ask for
+clipboard access. You can change the app's clipboard access in System Settings.
 
 Top Drawer makes exactly two kinds of network request:
 
 - **Update checks.** On launch and about once a day — and whenever the user picks *Check for Updates…* — it asks GitHub's public releases API over HTTPS whether a newer version exists. The request carries no account, identifier, or system profile; the only app-specific field is the bundle identifier sent as the required User-Agent header. Like any network request, GitHub receives ordinary connection metadata such as the source IP address. Automatic checks can be turned off in Settings. If the user chooses **Download** for an offered update, the release archive is fetched over HTTPS into `~/Downloads`; nothing installs automatically.
 - **Favicons.** For web links the user has added, Top Drawer fetches `https://<host>/favicon.ico` from that link's own site to show its icon in the drawer. The app itself keeps the decoded icons only in memory for the session; the system's standard HTTP cache may additionally retain the responses on disk under `~/Library/Caches/ch.lkmc.MacDring`, as with any macOS network request.
 
-Top Drawer's core features need no special macOS permissions — launching uses `NSWorkspace`, and hotkeys use Carbon rather than Accessibility. Two optional features each prompt only when used: **Empty Trash** asks Finder to empty the Trash via Apple Events, which macOS confirms with a one-time prompt; and the Fresh tabs' **direct folder check** (off by default) makes macOS ask once per folder for access to Downloads, Desktop, and Documents. Declining either simply leaves that feature off.
+Top Drawer's core features need no special macOS permissions — launching uses `NSWorkspace`, and hotkeys use Carbon rather than Accessibility. Two other optional features each prompt only when used: **Empty Trash** asks Finder to empty the Trash via Apple Events, which macOS confirms with a one-time prompt; and the Fresh tabs' **direct folder check** (off by default) makes macOS ask once per folder for access to Downloads, Desktop, and Documents. Declining either simply leaves that feature off.
 
 Removing Top Drawer, its Application Support folder, and its preferences domain (`defaults delete ch.lkmc.MacDring` — plus `defaults delete com.macdring.MacDring` on installs upgraded from earlier versions — user defaults also hold the Recents history) removes all of its data; the system HTTP cache lives under `~/Library/Caches/ch.lkmc.MacDring` and, for upgraded installs, `~/Library/Caches/com.macdring.MacDring`. Questions can be asked through the project's GitHub repository; please report security vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
