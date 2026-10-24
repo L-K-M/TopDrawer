@@ -40,6 +40,15 @@ final class ItemActionServiceTests: XCTestCase {
 
     // MARK: isValidApplication
 
+    func testPreviewKindChecksTheResolvedLocalTarget() throws {
+        let file = tempDir.appendingPathComponent("note.txt")
+        try Data().write(to: file)
+        XCTAssertEqual(ItemActionService.previewFileKind(at: file), .file)
+        XCTAssertEqual(ItemActionService.previewFileKind(at: tempDir), .folder)
+        XCTAssertNil(ItemActionService.previewFileKind(at: tempDir.appendingPathComponent("missing")))
+        XCTAssertNil(ItemActionService.previewFileKind(at: URL(string: "https://example.com")!))
+    }
+
     func testIsValidApplication() throws {
         let app = try makeFakeApp()
         XCTAssertTrue(ItemActionService.isValidApplication(app))

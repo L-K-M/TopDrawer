@@ -29,6 +29,19 @@ final class TabCyclingTests: XCTestCase {
         XCTAssertEqual(state.consume(delta: -24, source: .trackpad, phase: .began, timestamp: 6), .next)
     }
 
+    func testCyclingFollowsSpatialOrderRatherThanStackingRecency() {
+        for edge in Edge.allCases {
+            var first = tab(0, edge: edge), last = tab(1, edge: edge), middle = tab(2, edge: edge)
+            first.anchor.position = edge.isVertical ? 0.8 : 0.2
+            middle.anchor.position = 0.5
+            last.anchor.position = edge.isVertical ? 0.2 : 0.8
+            let tabs = [last, first, middle]
+            let available = Set(tabs.map(\.id))
+            XCTAssertEqual(TabCycling.adjacentID(to: first.id, direction: .next, in: tabs, availableIDs: available), middle.id)
+            XCTAssertEqual(TabCycling.adjacentID(to: first.id, direction: .previous, in: tabs, availableIDs: available), last.id)
+        }
+    }
+
     func testWheelIsRateLimitedAndRejectsInvalidSamples() {
         var state = TabCycling.ScrollState()
         XCTAssertEqual(state.consume(delta: -1, source: .wheel, phase: .changed, timestamp: 1), .next)

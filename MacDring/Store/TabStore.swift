@@ -565,14 +565,7 @@ final class TabStore: ObservableObject {
     func groupItems(draggedID: UUID, ontoTargetID targetID: UUID, inTab tabID: UUID) {
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
-                  // A locked item can't be dragged into or wrapped into a group,
-                  // and a locked group can't gain members. An unlocked group that
-                  // merely holds a locked child accepts the add — the child's slot
-                  // doesn't move.
-                  let dragged = $0.tabs[ti].items.first(where: { $0.id == draggedID }),
-                  let target = $0.tabs[ti].items.first(where: { $0.id == targetID }),
-                  !dragged.containsLockedItems, !target.isLocked,
-                  let grouped = DrawerGrouping.grouped($0.tabs[ti].items,
+                   let grouped = DrawerGrouping.grouped($0.tabs[ti].items,
                                                        draggedID: draggedID, ontoTargetID: targetID) else { return }
             $0.tabs[ti].items = grouped
         }

@@ -29,6 +29,13 @@ enum DrawerMetrics {
     /// date. Above it, the configured columns drive the width (and which metadata
     /// columns fit — see `ItemView`).
     static let listMinWidth: CGFloat = 220
+    static let tabLabelCrossPadding: CGFloat = 4
+
+    static func tabThickness(configured: CGFloat, style: TabStyle, labelLineHeight: CGFloat?) -> CGFloat {
+        let base = configured * style.thicknessScale
+        guard style == .modern, let labelLineHeight else { return base }
+        return max(base, labelLineHeight.rounded(.up) + 2 * tabLabelCrossPadding)
+    }
 
     static func gridCellHeight(iconSize: CGFloat, itemFontSize: Double = 12) -> CGFloat {
         iconSize + CGFloat(max(26, itemFontSize + 14))

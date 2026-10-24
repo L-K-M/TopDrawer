@@ -22,6 +22,16 @@ extension DrawerAppearance.FontWeight {
 }
 
 extension DrawerAppearance {
+    func tabThickness(following global: Double, style: TabStyle, title: String?) -> CGFloat {
+        let lineHeight = title.flatMap { title -> CGFloat? in
+            guard !title.isEmpty else { return nil }
+            return (title as NSString).size(withAttributes: [
+                .font: NSFont.systemFont(ofSize: tabFontSize, weight: tabFontWeight.appKitWeight)
+            ]).height
+        }
+        return DrawerMetrics.tabThickness(configured: CGFloat(global), style: style, labelLineHeight: lineHeight)
+    }
+
     func translucency(following global: DrawerTranslucency) -> DrawerTranslucency {
         switch preset {
         case .system: return global

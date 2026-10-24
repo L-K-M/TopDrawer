@@ -14,6 +14,13 @@ import AppKit   // NSWorkspace: Launch Services lookup + the open-with backend
 /// APIs used here need none.
 enum ItemActionService {
 
+    static func previewFileKind(at url: URL) -> ItemKind? {
+        guard url.isFileURL else { return nil }
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return nil }
+        return isDirectory.boolValue ? .folder : .file
+    }
+
     /// Why an Open With request failed. The drawer surfaces `localizedDescription`
     /// in its error banner, so each case names an actionable cause.
     enum ActionError: Error, LocalizedError, Equatable {

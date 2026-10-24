@@ -380,7 +380,7 @@ struct DrawerView: View {
             .padding(.vertical, 3)
             .padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 8)
-                 .fill(Color.primary.opacity(fileDropHere ? 0.12 : 0)))
+                .fill(Color.primary.opacity(fileDropHere ? 0.12 : 0)))
             .background(RoundedRectangle(cornerRadius: 8)
                 .fill(model.selectedItemID == item.id ? Color.accentColor.opacity(0.30) : .clear))
             .overlay {
@@ -499,10 +499,7 @@ struct DrawerView: View {
         let topLevel = model.openGroupID == nil
         guard !model.isEditingLocked(dragged) else { return }
         if topLevel, let g = groupTargetSlot, g == dropSlot,
-           let target = model.visibleItem(atSlot: g), target.id != dragged.id,
-           !model.isEditingLocked(target),
-           DrawerGrouping.isGroupable(dragged),
-           target.kind == .group || DrawerGrouping.isGroupable(target) {
+           let target = model.visibleItem(atSlot: g), DrawerGrouping.canGroup(dragged, onto: target) {
             model.onGroupItems?(dragged.id, target.id)
             return
         }
@@ -521,11 +518,9 @@ struct DrawerView: View {
     /// slot, and never while dragging a group (groups don't nest). Moving to a new slot
     /// resets the countdown, so brushing past an item to reorder doesn't group.
     private func updateDwell(target: Int?, dragged: DrawerItem) {
-        guard model.openGroupID == nil, DrawerGrouping.isGroupable(dragged),
+        guard model.openGroupID == nil,
               let target, let occupant = model.visibleItem(atSlot: target),
-               occupant.id != dragged.id,
-               !model.isEditingLocked(occupant),
-              occupant.kind == .group || DrawerGrouping.isGroupable(occupant) else {
+              DrawerGrouping.canGroup(dragged, onto: occupant) else {
             cancelDwell()
             return
         }

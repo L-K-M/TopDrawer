@@ -54,6 +54,28 @@ final class ItemPreviewPolicyTests: XCTestCase {
 
     // MARK: canPreview
 
+    func testBrowserActionUsesTheCurrentSafePage() {
+        let original = URL(string: "https://example.com/start")!
+        let current = URL(string: "https://example.org/next")!
+        let local = URL(fileURLWithPath: "/tmp/local")
+        XCTAssertEqual(ItemPreviewPolicy.browserURL(original: original, current: current), current)
+        XCTAssertEqual(ItemPreviewPolicy.browserURL(original: original, current: local), original)
+        XCTAssertEqual(ItemPreviewPolicy.browserURL(original: original, current: nil), original)
+        XCTAssertNil(ItemPreviewPolicy.browserURL(original: local, current: nil))
+    }
+
+    func testSubframesOnlyAddInertDocumentsToTheWebsitePolicy() {
+        let blank = URL(string: "about:blank")!
+        let srcdoc = URL(string: "about:srcdoc")!
+        XCTAssertTrue(ItemPreviewPolicy.allowsNavigation(to: blank, frame: .subframe))
+        XCTAssertTrue(ItemPreviewPolicy.allowsNavigation(to: srcdoc, frame: .subframe))
+        XCTAssertFalse(ItemPreviewPolicy.allowsNavigation(to: blank, frame: .main))
+        XCTAssertFalse(ItemPreviewPolicy.allowsNavigation(to: srcdoc, frame: .main))
+        XCTAssertFalse(ItemPreviewPolicy.allowsNavigation(to: URL(fileURLWithPath: "/tmp/local"), frame: .subframe))
+        XCTAssertFalse(ItemPreviewPolicy.allowsNavigation(to: URL(string: "data:text/html,test")!, frame: .subframe))
+        XCTAssertTrue(ItemPreviewPolicy.allowsNavigation(to: URL(string: "https://example.com")!, frame: .subframe))
+    }
+
     func testFileAndFolderItemsCanPreview() {
         let file = DrawerItem(kind: .file, displayName: "Note",
                               url: URL(fileURLWithPath: "/tmp/note.txt"))

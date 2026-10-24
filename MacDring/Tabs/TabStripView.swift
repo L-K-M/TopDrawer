@@ -22,7 +22,10 @@ struct TabStripView: View {
     private var isClassic: Bool { tabStyle == .classic }
     /// The pill's thickness, scaled down for the (more compact) classic style. Must
     /// match `TabWindowController`'s window sizing, which applies the same scale.
-    private var thickness: CGFloat { CGFloat(preferences.tabThickness) * tabStyle.thicknessScale }
+    private var thickness: CGFloat {
+        model.appearance.tabThickness(following: preferences.tabThickness, style: tabStyle,
+                                      title: preferences.showTabLabels ? model.title : nil)
+    }
     /// Glyph size relative to thickness — a little smaller for classic so its icon
     /// reads as a compact folder-tab marker rather than filling the pill.
     private var glyphScale: CGFloat { isClassic ? 0.36 : 0.42 }
@@ -95,8 +98,8 @@ struct TabStripView: View {
         return contentStack
             .foregroundStyle(foreground)
             .shadow(color: .black.opacity(foreground == .white ? 0.35 : 0), radius: 1, y: 0.5)
-            .padding(.vertical, isVertical ? 9 : 4)
-            .padding(.horizontal, isVertical ? 4 : 11)
+            .padding(.vertical, isVertical ? 9 : DrawerMetrics.tabLabelCrossPadding)
+            .padding(.horizontal, isVertical ? DrawerMetrics.tabLabelCrossPadding : 11)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 ZStack {

@@ -3,6 +3,14 @@ import XCTest
 
 final class DrawerMetricsTests: XCTestCase {
 
+    func testLargeTabLabelsFitInsideThinModernPills() {
+        XCTAssertEqual(DrawerMetrics.tabThickness(configured: 24, style: .modern, labelLineHeight: 23.5), 32)
+        XCTAssertEqual(DrawerMetrics.tabThickness(configured: 36, style: .modern, labelLineHeight: 14), 36)
+        XCTAssertEqual(DrawerMetrics.tabThickness(configured: 24, style: .modern, labelLineHeight: nil), 24)
+        XCTAssertEqual(DrawerMetrics.tabThickness(configured: 36, style: .classic, labelLineHeight: 24),
+                       36 * TabStyle.classic.thicknessScale)
+    }
+
     private let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
 
     func testSavedNotesSizeIsIndependentOfIconAndGridSettings() {

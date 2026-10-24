@@ -4,6 +4,13 @@ import XCTest
 @testable import MacDring
 
 final class ItemPreviewControllerTests: XCTestCase {
+    private final class RecordingOpener: AppLaunching {
+        var urls: [URL] = []
+        func resolveURL(for item: DrawerItem) -> URL? { item.url }
+        func openApplication(at url: URL, reply: @escaping (Error?) -> Void) { reply(nil) }
+        func openURL(_ url: URL) -> Bool { urls.append(url); return true }
+    }
+
     func testInvalidTargetsDoNotCreateChildPanels() {
         let parent = NSPanel()
         let preview = ItemPreviewController()
@@ -22,7 +29,9 @@ final class ItemPreviewControllerTests: XCTestCase {
         defer { preview.close() }
         var closes = 0
         preview.onClose = { closes += 1 }
+        let wasActive = NSApp.isActive
         XCTAssertTrue(preview.showFile(file, relativeTo: parent))
+        XCTAssertEqual(NSApp.isActive, wasActive)
         let child = try XCTUnwrap(parent.childWindows?.first)
         XCTAssertTrue(preview.contains(child))
         XCTAssertTrue(child.styleMask.contains(.nonactivatingPanel))
@@ -51,6 +60,26 @@ final class ItemPreviewControllerTests: XCTestCase {
         XCTAssertTrue(preview.showFile(file, relativeTo: parent))
         preview.close()
         XCTAssertEqual(closes, 2)
+        XCTAssertTrue(parent.childWindows?.isEmpty ?? true)
+    }
+
+    func testExternalOpenReturnsTheTargetAndClosesThePreview() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).txt")
+        try Data("Preview fixture".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let parent = NSPanel()
+        let opener = RecordingOpener()
+        let preview = ItemPreviewController(opener: opener)
+        defer { preview.close() }
+        XCTAssertTrue(preview.showFile(file, relativeTo: parent))
+        var opened: [URL] = []
+        preview.onOpenExternally = { opened.append($0) }
+        let panel = try XCTUnwrap(parent.childWindows?.first)
+        let button = try XCTUnwrap(panel.contentView?.subviews.flatMap(\.subviews)
+            .compactMap { $0 as? NSButton }.first { $0.title == "Open File" })
+        button.performClick(nil)
+        XCTAssertEqual(opened, [file])
+        XCTAssertTrue(opener.urls.isEmpty)
         XCTAssertTrue(parent.childWindows?.isEmpty ?? true)
     }
 }

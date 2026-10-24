@@ -192,7 +192,11 @@ final class DrawerModel: ObservableObject {
     func previewSelection() {
         guard kind != .clipboard, let selectedItemID,
               let item = displayedItems.first(where: { $0.id == selectedItemID }) else { return }
-        onPreviewItem?(item)
+        if item.kind == .url, let url = item.url, ItemPreviewPolicy.isWebsite(url) {
+            onPreviewWebsite?(item)
+        } else if item.kind == .file || item.kind == .folder {
+            onPreviewItem?(item)
+        }
     }
 
     func isEditingLocked(_ item: DrawerItem) -> Bool {
@@ -203,7 +207,7 @@ final class DrawerModel: ObservableObject {
     func isRemovalLocked(_ item: DrawerItem) -> Bool {
         if isEditingLocked(item) { return true }
         return items.contains {
-            $0.children.count <= 2 && $0.children.contains(where: { $0.id == item.id })
+            $0.children.count <= DrawerGrouping.dissolveThreshold && $0.children.contains(where: { $0.id == item.id })
                 && $0.children.contains(where: { $0.id != item.id && $0.isLocked })
         }
     }

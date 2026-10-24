@@ -18,6 +18,7 @@ HTTP(S) links offer **Preview Website**, with an **Open in Browser** action.
 Previews use a nonpersistent WebKit data store. Websites may run scripts and load
 third-party resources; browser cookies are not shared. Local/custom URL schemes
 and downloads are blocked inside previews. Other link types still open externally.
+HTTP authentication prompts require opening the page in your browser.
 
 In **Settings → Tabs → Behavior**, choose whether folder items open in Finder or
 a folder pop-up, and whether website items open in your browser or a preview.
@@ -28,9 +29,11 @@ Existing tabs keep Finder/browser behavior by default.
 - **Arrows:** select occupied cells without typing. Lists and search results move
   linearly; grids skip gaps and preserve the column where possible.
 - **Return:** open the selected item or enter a group.
-- **Space:** Quick Look for a selected file/folder when no search is active.
+- **Space:** Quick Look for a selected file/folder, or a website preview for a
+  selected web link, when no search is active.
 - **Esc:** clear a search, leave a group, then close the drawer.
-- **Command-[ / Command-]:** cycle available tabs on the same display edge.
+- **Command-[ / Command-]:** cycle available tabs on the same display edge in
+  spatial order (top-to-bottom on side edges, left-to-right on horizontal edges).
 - **Scroll/swipe over a tab:** optional in **Settings → General**. Wheel input is
   rate-limited; trackpad momentum does not repeatedly switch tabs. Scrolling drawer
   content still scrolls the content.
@@ -74,7 +77,8 @@ Manual macOS checks:
 1. Preview a local document and folder on every edge, including a small display
    and another application's fullscreen Space. Verify focus stays in that app.
 2. Resize/close a preview; switch tabs or quit during loading. No orphan preview
-   or stale callback should appear after reopening another drawer.
+   or stale callback should appear after reopening another drawer. Start a slow
+   application launch, then open a preview; its late completion must not close it.
 3. Browse empty, unreadable, large, and network folders. Verify errors, retry,
    truncation, correct click targets, and pop-up dismissal.
 4. Choose a compatible application through Open With. Check success, failure,

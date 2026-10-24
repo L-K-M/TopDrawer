@@ -20,6 +20,12 @@ enum DrawerGrouping {
     /// as a drop *target* the caller allows `.group` explicitly (to append into it).
     static func isGroupable(_ item: DrawerItem) -> Bool { groupableKinds.contains(item.kind) }
 
+    /// Adding to an unlocked group preserves the slots of its locked children.
+    static func canGroup(_ dragged: DrawerItem, onto target: DrawerItem) -> Bool {
+        dragged.id != target.id && !dragged.containsLockedItems && !target.isLocked
+            && isGroupable(dragged) && (target.kind == .group || isGroupable(target))
+    }
+
     /// Groups `draggedID` onto `targetID` at the top level. If the target is already a
     /// group the dragged item joins it; otherwise both are wrapped in a new group at
     /// the target's slot. Returns the new top-level array, or `nil` when the move
@@ -29,8 +35,7 @@ enum DrawerGrouping {
         guard draggedID != targetID,
               let dragged = items.first(where: { $0.id == draggedID }),
               let target = items.first(where: { $0.id == targetID }),
-              isGroupable(dragged),                                   // a launchable, non-group source
-              target.kind == .group || isGroupable(target)           // onto a group (append) or another launchable
+               canGroup(dragged, onto: target)
         else { return nil }
 
         var result = items.filter { $0.id != draggedID }

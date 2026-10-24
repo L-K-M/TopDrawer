@@ -27,12 +27,15 @@ final class ItemPreviewController: NSObject {
     /// The panel's state is fully torn down *before* this fires, so a callback
     /// that opens another preview (or calls `close()` again) can't disturb it.
     var onClose: (() -> Void)?
+    var onOpenExternally: ((URL) -> Void)?
 
     /// "Open File" / "Open in Browser" go through the shared launch service, never
     /// `NSWorkspace` from the view layer (AGENTS.md's layering rule). Injectable.
     private let opener: AppLaunching
 
     private enum Target { case file(URL), website(URL) }
+    private enum CloseReason { case dismissed, replaced }
+    private enum Activity { case loading, idle }
 
     private weak var parent: NSWindow?
     private var panel: PreviewPanel?
@@ -49,6 +52,7 @@ final class ItemPreviewController: NSObject {
     private var openButton: NSButton?
     private var target: Target?
     private var isTearingDown = false
+    private var navigationWasRefused = false
 
     init(opener: AppLaunching = SystemAppLauncher()) {
         self.opener = opener
@@ -63,16 +67,14 @@ final class ItemPreviewController: NSObject {
     /// message. Any current preview is superseded first.
     @discardableResult
     func showFile(_ url: URL, relativeTo parent: NSWindow) -> Bool {
-        teardown(notify: false)
-        var isDirectory = ObjCBool(false)
-        guard url.isFileURL,
-              FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
+        teardown(reason: .replaced)
+        guard let kind = ItemActionService.previewFileKind(at: url) else { return false }
         target = .file(url)
         presentPanel(titled: url.lastPathComponent, relativeTo: parent)
-        openButton?.title = isDirectory.boolValue ? "Open Folder" : "Open File"
-        setStatus("Quick Look", busy: false)
+        openButton?.title = kind == .folder ? "Open Folder" : "Open File"
+        setStatus("Quick Look", activity: .idle)
         guard showQuickLook(url) else {
-            teardown(notify: false)
+            teardown(reason: .replaced)
             return false
         }
         return true
@@ -83,7 +85,7 @@ final class ItemPreviewController: NSObject {
     /// leaves nothing on screen.
     @discardableResult
     func showWebsite(_ url: URL, relativeTo parent: NSWindow) -> Bool {
-        teardown(notify: false)
+        teardown(reason: .replaced)
         guard ItemPreviewPolicy.isWebsite(url) else { return false }
         target = .website(url)
         presentPanel(titled: url.host ?? url.absoluteString, relativeTo: parent)
@@ -96,7 +98,7 @@ final class ItemPreviewController: NSObject {
     /// releases delegates and content, detaches the panel from its parent, and
     /// reports the close once through `onClose`. Safe to call with nothing open.
     func close() {
-        teardown(notify: true)
+        teardown(reason: .dismissed)
     }
 
     /// Whether `window` is this controller's live preview panel — used by the
@@ -107,10 +109,9 @@ final class ItemPreviewController: NSObject {
 
     // MARK: Teardown
 
-    private func teardown(notify: Bool) {
+    private func teardown(reason: CloseReason) {
         guard let panel, !isTearingDown else { return }
         isTearingDown = true
-        defer { isTearingDown = false }
 
         if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
         closeObserver = nil
@@ -135,21 +136,25 @@ final class ItemPreviewController: NSObject {
         statusLabel = nil
         openButton = nil
         target = nil
+        onOpenExternally = nil
+        navigationWasRefused = false
 
         // orderOut, not close(): when teardown is reached through the panel's own
         // willClose notification, the system close is already in flight.
         panel.orderOut(nil)
+        panel.contentView = nil
 
         // Fired last: all state is already cleared, so a callback that re-enters
         // `show…` builds a new panel unaffected by this teardown.
-        if notify { onClose?() }
+        isTearingDown = false
+        if reason == .dismissed { onClose?() }
     }
 
     /// The panel's own close (traffic-light button) arrives here; everything else
     /// (Esc, `close()`) drives `teardown` directly.
     private func panelWillClose() {
         guard !isTearingDown else { return }
-        teardown(notify: true)
+        teardown(reason: .dismissed)
     }
 
     // MARK: Panel & chrome
@@ -271,11 +276,13 @@ final class ItemPreviewController: NSObject {
     private func place(_ panel: NSPanel, relativeTo parent: NSWindow) {
         let visible = (parent.screen ?? NSScreen.main)?.visibleFrame ?? parent.frame
         let margin = Self.screenMargin
-        let content = CGSize(
-            width: min(Self.preferredContentSize.width,
-                       max(Self.minimumContentSize.width, visible.width - 2 * margin)),
-            height: min(Self.preferredContentSize.height,
-                        max(Self.minimumContentSize.height, visible.height - 2 * margin)))
+        let chrome = panel.frameRect(forContentRect: .zero).size
+        let available = CGSize(width: max(1, visible.width - 2 * margin - chrome.width),
+                               height: max(1, visible.height - 2 * margin - chrome.height))
+        panel.contentMinSize = CGSize(width: min(Self.minimumContentSize.width, available.width),
+                                      height: min(Self.minimumContentSize.height, available.height))
+        let content = CGSize(width: min(Self.preferredContentSize.width, available.width),
+                             height: min(Self.preferredContentSize.height, available.height))
         panel.setContentSize(content)
 
         let size = panel.frame.size   // includes the title bar
@@ -297,9 +304,9 @@ final class ItemPreviewController: NSObject {
         contentArea.addSubview(view)
     }
 
-    private func setStatus(_ text: String, busy: Bool) {
+    private func setStatus(_ text: String, activity: Activity) {
         statusLabel?.stringValue = text
-        if busy { spinner?.startAnimation(nil) } else { spinner?.stopAnimation(nil) }
+        if activity == .loading { spinner?.startAnimation(nil) } else { spinner?.stopAnimation(nil) }
     }
 
     // MARK: Content
@@ -324,13 +331,13 @@ final class ItemPreviewController: NSObject {
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
         webView.allowsLinkPreview = false
-        let delegate = WebDelegate(controller: self)
+        let delegate = WebDelegate(controller: self, webView: webView)
         webView.navigationDelegate = delegate
         webView.uiDelegate = delegate
         self.webDelegate = delegate
         self.webView = webView
         installContent(webView)
-        setStatus("Loading \(url.host ?? "page")…", busy: true)
+        setStatus("Loading \(url.host ?? "page")…", activity: .loading)
         webView.load(URLRequest(url: url))
     }
 
@@ -339,11 +346,19 @@ final class ItemPreviewController: NSObject {
     @objc private func openExternally(_ sender: Any?) {
         let url: URL
         switch target {
-        case .file(let target), .website(let target): url = target
+        case .file(let target): url = target
+        case .website(let original):
+            guard let current = ItemPreviewPolicy.browserURL(original: original, current: webView?.url) else { return }
+            url = current
         case nil: return
         }
-        if !opener.openURL(url) {
-            setStatus("Couldn't open it in the default app.", busy: false)
+        if let onOpenExternally {
+            close()
+            onOpenExternally(url)
+        } else if opener.openURL(url) {
+            close()
+        } else {
+            setStatus("Couldn't open it in the default app.", activity: .idle)
         }
     }
 
@@ -353,31 +368,40 @@ final class ItemPreviewController: NSObject {
 
     // MARK: Web delegate callbacks
 
+    fileprivate func owns(_ candidate: WKWebView) -> Bool { webView === candidate }
+
     fileprivate func webLoadingStarted() {
-        setStatus("Loading…", busy: true)
+        navigationWasRefused = false
+        setStatus("Loading…", activity: .loading)
     }
 
     fileprivate func webLoadingFinished(title: String?) {
-        setStatus("", busy: false)
+        setStatus("", activity: .idle)
         if case .website = target, let title, !title.isEmpty { panel?.title = title }
     }
 
     fileprivate func webLoadingFailed(_ error: Error) {
+        guard !navigationWasRefused else { return }
         let nsError = error as NSError
         // Our own policy cancels surface here too — don't overwrite the "blocked"
         // message with a bare "cancelled".
         if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return }
-        setStatus("Couldn't load this page — \(error.localizedDescription)", busy: false)
+        setStatus("Couldn't load this page: \(error.localizedDescription)", activity: .idle)
     }
 
-    fileprivate func refusedNavigation(to url: URL) {
-        setStatus("This link can't be previewed — only web pages are allowed.", busy: false)
-        // Log scheme+host only — the refused URL can carry userinfo credentials.
-        NSLog("Top Drawer preview: refused navigation to \(url.scheme ?? "?")://\(url.host ?? "?")")
+    fileprivate func refusedNavigation() {
+        navigationWasRefused = true
+        setStatus("This link can't be previewed. Only web pages are allowed.", activity: .idle)
     }
 
     fileprivate func refusedDownload() {
-        setStatus("Downloads can't be previewed.", busy: false)
+        navigationWasRefused = true
+        setStatus("Downloads can't be previewed.", activity: .idle)
+    }
+
+    fileprivate func refusedAuthentication() {
+        navigationWasRefused = true
+        setStatus("Open in Browser to authenticate.", activity: .idle)
     }
 }
 
@@ -406,10 +430,17 @@ private final class PreviewPanel: NSPanel {
 /// Held strongly by the controller (the web view's delegate properties are weak)
 /// so teardown is a single release.
 private final class WebDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
-    private weak var controller: ItemPreviewController?
+    private weak var owner: ItemPreviewController?
+    private weak var view: WKWebView?
 
-    init(controller: ItemPreviewController) {
-        self.controller = controller
+    private var controller: ItemPreviewController? {
+        guard let owner, let view, owner.owns(view) else { return nil }
+        return owner
+    }
+
+    init(controller: ItemPreviewController, webView: WKWebView) {
+        self.owner = controller
+        self.view = webView
     }
 
     // MARK: Navigation policy
@@ -420,18 +451,13 @@ private final class WebDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// gates exist because neither covers the other.)
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url else { return .cancel }
-        if navigationAction.targetFrame?.isMainFrame ?? true {
-            guard ItemPreviewPolicy.isWebsite(url) else {
-                controller?.refusedNavigation(to: url)
-                return .cancel
-            }
-            return .allow
+        guard let controller, let url = navigationAction.request.url else { return .cancel }
+        let frame: ItemPreviewPolicy.Frame = navigationAction.targetFrame?.isMainFrame == false ? .subframe : .main
+        guard ItemPreviewPolicy.allowsNavigation(to: url, frame: frame) else {
+            controller.refusedNavigation()
+            return .cancel
         }
-        // Subframes may load web pages and the inert placeholder documents WebKit
-        // creates itself — nothing else (no file:, javascript:, or custom scheme).
-        let inert: Set<String> = ["about:blank", "about:srcdoc"]
-        return ItemPreviewPolicy.isWebsite(url) || inert.contains(url.absoluteString) ? .allow : .cancel
+        return .allow
     }
 
     /// The response gate: catches server redirects to off-policy schemes
@@ -439,13 +465,14 @@ private final class WebDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// can't render — a bounded preview never downloads.
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationResponse: WKNavigationResponse) async -> WKNavigationResponsePolicy {
-        guard navigationResponse.isForMainFrame else { return .allow }
-        if let url = navigationResponse.response.url, !ItemPreviewPolicy.isWebsite(url) {
-            controller?.refusedNavigation(to: url)
+        guard let controller, let url = navigationResponse.response.url else { return .cancel }
+        let frame: ItemPreviewPolicy.Frame = navigationResponse.isForMainFrame ? .main : .subframe
+        guard ItemPreviewPolicy.allowsNavigation(to: url, frame: frame) else {
+            controller.refusedNavigation()
             return .cancel
         }
         guard navigationResponse.canShowMIMEType else {
-            controller?.refusedDownload()
+            controller.refusedDownload()
             return .cancel
         }
         return .allow
@@ -461,7 +488,7 @@ private final class WebDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         if let url = webView.url, !ItemPreviewPolicy.isWebsite(url) {
             webView.stopLoading()
-            controller?.refusedNavigation(to: url)
+            controller?.refusedNavigation()
         }
     }
 
@@ -478,11 +505,16 @@ private final class WebDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
         controller?.webLoadingFailed(error)
     }
 
-    /// Server trust and client-certificate challenges alike get the default
-    /// handling — a preview never supplies credentials of its own.
+    /// Leave certificate validation to WebKit; credential prompts belong in a browser.
     func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
                  completionHandler: @escaping @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        completionHandler(.performDefaultHandling, nil)
+        guard controller != nil else { completionHandler(.cancelAuthenticationChallenge, nil); return }
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
+            completionHandler(.performDefaultHandling, nil)
+        } else {
+            controller?.refusedAuthentication()
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
     }
 
     /// Belt-and-braces: policy never produces `.download`, but anything that still
@@ -504,7 +536,7 @@ private final class WebDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction,
                  windowFeatures: WKWindowFeatures) -> WKWebView? {
-        guard navigationAction.navigationType == .linkActivated,
+        guard controller != nil, navigationAction.navigationType == .linkActivated,
               let url = navigationAction.request.url,
               ItemPreviewPolicy.isWebsite(url) else { return nil }
         webView.load(navigationAction.request)

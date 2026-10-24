@@ -421,9 +421,16 @@ final class TabController {
     }
 
     private func cycleTab(from id: UUID, direction: TabCycling.Direction) {
-        let available = Set(tabWindows.compactMap { $0.value.isShown ? $0.key : nil })
+        let visibleTabs = store.tabs.compactMap { tab -> Tab? in
+            guard tabWindows[tab.id]?.isShown == true, let screen = resolvedScreen(for: tab),
+                  let display = registry.uuid(for: screen) else { return nil }
+            var displayed = tab
+            displayed.anchor.displayUUID = display
+            return displayed
+        }
+        let available = Set(visibleTabs.map(\.id))
         guard let next = TabCycling.adjacentID(to: id, direction: direction,
-                                             in: store.tabs, availableIDs: available) else { return }
+                                             in: visibleTabs, availableIDs: available) else { return }
         openDrawer(next)
     }
 
@@ -459,7 +466,7 @@ final class TabController {
               // `currentScreen`: a parked tab (its display disconnected, default policy)
               // keeps its old screen reference, so a hotkey/spring-open must not slide a
               // drawer out onto a detached display. See BACKLOG.md's legacy ID index (B3).
-               let screen = resolvedScreen(for: tab) else { return }
+              let screen = resolvedScreen(for: tab) else { return }
         previewController.close()
         previewIsOpen = false
         folderBrowser.close()
@@ -493,11 +500,11 @@ final class TabController {
     }
 
     private func closeDrawer() {
-        cancelHoverClose()
         cancelSpringOpen()
         previewController.close()
         previewIsOpen = false
         folderBrowser.close()
+        cancelHoverClose()
         if openTabID != nil { drawerInteractionGeneration &+= 1 }
         let duration = animationDuration
         if let id = openTabID, let wc = tabWindows[id] {
@@ -574,6 +581,13 @@ final class TabController {
     private func cancelHoverClose() {
         pendingHoverClose?.cancel()
         pendingHoverClose = nil
+    }
+
+    private func resumeHoverClose() {
+        guard let id = openTabID, let tab = store.tab(id: id), let wc = tabWindows[id],
+              effectiveBehavior(tab).openOnHover else { return }
+        let mouse = NSEvent.mouseLocation
+        if !drawer.frame.contains(mouse), !wc.frame.contains(mouse) { scheduleHoverClose() }
     }
 
     // MARK: Auto-hide / auto-fade (Dock-style concealment)
@@ -1037,7 +1051,9 @@ final class TabController {
         previewController.onClose = { [weak self] in
             guard let self else { return }
             self.previewIsOpen = false
+            self.resumeHoverClose()
         }
+        folderBrowser.onClose = { [weak self] in self?.resumeHoverClose() }
         drawer.onFrameChanged = { [weak self] frame in
             guard let self, let id = self.openTabID, let wc = self.tabWindows[id],
                   let tab = self.store.tab(id: id) else { return }
@@ -1186,6 +1202,7 @@ final class TabController {
 
     private func browseFolder(_ item: DrawerItem) {
         guard item.kind == .folder, openTabID != nil, let session = drawerSessionID else { return }
+        activeLaunchRequestID = nil
         previewController.close()
         previewIsOpen = false
         cancelHoverClose()
@@ -1205,7 +1222,9 @@ final class TabController {
     }
 
     private func previewItem(_ item: DrawerItem) {
-        guard openTabID != nil, ItemPreviewPolicy.canPreview(item),
+        guard openTabID != nil else { return }
+        activeLaunchRequestID = nil
+        guard ItemPreviewPolicy.canPreview(item),
               let url = BookmarkResolver.url(for: item) else {
             drawer.model.actionError = "This item is unavailable for Quick Look."
             return
@@ -1213,15 +1232,33 @@ final class TabController {
         folderBrowser.close()
         cancelHoverClose()
         previewIsOpen = previewController.showFile(url, relativeTo: drawer.window)
+        wirePreviewExternalOpen(for: item)
         drawer.model.actionError = previewIsOpen ? nil : "Couldn't preview this file."
+        if !previewIsOpen { resumeHoverClose() }
     }
 
     private func previewWebsite(_ item: DrawerItem) {
         guard openTabID != nil, let url = item.url, ItemPreviewPolicy.isWebsite(url) else { return }
+        activeLaunchRequestID = nil
         folderBrowser.close()
         cancelHoverClose()
         previewIsOpen = previewController.showWebsite(url, relativeTo: drawer.window)
+        wirePreviewExternalOpen(for: item)
         drawer.model.actionError = previewIsOpen ? nil : "Couldn't preview this website."
+        if !previewIsOpen { resumeHoverClose() }
+    }
+
+    private func wirePreviewExternalOpen(for item: DrawerItem) {
+        guard previewIsOpen, let session = drawerSessionID else { return }
+        previewController.onOpenExternally = { [weak self] url in
+            guard let self, self.drawerSessionID == session else { return }
+            var opened = item
+            if item.kind == .url, item.url != url {
+                opened.url = url
+                opened.displayName = url.host ?? item.displayName
+            }
+            self.launchExternally(opened)
+        }
     }
 
     private func openWith(_ item: DrawerItem, application: URL) {
@@ -1817,6 +1854,7 @@ final class TabController {
     func saveAndTeardown() {
         previewController.close()
         folderBrowser.close()
+        cancelHoverClose()
         drawer.finishResize()
         store.saveNow()
         stopMonitoring()

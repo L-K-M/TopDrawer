@@ -93,4 +93,33 @@ final class DrawerNavigationTests: XCTestCase {
         model.items = [group]
         XCTAssertTrue(model.isEditingLocked(unlocked))
     }
+
+    func testAnUnlockedGroupAcceptsAddsWithoutMovingItsLockedChild() throws {
+        let child = DrawerItem(kind: .file, displayName: "Protected", isLocked: true, slot: 0)
+        let sibling = DrawerItem(kind: .file, displayName: "Sibling", slot: 1)
+        let group = DrawerItem(kind: .group, displayName: "Group", slot: 1, children: [child, sibling])
+        let dragged = DrawerItem(kind: .file, displayName: "New", slot: 2)
+        XCTAssertTrue(DrawerGrouping.canGroup(dragged, onto: group))
+        let grouped = try XCTUnwrap(DrawerGrouping.grouped([group, dragged], draggedID: dragged.id, ontoTargetID: group.id))
+        XCTAssertEqual(grouped.first?.children.first, child)
+        var lockedGroup = group
+        lockedGroup.isLocked = true
+        XCTAssertFalse(DrawerGrouping.canGroup(dragged, onto: lockedGroup))
+        XCTAssertFalse(DrawerGrouping.canGroup(child, onto: dragged))
+    }
+
+    func testSpaceUsesWebsitePreviewForLinksAndIgnoresApps() {
+        let model = DrawerModel()
+        let website = DrawerItem(kind: .url, displayName: "Site", url: URL(string: "https://example.com"), slot: 0)
+        let app = DrawerItem(kind: .application, displayName: "App", slot: 1)
+        model.items = [website, app]
+        var websites: [UUID] = []
+        model.onPreviewWebsite = { websites.append($0.id) }
+        model.onPreviewItem = { _ in XCTFail("Links and apps are not Quick Look files") }
+        model.moveSelection(.down)
+        model.previewSelection()
+        model.moveSelection(.right)
+        model.previewSelection()
+        XCTAssertEqual(websites, [website.id])
+    }
 }

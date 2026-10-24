@@ -9,6 +9,17 @@ import Foundation
 /// them — menus decide whether to offer a preview at all, and the web preview
 /// re-checks every URL the page tries to reach.
 enum ItemPreviewPolicy {
+    enum Frame { case main, subframe }
+    private static let inertSubframeURLs: Set<String> = ["about:blank", "about:srcdoc"]
+
+    static func allowsNavigation(to url: URL, frame: Frame) -> Bool {
+        isWebsite(url) || (frame == .subframe && inertSubframeURLs.contains(url.absoluteString))
+    }
+
+    static func browserURL(original: URL, current: URL?) -> URL? {
+        if let current, isWebsite(current) { return current }
+        return isWebsite(original) ? original : nil
+    }
 
     /// Whether `url` may load inside the embedded web preview.
     ///

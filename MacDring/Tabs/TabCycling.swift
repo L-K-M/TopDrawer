@@ -10,8 +10,11 @@ enum TabCycling {
             $0.anchor.displayUUID == current.anchor.displayUUID
                 && $0.anchor.edge == current.anchor.edge && availableIDs.contains($0.id)
         }.sorted {
+            if $0.anchor.position != $1.anchor.position {
+                return current.anchor.edge.isVertical
+                    ? $0.anchor.position > $1.anchor.position : $0.anchor.position < $1.anchor.position
+            }
             if $0.anchor.order != $1.anchor.order { return $0.anchor.order < $1.anchor.order }
-            if $0.anchor.position != $1.anchor.position { return $0.anchor.position < $1.anchor.position }
             return $0.id.uuidString < $1.id.uuidString
         }
         guard peers.count > 1, let index = peers.firstIndex(where: { $0.id == currentID }) else { return nil }

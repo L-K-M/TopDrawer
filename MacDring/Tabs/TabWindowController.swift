@@ -247,7 +247,8 @@ final class TabWindowController {
         hostingView.layoutSubtreeIfNeeded()
         let fitting = hostingView.fittingSize
         let style = model.appearance.tabStyle(following: preferences.tabStyle)
-        let thickness = CGFloat(preferences.tabThickness) * style.thicknessScale
+        let thickness = model.appearance.tabThickness(following: preferences.tabThickness, style: style,
+            title: preferences.showTabLabels ? model.title : nil)
         let size: CGSize
         if style == .classic {
             // Classic hugs its content along the thin (perpendicular) axis for a
@@ -407,8 +408,9 @@ final class TabWindowController {
     /// the other tabs before showing it, so the inputs are exposed without the pill
     /// committing to them.
     func dragFrame(edge: Edge, position: Double, length: CGFloat, on screen: NSScreen) -> CGRect {
-        let thickness = CGFloat(preferences.tabThickness)
-            * model.appearance.tabStyle(following: preferences.tabStyle).thicknessScale
+        let thickness = model.appearance.tabThickness(following: preferences.tabThickness,
+            style: model.appearance.tabStyle(following: preferences.tabStyle),
+            title: preferences.showTabLabels ? model.title : nil)
         let size: CGSize = edge.isVertical
             ? CGSize(width: thickness, height: max(length, thickness))
             : CGSize(width: max(length, thickness), height: thickness)
