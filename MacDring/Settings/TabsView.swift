@@ -149,7 +149,8 @@ struct TabsView: View {
     }
 
     private func removeSelected() {
-        guard let id = selection, let tab = store.tab(id: id), !tab.items.contains(where: \.containsLockedItems) else { return }
+        guard let id = selection, let tab = store.tab(id: id), !tab.items.contains(where: \.containsLockedItems),
+              TabRemoval.confirm(tab) else { return }
         store.removeTab(id: id)
         selection = store.tabs.first?.id
     }

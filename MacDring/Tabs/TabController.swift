@@ -415,7 +415,10 @@ final class TabController {
         wc.onDragEnded = { [weak self] in self?.endDrag(id) }
         wc.onCycle = { [weak self] direction in self?.cycleTab(from: id, direction: direction) }
         wc.model.onRequestSettings = { [weak self] in self?.onOpenSettings?(id) }
-        wc.model.onDelete = { [weak self] in self?.store.removeTab(id: id) }
+        wc.model.onDelete = { [weak self] in
+            guard let self, let tab = self.store.tab(id: id), TabRemoval.confirm(tab) else { return }
+            self.store.removeTab(id: id)
+        }
         wc.model.onMoveToEdge = { [weak self] edge in self?.moveTab(id, toEdge: edge) }
         return wc
     }
