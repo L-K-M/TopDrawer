@@ -59,6 +59,33 @@ final class FolderListerTests: XCTestCase {
         XCTAssertTrue(FolderLister.contents(of: tab).isEmpty)
     }
 
+    func testReadableDirectoryReportsNoError() {
+        let listing = FolderLister.listing(of: folderTab())
+        XCTAssertEqual(listing.items.count, 3)
+        XCTAssertNil(listing.error)
+    }
+
+    func testUnreadableDirectoryReportsErrorInsteadOfEmpty() throws {
+        // A permission-denied folder must not masquerade as an empty one.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path) }
+
+        let listing = FolderLister.listing(of: folderTab())
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
+    func testDeletedDirectoryReportsError() throws {
+        let tab = folderTab()
+        try FileManager.default.removeItem(at: dir)
+
+        let listing = FolderLister.listing(of: tab)
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
     // MARK: Sort + show-hidden
 
     private func entry(_ name: String, dir: Bool = false, modified: TimeInterval = 0) -> FolderLister.Entry {

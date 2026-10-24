@@ -32,10 +32,19 @@ enum FolderLister {
     }
 
     /// Like `contents(of:)`, but also reports whether the directory held more entries
-    /// than `limit` (so the drawer can show a "300+" truncation badge).
-    static func listing(of tab: Tab) -> (items: [DrawerItem], truncated: Bool) {
-        guard tab.kind == .folder, let url = resolveFolder(tab) else { return ([], false) }
-        return (try? listing(at: url, sort: tab.folderSort, showsHidden: tab.folderShowsHidden)) ?? ([], false)
+    /// than `limit` (so the drawer can show a "300+" truncation badge) and why the
+    /// listing is empty when the directory exists but can't be read. An unreadable
+    /// directory must not masquerade as an empty one — the drawer shows the failure
+    /// instead of a bare "This folder is empty".
+    static func listing(of tab: Tab) -> (items: [DrawerItem], truncated: Bool, error: String?) {
+        guard tab.kind == .folder, let url = resolveFolder(tab) else { return ([], false, nil) }
+        do {
+            let listing = try listing(at: url, sort: tab.folderSort, showsHidden: tab.folderShowsHidden)
+            return (listing.items, listing.truncated, nil)
+        } catch {
+            NSLog("Top Drawer: couldn't list folder \(url.path): \(error.localizedDescription)")
+            return ([], false, error.localizedDescription)
+        }
     }
 
     /// Pop-up browsers use the same bounded listing but surface unreadable folders.

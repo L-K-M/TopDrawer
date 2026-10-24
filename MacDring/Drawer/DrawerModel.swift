@@ -89,6 +89,9 @@ final class DrawerModel: ObservableObject {
     /// Whether the live listing was capped (a folder with more than `FolderLister.limit`
     /// entries) — drives the header's "300+" truncation badge.
     @Published var itemsTruncated = false
+    /// Why the open folder tab has no items when the cause is a failed listing
+    /// (unreadable or vanished directory) rather than an empty one; `nil` otherwise.
+    @Published var folderError: String?
 
     /// A transient "Moved N items — Undo" banner shown in the drawer header after a
     /// drop moved files. `nil` when no toast is showing. Set/cleared by the controller.

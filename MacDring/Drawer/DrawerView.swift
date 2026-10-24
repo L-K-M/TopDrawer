@@ -622,6 +622,7 @@ struct DrawerView: View {
     }
 
     private var emptyIcon: String {
+        if model.folderError != nil { return "exclamationmark.triangle" }
         switch model.kind {
         case .folder: return "folder"
         case .disks: return "externaldrive"
@@ -636,6 +637,9 @@ struct DrawerView: View {
     private var emptyMessage: String {
         switch model.kind {
         case .folder:
+            if let error = model.folderError {
+                return "Couldn't read this folder.\n\(error)"
+            }
             return model.folderURL == nil
                 ? "No folder chosen.\nPick one with the gear above."
                 : "This folder is empty."

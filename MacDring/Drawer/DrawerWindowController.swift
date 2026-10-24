@@ -374,6 +374,7 @@ final class DrawerWindowController {
         model.isDropTargeted = false
         model.externalDropTargetFrames = [:]
         model.itemsTruncated = false
+        model.folderError = nil
         model.sparklingItemIDs = []
         if !preserveLiveNotes {
             // A fresh open (or a switch to another tab) must not inherit the previous
@@ -409,6 +410,7 @@ final class DrawerWindowController {
             let listing = FolderLister.listing(of: tab)
             model.items = listing.items.applyingIconStyles(from: tab.iconStyles)
             model.itemsTruncated = listing.truncated
+            model.folderError = listing.error
             model.notes = ""
             model.folderURL = FolderLister.resolveFolder(tab)
         case .disks:
