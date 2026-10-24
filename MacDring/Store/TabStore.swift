@@ -778,6 +778,10 @@ final class TabStore: ObservableObject {
     /// whole document (notes and bookmark blobs included) and performs two atomic
     /// writes — none of which may hitch typing, dragging, or Settings edits.
     private let saveQueue = DispatchQueue(label: "ch.lkmc.TopDrawer.TabStore.save", qos: .utility)
+    /// Monotonic save numbering (main-confined), so an outcome is published only if
+    /// no newer save has already reported one.
+    private var saveSequence: UInt = 0
+    private var publishedSaveSequence: UInt = 0
 
     private func mutate(notifyChange: Bool = true, _ change: (inout LauncherDocument) -> Void) {
         var doc = document
@@ -797,11 +801,13 @@ final class TabStore: ObservableObject {
     /// The debounced autosave: snapshot the document on the main queue, then encode
     /// and write it on `saveQueue`, publishing the outcome back on main.
     private func saveSoon() {
+        saveSequence &+= 1
+        let sequence = saveSequence
         let snapshot = document
         saveQueue.async { [weak self] in
             guard let self else { return }
             let error = self.performSave(snapshot)
-            DispatchQueue.main.async { self.persistenceError = error }
+            DispatchQueue.main.async { self.publishPersistenceError(error, for: sequence) }
         }
     }
 
@@ -817,7 +823,20 @@ final class TabStore: ObservableObject {
         dispatchPrecondition(condition: .onQueue(.main))
         saveWorkItem?.cancel()
         saveWorkItem = nil
-        persistenceError = saveQueue.sync { performSave(document) }
+        saveSequence &+= 1
+        let sequence = saveSequence
+        let snapshot = document   // value semantics: safe to encode off the caller's thread
+        let error = saveQueue.sync { performSave(snapshot) }
+        publishPersistenceError(error, for: sequence)
+    }
+
+    /// Applies a save outcome unless a newer save has already reported — an older
+    /// autosave completion must not resurrect its stale error over a newer success.
+    private func publishPersistenceError(_ message: String?, for sequence: UInt) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard sequence >= publishedSaveSequence else { return }
+        publishedSaveSequence = sequence
+        persistenceError = message
     }
 
     /// The shared write path, always running on `saveQueue` so concurrent saves can
