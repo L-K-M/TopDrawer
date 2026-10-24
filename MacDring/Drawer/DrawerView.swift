@@ -76,6 +76,7 @@ struct DrawerView: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if model.isSearchable { searchBar }
             bodyContent

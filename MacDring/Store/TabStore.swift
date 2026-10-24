@@ -28,6 +28,10 @@ final class TabStore: ObservableObject {
     /// decide whether to seed a starter tab.
     let loadedFromDisk: Bool
 
+    /// The user-facing reason a future-schema document can't be saved.
+    private static let newerVersionMessage =
+        "This layout was saved by a newer version of Top Drawer. Changes are kept for this session only, so the newer document isn't damaged."
+
     private let storeURL: URL
     private let bakURL: URL
     private let fileManager: FileManager
@@ -95,6 +99,11 @@ final class TabStore: ObservableObject {
                 self.document = .empty
                 self.loadedFromDisk = false
             }
+        }
+        // Surface a future-schema document at load, not at the first save attempt:
+        // a session that can never persist must say so before the first edit.
+        if document.version > LauncherDocument.currentVersion {
+            persistenceError = TabStore.newerVersionMessage
         }
     }
 
@@ -786,6 +795,9 @@ final class TabStore: ObservableObject {
     /// copy exactly when writes are failing (e.g. disk full), leaving the
     /// document nowhere but memory.
     func saveNow() {
+        // Every caller (quit flush, debounced autosave, tests) is main-bound, and
+        // the outcome publishes `@Published` state — fail loudly if that drifts.
+        dispatchPrecondition(condition: .onQueue(.main))
         saveWorkItem?.cancel()
         saveWorkItem = nil
         // A document written by a newer Top Drawer (schema version above ours)
@@ -794,7 +806,7 @@ final class TabStore: ObservableObject {
         // works; only persistence is disabled.
         guard document.version <= LauncherDocument.currentVersion else {
             NSLog("Top Drawer: launcher document is version \(document.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
-            persistenceError = "This layout was saved by a newer version of Top Drawer. Changes are kept for this session only, so the newer document isn't damaged."
+            persistenceError = Self.newerVersionMessage
             return
         }
         do {
