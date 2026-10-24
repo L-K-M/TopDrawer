@@ -27,6 +27,8 @@ struct OpenWithMenu: View {
             }
         }
         .task(id: item) {
+            isLoading = true
+            applications = []
             let item = item
             let result = await Task.detached(priority: .userInitiated) {
                 ItemActionService.applications(for: item)

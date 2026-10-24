@@ -77,6 +77,23 @@ struct ItemView: View {
         }
     }
 
+    private var lockDescription: String? {
+        if item.isLocked || (editingLocked && !item.isGroup) { return "Locked" }
+        return item.containsLockedItems ? "Contains locked items" : nil
+    }
+
+    @ViewBuilder
+    private var lockBadge: some View {
+        if let lockDescription {
+            Image(systemName: "lock.fill")
+                .font(.system(size: max(6, effectiveIconSize * 0.16), weight: .semibold))
+                .padding(layout == .list ? 1 : 3)
+                .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                .help(lockDescription)
+                .accessibilityHidden(true)
+        }
+    }
+
     /// Finder-style small icon for the list layout, regardless of the grid's icon size.
     static let listIconSize: CGFloat = 16
 
@@ -106,6 +123,7 @@ struct ItemView: View {
             .onHover { isHovered = $0 }
             .help(broken ? "Can't find \(item.displayName)" : item.displayName)
             .accessibilityLabel(item.displayName)
+            .accessibilityValue(lockDescription ?? "")
             .contextMenu {
                 Button(groupOrKindOpenTitle, action: onLaunch)
                 if let onPreview { Button("Quick Look", action: onPreview).disabled(broken) }
@@ -326,6 +344,7 @@ struct ItemView: View {
                     HStack(spacing: gap) { previewSlot(2, inner); previewSlot(3, inner) }
                 }
             }
+            .overlay(alignment: .bottomTrailing) { lockBadge }
     }
 
     @ViewBuilder
@@ -381,14 +400,7 @@ struct ItemView: View {
             .overlay(alignment: .topTrailing) { trashBadge }
             .overlay { ejectingSpinner }
             .overlay { sparkleOverlay }
-            .overlay(alignment: .bottomTrailing) {
-                if item.isLocked {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(3)
-                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
-                }
-            }
+            .overlay(alignment: .bottomTrailing) { lockBadge }
     }
 
     /// A small red count badge on the Trash icon (grid only — a 16 pt list glyph is

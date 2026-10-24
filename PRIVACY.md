@@ -2,9 +2,9 @@
 
 Effective October 24, 2026
 
-Top Drawer does not operate an account or analytics service, and it does not sell personal data. It contains no advertising, telemetry, or tracking.
+Top Drawer does not operate an account or analytics service, and it does not sell personal data. It adds no advertising, telemetry, or tracking.
 
-Everything the app knows stays on the user's Mac. Tabs, their items, and notes are stored as JSON in `~/Library/Application Support/MacDring/launcher.json`, and app-wide settings live in macOS user defaults under the `ch.lkmc.MacDring` domain (`com.macdring.MacDring` before the identifier change; that older domain is not migrated). MacDring is the app's former name, which the Application Support folder keeps, so existing installs retain their saved tabs, items, and notes. The history behind Recents tabs is recorded locally, and Fresh and Recents tabs otherwise read the Mac's own Spotlight index. Layout exports are written only to a file the user chooses. Nothing is synced or uploaded.
+Launcher data stays on the user's Mac. Tabs, their items, and notes are stored as JSON in `~/Library/Application Support/MacDring/launcher.json`, and app-wide settings live in macOS user defaults under the `ch.lkmc.MacDring` domain (`com.macdring.MacDring` before the identifier change; that older domain is not migrated). MacDring is the app's former name, which the Application Support folder keeps, so existing installs retain their saved tabs, items, and notes. The history behind Recents tabs is recorded locally, and Fresh and Recents tabs otherwise read the Mac's own Spotlight index. Layout exports are written only to a file the user chooses. These records are not synced or uploaded.
 
 Clipboard history on macOS records text only while a Clipboard tab exists. Up to
 50 distinct copies, each at most 256 KiB, never enter saved layouts or exports.

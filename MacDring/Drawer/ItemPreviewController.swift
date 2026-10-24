@@ -183,7 +183,7 @@ final class ItemPreviewController: NSObject {
             backing: .buffered,
             defer: false)
         panel.title = title
-        // Floating-panel behavior keeps key focus nonactivating, like the drawer.
+        // Match the drawer's panel behavior; keyboard focus follows explicit clicks.
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
@@ -209,12 +209,7 @@ final class ItemPreviewController: NSObject {
         traceActivation("after child attachment")
         panel.orderFrontRegardless()
         traceActivation("after ordering")
-        // Same stranding rule as the drawer: over a foreign full-screen Space a
-        // non-activating panel that takes key focus gets sited on our own hidden
-        // desktop Space instead of the visible one — order in front, stay non-key.
-        let screen = parent.screen ?? NSScreen.main
-        if let screen, !ForeignFullScreen.covers(screen) { panel.makeKey() }
-        traceActivation("after key focus")
+        // makeKey() activates the accessory app. Leave initial keys in the drawer.
     }
 
     /// The toolbar strip: status + spinner on the left, Open-externally and Close

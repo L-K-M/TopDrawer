@@ -4,6 +4,8 @@
 
 Right-click a file or folder for **Quick Look**, or select it with the arrow keys
 and press **Space**. The preview closes with Esc or its close button.
+Initial keyboard focus stays in the drawer; click into a preview to interact
+with it. Esc from the drawer closes its preview before closing the drawer.
 
 **Browse Folder** opens a bounded, folders-first listing without adding its
 contents to your layout. **Open in Finder** opens the full directory. An unreadable

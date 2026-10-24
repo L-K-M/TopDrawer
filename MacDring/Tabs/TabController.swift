@@ -1813,7 +1813,11 @@ final class TabController {
         // they don't move the text cursor instead.
         switch event.keyCode {
         case UInt16(kVK_Escape):
-            if model.isSearching {
+            if previewIsOpen {
+                previewController.close()
+            } else if folderBrowser.isShown {
+                folderBrowser.close()
+            } else if model.isSearching {
                 model.clearSearch()
             } else if model.openGroupID != nil {
                 model.openGroupID = nil
