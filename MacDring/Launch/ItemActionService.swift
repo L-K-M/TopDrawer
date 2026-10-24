@@ -87,7 +87,7 @@ enum ItemActionService {
         }
         openURLs([target], appURL) { error in
             if let error {
-                NSLog("Top Drawer: open-with failed for \(target.lastPathComponent): \(error.localizedDescription)")
+                NSLog("Top Drawer: open-with failed for %@: %@", target.lastPathComponent, error.localizedDescription)
                 relay.complete(.failure(ActionError.openFailed(target: target, underlying: error)))
             } else {
                 relay.complete(.success(target))

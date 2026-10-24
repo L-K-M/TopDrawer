@@ -1,4 +1,7 @@
 import XCTest
+#if os(Linux)
+import Glibc
+#endif
 #if canImport(AppKit)
 import AppKit   // NSImage — the `applications(toOpen:)` signature needs it
 #endif
@@ -11,6 +14,40 @@ import AppKit   // NSImage — the `applications(toOpen:)` signature needs it
 final class ItemActionServiceTests: XCTestCase {
 
     private enum TestError: Error { case failed }
+
+    #if os(Linux)
+    func testFailureLoggingPreservesPercentCharactersInFilenames() throws {
+        let app = try makeFakeApp()
+        let target = URL(fileURLWithPath: "/tmp/Budget%%.txt")
+        let pipe = Pipe()
+        fflush(stderr)
+        let original = dup(STDERR_FILENO)
+        guard original >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { _ = dup2(original, STDERR_FILENO); _ = Glibc.close(original) }
+        guard dup2(pipe.fileHandleForWriting.fileDescriptor, STDERR_FILENO) >= 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        var completed = false
+        ItemActionService.open(DrawerItem(kind: .file, displayName: "Budget", url: target),
+            withApplicationAt: app, resolveURL: { $0.url },
+            isValidApplication: ItemActionService.isValidApplication,
+            openURLs: { _, _, reply in reply(TestError.failed) }, completion: { _ in completed = true })
+        var launchCompleted = false
+        ItemLauncher.launch(DrawerItem(kind: .file, displayName: "Budget", url: target),
+            resolveURL: { $0.url }, openApplication: { _, reply in reply(nil) },
+            openURL: { _ in false }, completion: { _ in launchCompleted = true })
+        fflush(stderr)
+        guard dup2(original, STDERR_FILENO) >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        try pipe.fileHandleForWriting.close()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        try pipe.fileHandleForReading.close()
+        XCTAssertTrue(completed)
+        XCTAssertTrue(launchCompleted)
+        XCTAssertTrue(output.contains("open-with failed for Budget%%.txt"), output)
+        XCTAssertTrue(output.contains("failed to open Budget%%.txt"), output)
+    }
+    #endif
 
     private var tempDir: URL!
 
