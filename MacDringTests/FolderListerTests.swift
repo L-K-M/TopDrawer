@@ -92,6 +92,19 @@ final class FolderListerTests: XCTestCase {
         XCTAssertNotNil(listing.error)
     }
 
+    func testUnresolvableBookmarkReportsError() {
+        // A configured folder whose bookmark is dead must report itself — not read
+        // as the "no folder chosen" empty state.
+        let tab = Tab(title: "F", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                      kind: .folder, folderBookmark: Data([0x01, 0x02, 0x03]))
+
+        let listing = FolderLister.listing(of: tab)
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
     func testDeletedDirectoryReportsError() throws {
         let tab = folderTab()
         try FileManager.default.removeItem(at: dir)

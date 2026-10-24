@@ -616,6 +616,9 @@ struct DrawerView: View {
                 .foregroundStyle(.secondary)
                 .font(.callout)
                 .multilineTextAlignment(.center)
+                // Listing-error copy can run long; wrap instead of truncating in a
+                // small drawer.
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)

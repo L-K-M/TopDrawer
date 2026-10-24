@@ -37,15 +37,30 @@ enum FolderLister {
     /// directory must not masquerade as an empty one — the drawer shows the failure
     /// instead of a bare "This folder is empty".
     static func listing(of tab: Tab) -> (items: [DrawerItem], truncated: Bool, error: String?) {
-        guard tab.kind == .folder, let url = resolveFolder(tab) else { return ([], false, nil) }
+        guard tab.kind == .folder else { return ([], false, nil) }
+        guard let url = resolveFolder(tab) else {
+            // A tab that *has* a folder whose stored location no longer resolves is
+            // a failure to report — not the "no folder chosen" case.
+            if tab.folderBookmark != nil || tab.folderURL != nil {
+                return ([], false, Self.unresolvableMessage)
+            }
+            return ([], false, nil)
+        }
         do {
             let listing = try listing(at: url, sort: tab.folderSort, showsHidden: tab.folderShowsHidden)
             return (listing.items, listing.truncated, nil)
         } catch {
-            NSLog("Top Drawer: couldn't list folder \(url.path): \(error.localizedDescription)")
+            // `%@`, not interpolation: NSLog reads its first argument as a format
+            // string, and folder paths routinely contain `%`.
+            NSLog("Top Drawer: couldn't list folder %@: %@", url.path, error.localizedDescription)
             return ([], false, error.localizedDescription)
         }
     }
+
+    /// Shown when a configured folder's stored location can no longer be resolved
+    /// (its bookmark is dead and no fallback URL was stored).
+    private static let unresolvableMessage =
+        "This folder's location can no longer be resolved. Pick it again with the gear above."
 
     /// Pop-up browsers use the same bounded listing but surface unreadable folders.
     static func listing(at url: URL, sort: FolderSort = .name,
