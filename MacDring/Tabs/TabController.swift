@@ -930,9 +930,14 @@ final class TabController {
                         NSAnimationEffect.poof.show(centeredAt: poofAt,
                                                     size: NSSize(width: 32, height: 32), completionHandler: {})
                     } else {
-                        self.drawer.model.actionError = "Some items couldn't be moved to the Trash."
+                        // A single Bool can't say *which* files failed, so the
+                        // message claims nothing about partial success.
+                        self.drawer.model.actionError = "Couldn't move items to the Trash."
                     }
-                    self.drawer.model.iconNonce += 1   // the Trash changed — re-resolve its icon
+                    // Refreshed even on failure: a partially-failed batch still moves
+                    // the files that did succeed, so the Trash icon and folder listing
+                    // may have changed.
+                    self.drawer.model.iconNonce += 1   // re-resolve the Trash icon
                     if tab.kind == .folder { self.refreshOpenDrawer() }
                 }
             }
