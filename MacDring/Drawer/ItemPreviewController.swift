@@ -71,7 +71,10 @@ final class ItemPreviewController: NSObject {
         presentPanel(titled: url.lastPathComponent, relativeTo: parent)
         openButton?.title = isDirectory.boolValue ? "Open Folder" : "Open File"
         setStatus("Quick Look", busy: false)
-        showQuickLook(url)
+        guard showQuickLook(url) else {
+            teardown(notify: false)
+            return false
+        }
         return true
     }
 
@@ -301,13 +304,14 @@ final class ItemPreviewController: NSObject {
 
     // MARK: Content
 
-    private func showQuickLook(_ url: URL) {
-        guard let contentArea else { return }
-        let preview = QLPreviewView(frame: contentArea.bounds, style: .normal)
+    private func showQuickLook(_ url: URL) -> Bool {
+        guard let contentArea,
+              let preview = QLPreviewView(frame: contentArea.bounds, style: .normal) else { return false }
         preview.autostarts = true
         preview.previewItem = url as NSURL   // NSURL conforms to QLPreviewItem
         quickLookView = preview
         installContent(preview)
+        return true
     }
 
     private func showWebPage(_ url: URL) {
@@ -363,8 +367,6 @@ final class ItemPreviewController: NSObject {
         // Our own policy cancels surface here too — don't overwrite the "blocked"
         // message with a bare "cancelled".
         if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return }
-        if nsError.domain == WKError.errorDomain,
-           nsError.code == WKError.Code.frameLoadInterruptedByPolicyChange.rawValue { return }
         setStatus("Couldn't load this page — \(error.localizedDescription)", busy: false)
     }
 
