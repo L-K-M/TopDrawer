@@ -103,6 +103,40 @@ final class LinuxVolumesTests: XCTestCase {
         XCTAssertEqual(volumes.map(\.name), volumes.map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
     }
 
+    /// On a removable boot device (live USB, an SD-card rootfs like a Pi's
+    /// `mmcblk0`), the OS mounts flag removable but must never reach the Disks dock —
+    /// ejecting `/` or `/home` would unmount the running system.
+    func testClassifyNeverOffersSystemMountsEvenWhenRemovable() {
+        let mountinfo = """
+        30 1 179:2 / / rw,relatime shared:1 - ext4 /dev/mmcblk0p2 rw
+        31 30 8:33 / /home rw,relatime shared:2 - ext4 /dev/sda1 rw
+        32 30 8:34 / /usr rw,relatime shared:3 - ext4 /dev/sda2 rw
+        33 30 8:35 / /mnt/backup rw,relatime shared:4 - ext4 /dev/sdc1 rw
+        """
+        let volumes = VolumeClassifier.classify(
+            mounts: MountInfoParser.parse(mountinfo), user: "alice",
+            isRemovable: { _ in true },
+            home: "/home/alice")
+        let byPath = Dictionary(uniqueKeysWithValues: volumes.map { ($0.path, $0) })
+
+        XCTAssertNil(byPath["/"], "the root filesystem is never a volume, removable or not")
+        XCTAssertNil(byPath["/home"], "a mount above $HOME is a system area")
+        XCTAssertNil(byPath["/usr"], "a system prefix is excluded")
+        XCTAssertEqual(byPath["/mnt/backup"]?.kind, .disk,
+                       "a removable mount outside system areas still qualifies")
+    }
+
+    /// An ancestor check covers exotic home locations (`/users/alice`) that no fixed
+    /// prefix list would catch.
+    func testClassifyExcludesMountAboveNonstandardHome() {
+        let line = "40 30 8:33 / /users rw,relatime shared:20 - ext4 /dev/sda1 rw"
+        let volumes = VolumeClassifier.classify(
+            mounts: MountInfoParser.parse(line), user: "alice",
+            isRemovable: { _ in true },
+            home: "/users/alice")
+        XCTAssertTrue(volumes.isEmpty, "/users holds $HOME and is not ejectable")
+    }
+
     /// The /media convention is user-scoped: another user's media dir isn't offered as
     /// ejectable (that's exactly what the `user:` parameter distinguishes).
     func testClassifyIgnoresOtherUsersMediaDir() {

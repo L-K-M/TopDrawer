@@ -109,21 +109,27 @@ public enum VolumeClassifier {
     ]
 
     /// Mount points we never surface even with a real fstype (system areas).
-    static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap", "/var/lib/docker"]
+    static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap", "/var/lib/docker",
+                                 "/home", "/usr", "/var", "/opt", "/etc", "/root"]
 
     /// - Parameters:
     ///   - mounts: parsed `/proc/self/mountinfo`.
     ///   - user: `$USER`, for the `/media/$USER` + `/run/media/$USER` removable convention.
     ///   - isRemovable: whether a block device is removable (`/sys/block/<base>/removable`).
+    ///   - home: `$HOME`; a mount at or above it (a separate `/home`, `/users`, …) holds
+    ///     the running system's data and is never ejectable, same as `/` itself.
     ///   - dropboxRoots: cloud folders that aren't mounts (e.g. from `~/.dropbox/info.json`).
     public static func classify(mounts: [RawMount], user: String,
                                 isRemovable: (String) -> Bool,
+                                home: String = "",
                                 dropboxRoots: [String] = []) -> [LinuxVolume] {
         var volumes: [LinuxVolume] = []
         var seenPaths = Set<String>()
 
         for mount in mounts {
             guard !pseudoFSTypes.contains(mount.fsType),
+                  mount.mountPoint != "/",
+                  !isAtOrAbove(mount.mountPoint, of: home),
                   !systemPrefixes.contains(where: { mount.mountPoint == $0 || mount.mountPoint.hasPrefix($0 + "/") }),
                   !seenPaths.contains(mount.mountPoint) else { continue }
 
@@ -139,6 +145,13 @@ public enum VolumeClassifier {
         }
 
         return volumes.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// `path` is `base` itself or a directory above it — ejecting such a mount removes
+    /// the base directory (a home mount, or a partition `home` lives on) from under the
+    /// running system.
+    private static func isAtOrAbove(_ path: String, of base: String) -> Bool {
+        !base.isEmpty && (path == base || base.hasPrefix(path + "/"))
     }
 
     private static func classifyOne(_ mount: RawMount, user: String,
@@ -200,6 +213,7 @@ public struct ProcMounts: VolumeSnapshotProviding {
             mounts: MountInfoParser.parse(mountinfo),
             user: user,
             isRemovable: Self.isRemovable(device:),
+            home: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory(),
             dropboxRoots: dropboxRoots())
     }
 
