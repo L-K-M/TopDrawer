@@ -196,6 +196,41 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(store.tab(id: tab.id)?.items.count, 0)
     }
 
+    /// "Delete Group" must not destroy the launchers inside: the container dissolves
+    /// and its children return to the top level.
+    func testDissolveGroupPromotesChildrenToTopLevel() throws {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        let a = DrawerItem(kind: .application, displayName: "A", slot: 0)
+        let b = DrawerItem(kind: .application, displayName: "B", slot: 1)
+        let group = DrawerItem(kind: .group, displayName: "G", slot: 0, children: [a, b])
+        tab.items = [group]
+        store.addTab(tab)
+
+        store.dissolveGroup(id: group.id, fromTab: tab.id)
+
+        let items = try XCTUnwrap(store.tab(id: tab.id)?.items)
+        XCTAssertFalse(items.contains { $0.kind == .group })
+        XCTAssertEqual(Set(items.map(\.id)), [a.id, b.id])
+    }
+
+    /// A locked child makes the whole group editing-locked: dissolving would move it.
+    func testDissolveGroupIsDeniedWhenAChildIsLocked() throws {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        var b = DrawerItem(kind: .application, displayName: "B", slot: 1)
+        b.isLocked = true
+        let a = DrawerItem(kind: .application, displayName: "A", slot: 0)
+        let group = DrawerItem(kind: .group, displayName: "G", slot: 0, children: [a, b])
+        tab.items = [group]
+        store.addTab(tab)
+
+        store.dissolveGroup(id: group.id, fromTab: tab.id)
+
+        let items = try XCTUnwrap(store.tab(id: tab.id)?.items)
+        XCTAssertEqual(items.map(\.id), [group.id], "a group with a locked child stays put")
+    }
+
     func testSettingCustomIconBookmarkClearsGeneratedStyle() throws {
         let store = TabStore(storeURL: storeURL)
         let tab = makeTab()

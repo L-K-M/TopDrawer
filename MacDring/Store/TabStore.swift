@@ -468,6 +468,18 @@ final class TabStore: ObservableObject {
         }
     }
 
+    /// Dissolves a group: the container goes away and its children return to the top
+    /// level at the group's slot. This is what "Delete Group" routes to — removing a
+    /// group wholesale would destroy launchers the user never asked to lose. Denied
+    /// when the group or any of its children is locked (dissolving moves them).
+    func dissolveGroup(id groupID: UUID, fromTab tabID: UUID) {
+        mutate {
+            guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  !Self.editingLocked(groupID, in: $0.tabs[i].items) else { return }
+            $0.tabs[i].items = DrawerGrouping.dissolvingGroup($0.tabs[i].items, id: groupID)
+        }
+    }
+
     func updateItem(_ item: DrawerItem, inTab tabID: UUID) {
         mutate {
             guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }),

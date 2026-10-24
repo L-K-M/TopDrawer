@@ -1086,7 +1086,13 @@ final class TabController {
             // item left the grid (only the launcher entry goes; the file stays put).
             NSAnimationEffect.poof.show(centeredAt: NSEvent.mouseLocation,
                                         size: NSSize(width: 32, height: 32), completionHandler: {})
-            self.store.removeItem(id: item.id, fromTab: id)
+            // "Delete Group" dissolves the container and returns its children to the
+            // top level; plain Remove on a non-group item deletes as before.
+            if item.isGroup {
+                self.store.dissolveGroup(id: item.id, fromTab: id)
+            } else {
+                self.store.removeItem(id: item.id, fromTab: id)
+            }
         }
         drawer.model.onRevealItem = { item in ItemLauncher.revealInFinder(item) }
         drawer.model.onEmptyTrash = { [weak self] in self?.emptyTrash() }
