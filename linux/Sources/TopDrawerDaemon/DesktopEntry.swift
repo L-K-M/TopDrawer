@@ -44,8 +44,9 @@ public struct DesktopEntry: Sendable, Equatable {
         var values: [String: String] = [:]
         // U+FEFF is not whitespace, so strip a UTF-8 BOM or "[Desktop Entry]" detection fails.
         let body = text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
-        for rawLine in body.split(separator: "\n", omittingEmptySubsequences: false) {
-            // .whitespacesAndNewlines also drops a trailing \r, so CRLF files parse.
+        // Split on the newline *character set*, not "\n": a CR+LF pair is a single
+        // grapheme cluster, so split(separator: "\n") never matches inside CRLF text.
+        for rawLine in body.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
             if line.hasPrefix("[") && line.hasSuffix("]") {
