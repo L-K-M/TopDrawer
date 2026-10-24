@@ -49,8 +49,7 @@ final class ItemPreviewControllerTests: XCTestCase {
         let wasActive = NSApp.isActive
         let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
         XCTAssertTrue(preview.showFile(file, relativeTo: parent))
-        XCTAssertEqual(NSApp.isActive, wasActive,
-                       "policy=\(NSApp.activationPolicy().rawValue); \(preview.activationTrace.joined(separator: ", "))")
+        XCTAssertEqual(NSApp.isActive, wasActive, "Preview must not activate Top Drawer")
         XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, frontmost)
         let child = try XCTUnwrap(parent.childWindows?.first)
         XCTAssertFalse(child.isKeyWindow)

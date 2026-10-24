@@ -28,15 +28,6 @@ final class ItemPreviewController: NSObject {
     /// that opens another preview (or calls `close()` again) can't disturb it.
     var onClose: (() -> Void)?
     var onOpenExternally: ((URL) -> Void)?
-    #if DEBUG
-    private(set) var activationTrace: [String] = []
-    #endif
-
-    private func traceActivation(_ stage: String) {
-        #if DEBUG
-        activationTrace.append("\(stage)=\(NSApp.isActive)")
-        #endif
-    }
 
     /// "Open File" / "Open in Browser" go through the shared launch service, never
     /// `NSWorkspace` from the view layer (AGENTS.md's layering rule). Injectable.
@@ -78,10 +69,8 @@ final class ItemPreviewController: NSObject {
     func showFile(_ url: URL, relativeTo parent: NSWindow) -> Bool {
         teardown(reason: .replaced)
         guard let kind = ItemActionService.previewFileKind(at: url) else { return false }
-        traceActivation("before panel")
         target = .file(url)
         presentPanel(titled: url.lastPathComponent, relativeTo: parent)
-        traceActivation("after panel")
         openButton?.title = kind == .folder ? "Open Folder" : "Open File"
         setStatus("Quick Look", activity: .idle)
         guard showQuickLook(url) else {
@@ -206,9 +195,7 @@ final class ItemPreviewController: NSObject {
         }
 
         parent.addChildWindow(panel, ordered: .above)
-        traceActivation("after child attachment")
         panel.orderFrontRegardless()
-        traceActivation("after ordering")
         // makeKey() activates the accessory app. Leave initial keys in the drawer.
     }
 
@@ -321,14 +308,10 @@ final class ItemPreviewController: NSObject {
     private func showQuickLook(_ url: URL) -> Bool {
         guard let contentArea,
               let preview = QLPreviewView(frame: contentArea.bounds, style: .normal) else { return false }
-        traceActivation("after Quick Look init")
         preview.autostarts = true
-        traceActivation("after autostart")
         preview.previewItem = url as NSURL   // NSURL conforms to QLPreviewItem
-        traceActivation("after preview item")
         quickLookView = preview
         installContent(preview)
-        traceActivation("after content install")
         return true
     }
 
