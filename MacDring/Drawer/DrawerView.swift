@@ -544,12 +544,23 @@ struct DrawerView: View {
         if let hit = slotFrames.first(where: { $0.value.contains(point) })?.key {
             return hit
         }
-        return slotFrames.min { squaredDistance($0.value, point) < squaredDistance($1.value, point) }?.key
+        // Near-miss drops still snap to the nearest slot (dropping between or just
+        // past a slot must keep working), but a point far outside the grid means the
+        // drag was released out of the drawer — that cancels the reorder instead of
+        // silently snapping, matching how every other drag destination works.
+        let dropMargin: CGFloat = 28
+        guard let nearest = slotFrames.min(by: { edgeDistance($0.value, to: point) < edgeDistance($1.value, to: point) }),
+              edgeDistance(nearest.value, to: point) <= dropMargin else { return nil }
+        return nearest.key
     }
 
-    private func squaredDistance(_ rect: CGRect, _ point: CGPoint) -> CGFloat {
-        let dx = point.x - rect.midX, dy = point.y - rect.midY
-        return dx * dx + dy * dy
+    /// Distance from `point` to `rect` — 0 when inside, gap distance otherwise.
+    /// (Center distance is wrong here: a slot at the panel edge reads "far" even
+    /// when the drop lands just outside it.)
+    private func edgeDistance(_ rect: CGRect, to point: CGPoint) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return (dx * dx + dy * dy).squareRoot()
     }
 
     private func dragProvider(_ item: DrawerItem) -> NSItemProvider {
