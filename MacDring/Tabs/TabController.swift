@@ -1670,13 +1670,19 @@ final class TabController {
             // folder-access (TCC) prompt, unlike a direct scan of ~/Downloads & co.
             // (FB1 / PR #61). With the direct-scan opt-in — whose toggle owns those
             // prompts — the landing zones are also read straight from the
-            // filesystem, so the tab works where Spotlight is off or unreliable,
-            // and the two listings merge (the index still adds sub-folder hits).
-            let scanned = directScan
-                ? FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
-                : []
-            spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightResult(.fresh(FreshLister.items(from: FreshLister.merge(scanned, results))), for: key)
+            // filesystem, off the main thread (the same bounded scan
+            // `refreshFreshBadges` runs on a utility queue), so the tab works where
+            // Spotlight is off or unreliable, and the two listings merge (the index
+            // still adds sub-folder hits).
+            if directScan {
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    let scanned = FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
+                    DispatchQueue.main.async {
+                        self?.startFreshSpotlight(for: key, scanned: scanned)
+                    }
+                }
+            } else {
+                startFreshSpotlight(for: key, scanned: [])
             }
         case .recents:
             let home = FileManager.default.homeDirectoryForCurrentUser
@@ -1684,6 +1690,16 @@ final class TabController {
                 let system = results.map { RecentItem(spotlight: $0) }
                 self?.applySpotlightResult(.recents(system), for: key)
             }
+        }
+    }
+
+    /// Issues the Fresh drawer's Spotlight lookup, merging the (already gathered)
+    /// direct-scan hits into whatever the index returns. Skipped when the drawer has
+    /// moved on to other work while the scan was running.
+    private func startFreshSpotlight(for key: SpotlightWatchKey, scanned: [RecentFileHit]) {
+        guard spotlightWatchKey == key else { return }
+        spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
+            self?.applySpotlightResult(.fresh(FreshLister.items(from: FreshLister.merge(scanned, results))), for: key)
         }
     }
 
