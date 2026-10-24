@@ -1058,7 +1058,7 @@ final class TabController {
         drawer.model.onPreviewItem = { [weak self] item in self?.previewItem(item) }
         drawer.model.onBrowseFolder = { [weak self] item in self?.browseFolder(item) }
         drawer.model.onPreviewWebsite = { [weak self] item in self?.previewWebsite(item) }
-        drawer.model.onOpenWith = { [weak self] item, application in self?.open(item, with: application) }
+        drawer.model.onOpenWith = { [weak self] item, application in self?.openWith(item, application: application) }
         drawer.model.onToggleItemLock = { [weak self] item in
             guard let self, let id = self.openTabID else { return }
             self.store.setItemLock(item.isLocked ? .unlocked : .locked, forItem: item.id, inTab: id)
@@ -1224,7 +1224,7 @@ final class TabController {
         drawer.model.actionError = previewIsOpen ? nil : "Couldn't preview this website."
     }
 
-    private func open(_ item: DrawerItem, with application: URL) {
+    private func openWith(_ item: DrawerItem, application: URL) {
         guard let tabID = openTabID, let sessionID = drawerSessionID else { return }
         let request = DrawerLaunchRequest(tabID: tabID, sessionID: sessionID)
         activeLaunchRequestID = request.requestID
