@@ -11,6 +11,16 @@ import Foundation
 /// siblings survive, so one bad field never costs the user the whole tab. See
 /// `LenientDecoding`.
 struct DrawerAppearance: Codable, Equatable {
+    enum OutlineState { case idle, open, dropTargeted }
+
+    func outlineWidth(for state: OutlineState) -> Double {
+        guard preset == .highContrast else { return state == .dropTargeted ? 2 : 1 }
+        switch state {
+        case .idle: return 2
+        case .open: return 3
+        case .dropTargeted: return 4
+        }
+    }
 
     // MARK: Modes
 

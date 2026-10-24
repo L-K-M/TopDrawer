@@ -116,7 +116,7 @@ struct TabStripView: View {
             .overlay(
                 shape.stroke(
                     highContrast ? Color.primary : .white.opacity(model.isDropTargeted ? 0.95 : (model.isOpen ? 0.5 : 0.18)),
-                    lineWidth: model.isDropTargeted || highContrast ? 2 : 1
+                    lineWidth: model.appearance.outlineWidth(for: model.isDropTargeted ? .dropTargeted : (model.isOpen ? .open : .idle))
                 )
             )
     }

@@ -3,6 +3,14 @@ import XCTest
 
 final class DrawerAppearanceTests: XCTestCase {
 
+    func testHighContrastOutlinesKeepOpenAndDropFeedbackDistinct() {
+        let appearance = DrawerAppearance(preset: .highContrast)
+        XCTAssertGreaterThan(appearance.outlineWidth(for: .open), appearance.outlineWidth(for: .idle))
+        XCTAssertGreaterThan(appearance.outlineWidth(for: .dropTargeted), appearance.outlineWidth(for: .open))
+        XCTAssertEqual(DrawerAppearance().outlineWidth(for: .idle), 1)
+        XCTAssertEqual(DrawerAppearance().outlineWidth(for: .dropTargeted), 2)
+    }
+
     private func decode(_ json: String,
                         floats: JSONDecoder.NonConformingFloatDecodingStrategy? = nil) throws -> DrawerAppearance {
         let decoder = JSONDecoder()

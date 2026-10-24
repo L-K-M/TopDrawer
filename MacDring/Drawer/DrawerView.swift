@@ -92,7 +92,7 @@ struct DrawerView: View {
         // appearance's Frosted/Solid backing too, where white-on-white vanishes.
         .overlay(
             shape.stroke(Color.primary.opacity(model.appearance.preset == .highContrast ? 1 : (model.isDropTargeted ? 0.85 : 0.14)),
-                         lineWidth: model.isDropTargeted || model.appearance.preset == .highContrast ? 2 : 1)
+                         lineWidth: model.appearance.outlineWidth(for: model.isDropTargeted ? .dropTargeted : .idle))
         )
         .onHover { inside in
             if inside { model.onMouseEntered?() } else { model.onMouseExited?() }
