@@ -4,7 +4,15 @@ import SwiftUI
 /// An `NSHostingView` that accepts the first mouse click even when its panel
 /// isn't key, so a click on the (background-app) pill registers immediately.
 private final class FirstMouseTabHostingView: NSHostingView<TabStripView> {
+    var onScroll: ((NSEvent) -> Bool)?
+    var onSwipe: ((NSEvent) -> Bool)?
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func scrollWheel(with event: NSEvent) {
+        if onScroll?(event) != true { super.scrollWheel(with: event) }
+    }
+    override func swipe(with event: NSEvent) {
+        if onSwipe?(event) != true { super.swipe(with: event) }
+    }
 }
 
 /// Hosts a borderless, non-activating panel for one tab pill: keeps it sized to
@@ -56,6 +64,8 @@ final class TabWindowController {
     var onDragWillBegin: (() -> Void)?
     var onDragChanged: (() -> Void)?
     var onDragEnded: (() -> Void)?
+    var onCycle: ((TabCycling.Direction) -> Void)?
+    private var scrollState = TabCycling.ScrollState()
 
     init(tab: Tab, preferences: Preferences) {
         self.tabID = tab.id
@@ -63,7 +73,7 @@ final class TabWindowController {
         self.anchor = tab.anchor
         self.model = TabStripModel(title: tab.title, colorHex: tab.colorHex, glyph: tab.glyph,
                                    edge: tab.anchor.edge, acceptsWebURLDrops: tab.kind == .items,
-                                   acceptsFileDrops: TabWindowController.takesFileDrops(tab.kind))
+                                   acceptsFileDrops: TabWindowController.takesFileDrops(tab.kind), appearance: tab.appearance)
 
         let hosting = FirstMouseTabHostingView(rootView: TabStripView(model: model, preferences: preferences))
         hosting.translatesAutoresizingMaskIntoConstraints = true
@@ -101,7 +111,32 @@ final class TabWindowController {
         self.panel = panel
 
         wireModelCallbacks()
+        model.hasLockedItems = tab.items.contains(where: \.containsLockedItems)
+        hosting.onScroll = { [weak self] event in self?.handleScroll(event) ?? false }
+        hosting.onSwipe = { [weak self] event in
+            guard let self, self.preferences.scrollToSwitchTabs, event.deltaX != 0 else { return false }
+            self.onCycle?(event.deltaX > 0 ? .previous : .next)
+            return true
+        }
         observeExternalFrameChanges()
+    }
+
+    private func handleScroll(_ event: NSEvent) -> Bool {
+        guard preferences.scrollToSwitchTabs,
+              event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
+        let phase: TabCycling.ScrollState.Phase
+        if !event.momentumPhase.isEmpty { phase = .momentum }
+        else if event.phase.contains(.began) { phase = .began }
+        else if event.phase.contains(.ended) || event.phase.contains(.cancelled) { phase = .ended }
+        else { phase = .changed }
+        let delta = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+            ? event.scrollingDeltaX : event.scrollingDeltaY
+        if let direction = scrollState.consume(delta: Double(delta),
+            source: event.hasPreciseScrollingDeltas && !event.phase.isEmpty ? .trackpad : .wheel,
+            phase: phase, timestamp: event.timestamp) {
+            onCycle?(direction)
+        }
+        return true
     }
 
     deinit {
@@ -175,6 +210,9 @@ final class TabWindowController {
         if model.colorHex != tab.colorHex { model.colorHex = tab.colorHex }
         if model.glyph != tab.glyph { model.glyph = tab.glyph }
         if model.edge != tab.anchor.edge { model.edge = tab.anchor.edge }
+        if model.appearance != tab.appearance { model.appearance = tab.appearance }
+        let hasLockedItems = tab.items.contains(where: \.containsLockedItems)
+        if model.hasLockedItems != hasLockedItems { model.hasLockedItems = hasLockedItems }
         let acceptsWebURLDrops = tab.kind == .items
         if model.acceptsWebURLDrops != acceptsWebURLDrops { model.acceptsWebURLDrops = acceptsWebURLDrops }
         let acceptsFileDrops = TabWindowController.takesFileDrops(tab.kind)
@@ -208,9 +246,10 @@ final class TabWindowController {
 
         hostingView.layoutSubtreeIfNeeded()
         let fitting = hostingView.fittingSize
-        let thickness = CGFloat(preferences.tabThickness) * preferences.tabStyle.thicknessScale
+        let style = model.appearance.tabStyle(following: preferences.tabStyle)
+        let thickness = CGFloat(preferences.tabThickness) * style.thicknessScale
         let size: CGSize
-        if preferences.tabStyle == .classic {
+        if style == .classic {
             // Classic hugs its content along the thin (perpendicular) axis for a
             // compact folder-tab look; the along-edge axis keeps a thickness floor
             // so a short-label tab stays easy to click. Matches the view, which
@@ -368,7 +407,8 @@ final class TabWindowController {
     /// the other tabs before showing it, so the inputs are exposed without the pill
     /// committing to them.
     func dragFrame(edge: Edge, position: Double, length: CGFloat, on screen: NSScreen) -> CGRect {
-        let thickness = CGFloat(preferences.tabThickness) * preferences.tabStyle.thicknessScale
+        let thickness = CGFloat(preferences.tabThickness)
+            * model.appearance.tabStyle(following: preferences.tabStyle).thicknessScale
         let size: CGSize = edge.isVertical
             ? CGSize(width: thickness, height: max(length, thickness))
             : CGSize(width: max(length, thickness), height: thickness)

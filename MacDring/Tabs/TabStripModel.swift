@@ -14,6 +14,8 @@ final class TabStripModel: ObservableObject {
     @Published var colorHex: String
     @Published var glyph: TabGlyph
     @Published var edge: Edge
+    @Published var appearance = DrawerAppearance()
+    @Published var hasLockedItems = false
     @Published var acceptsWebURLDrops: Bool
     /// Whether this pill takes *file* drops at all. Only items and folder tabs do —
     /// the live listings (notes/disks/network/cloud/recents/fresh) are read-only,
@@ -44,11 +46,12 @@ final class TabStripModel: ObservableObject {
     var onMoveToEdge: ((Edge) -> Void)?
 
     init(title: String, colorHex: String, glyph: TabGlyph, edge: Edge,
-         acceptsWebURLDrops: Bool, acceptsFileDrops: Bool) {
+         acceptsWebURLDrops: Bool, acceptsFileDrops: Bool, appearance: DrawerAppearance = .init()) {
         self.title = title
         self.colorHex = colorHex
         self.glyph = glyph
         self.edge = edge
+        self.appearance = appearance
         self.acceptsWebURLDrops = acceptsWebURLDrops
         self.acceptsFileDrops = acceptsFileDrops
     }

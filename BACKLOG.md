@@ -575,14 +575,14 @@ re-renders.
 
 **Action:** schedule a lightweight next-midnight refresh or use an appropriate timeline.
 
-### U18 P3: Localization/larger-text resilience is absent
+### U18 P3: Larger-text resilience
 
 *(was SOL-U21)* The project declares English/Base but has no string catalog; fixed
 windows, raw AppKit strings, manual plurals, and fixed columns are English-sized.
 
-**Action:** String Catalog, explicit AppKit localization, plural inflection,
-pseudo-localization, RTL/fixed-width review, and resizable utilities if localization
-becomes a product goal. If English-only is intentional, state it explicitly.
+**Decision (24 October 2026):** keep the app English-only. Translation and RTL
+support are not planned. Larger-text clipping and VoiceOver remain in scope;
+check fixed columns and utility windows when changing typography.
 
 ### U19 P3: About/README product presentation is sparse
 
@@ -611,10 +611,9 @@ progress affordance; keep file spring-load timing distinct.
 
 Ordered by product value (union of the sol §5 list, fable FF1-FF7, and awesome §4):
 
-1. **Full keyboard navigation plus Quick Look.** Arrow selection across the
-   unfiltered grid and Space preview — the most Mac-native missing interactions.
-   (Type-to-find already ships; arrowing the full slot grid with gaps is the
-   remaining, fiddlier half.)
+1. **Full keyboard navigation plus Quick Look: implemented.** Arrow selection
+   follows occupied cells in unfiltered grids and lists; Space previews the
+   selected file or folder. See [drawer interactions](docs/drawer-interactions.md).
 2. **Relink broken items.** Complete bookmark recovery (see U4).
 3. **Move/Copy to Tab.** A context submenu solves most cross-drawer organization
    without a fragile inter-window drag design; a drop on another pill would add a
@@ -651,6 +650,9 @@ Ordered by product value (union of the sol §5 list, fable FF1-FF7, and awesome 
     `DispatchSource` watch wired into open/close/refresh, mirroring the folder
     watcher.
 18. **Frecency/Frequent Recents.** Optional launch count plus recency.
+19. **Native Apple Shortcuts picker: deferred.** List and search installed
+    shortcuts, then add a one-click launcher item. Explicitly backlog-only per
+    the 24 October 2026 product decision; do not implement yet.
 
 Delight backlog (union of the sol and awesome/fable idea lists — none are bugs; each
 needs design + visual iteration):
@@ -694,11 +696,10 @@ needs design + visual iteration):
 - **Corner Store:** an optional corner target whose four quadrants route drops to
   favorite drawers. Weird, useful, very DragThing.
 
-Intentional non-goals remain: process dock/app switcher, AppleScript dictionary,
-free-floating off-edge placement, and default novelty sounds. iCloud sync remains a
-separate future project. (Earlier notes also listed accessibility and localization as
-non-goals; the sol review supersedes that — keyboard/VoiceOver completeness is
-blocker A7, and localization stays conditional per U18.)
+Intentional non-goals: process dock/app switcher, AppleScript dictionary,
+free-floating off-edge placement, localization, and default novelty sounds.
+Floating docks are not planned. iCloud sync remains a separate future project.
+Keyboard/VoiceOver completeness remains blocker A7; English-only does not waive it.
 
 ## 6. Engineering, Documentation, and Verification
 

@@ -21,6 +21,9 @@ drawer slides out with whatever you put there. Drag files onto a tab to add them
 Works across multiple monitors, and your tabs return to exactly where you left
 them after a restart.
 
+Top Drawer is English-only. Tabs stay anchored to screen edges; free-floating
+docks are not planned.
+
 > [!IMPORTANT]
 > LLM Disclosure: Top Drawer was built with substantial help from large language models — primarily Anthropic's Claude, via Claude Code. Much of the code arrived through AI-authored commits and `claude/*` pull-request branches, with agent guidance kept in [`AGENTS.md`](AGENTS.md)
 
@@ -58,6 +61,17 @@ Jetty all draw it.
 - **Type to find.** With a drawer open, just start typing to filter it; **↑/↓** move
   the selection, **Return** opens it, **Esc** clears (then closes). Shown on drawers
   with a handful of items or more.
+- **Keyboard navigation and previews.** Arrow through an unfiltered grid or list;
+  **Return** opens the selection and **Space** shows Quick Look for a selected
+  file or folder. **⌘[ / ⌘]** switch tabs on the same screen edge. Optional
+  scroll/swipe switching over tab pills is in **Settings → General**.
+- **File and website actions.** Right-click for **Quick Look**, **Browse Folder**,
+  **Open With**, or **Preview Website**. Per-tab settings can make folder pop-ups
+  or website previews the default click action; Finder/browser remain the defaults.
+- **Item locks and visual presets.** Protect individual launcher entries, lock all
+  items, or lock new items by default. Per-tab appearance includes Glass, Flat,
+  and High Contrast presets, title visibility, typography, and file extensions.
+  See [drawer interactions](docs/drawer-interactions.md).
 - **Trash item.** Add a Trash to any tab (Settings → Tabs → *Add Trash*): click it to
   open the Trash, or drop files onto it to throw them away.
 - **Running-app dot.** Application items show a small green dot when the app is

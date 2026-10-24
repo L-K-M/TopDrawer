@@ -193,6 +193,20 @@ final class DrawerWindowController {
     var window: NSWindow { panel }
     var frame: CGRect { panel.frame }
 
+    func browseFolder(_ item: DrawerItem, using browser: FolderBrowserController,
+                      onLaunch: @escaping (DrawerItem) -> Void,
+                      onReveal: @escaping (DrawerItem) -> Void,
+                      onPreview: @escaping (DrawerItem) -> Void) {
+        let reported = model.externalDropTargetFrames.first { target, _ in
+            if case .occupiedItem(let id, _) = target { return id == item.id }
+            return false
+        }?.value
+        var rect = reported ?? CGRect(x: hostingView.bounds.midX, y: hostingView.bounds.midY, width: 1, height: 1)
+        if !hostingView.isFlipped { rect.origin.y = hostingView.bounds.height - rect.maxY }
+        browser.show(item, relativeTo: rect, of: hostingView,
+                     onLaunch: onLaunch, onReveal: onReveal, onPreview: onPreview)
+    }
+
     // MARK: Presentation
 
     /// How far the drawer nudges (inward) while fading in/out.
@@ -372,6 +386,7 @@ final class DrawerWindowController {
         }
         model.title = tab.title
         model.colorHex = tab.colorHex
+        model.appearance = tab.appearance
         model.columns = max(1, tab.gridColumns)
         model.rows = max(1, tab.gridRows)
         model.locked = tab.locked
@@ -383,7 +398,7 @@ final class DrawerWindowController {
             && tab.recentsSource.includesMacDring
             && !RecentsStore.shared.items.isEmpty
         // Like the undo toast, a clipboard error belongs to this drawer session.
-        if !preserveLiveNotes { model.clipboardError = nil }
+        if !preserveLiveNotes { model.clipboardError = nil; model.actionError = nil }
         switch tab.kind {
         case .items:
             model.items = tab.items
@@ -474,6 +489,7 @@ final class DrawerWindowController {
                 iconSize: CGFloat(preferences.iconSize),
                 columns: model.columns,
                 searchable: model.isSearchable,
+                itemFontSize: model.appearance.itemFontSize,
                 in: visibleFrame
             )
         }
@@ -483,7 +499,7 @@ final class DrawerWindowController {
         // centered on the drawer along the edge — meets it flush, with no rounded
         // notch at the join (see the "tab doesn't attach to the drawer" report).
         var content = size
-        let radius = CGFloat(preferences.cornerRadius)
+        let radius = model.appearance.cornerRadius(following: preferences.cornerRadius)
         let tabLength = currentEdge.isVertical ? currentTabFrame.height : currentTabFrame.width
         let minExtent = tabLength + 2 * radius
         if currentEdge.isVertical {
@@ -508,7 +524,8 @@ final class DrawerWindowController {
         // centered on it and ends up beside an inner corner; square that corner so
         // the tab still joins flush (the minExtent run only covers the centered case).
         let corners = EdgeLayout.drawerInnerCornersToSquare(edge: currentEdge, tabFrame: currentTabFrame,
-                                                            drawerFrame: frame, radius: CGFloat(preferences.cornerRadius))
+                                                            drawerFrame: frame,
+                                                            radius: model.appearance.cornerRadius(following: preferences.cornerRadius))
         if model.squareInnerStart != corners.start { model.squareInnerStart = corners.start }
         if model.squareInnerEnd != corners.end { model.squareInnerEnd = corners.end }
     }
@@ -539,7 +556,7 @@ final class DrawerWindowController {
         guard let session = resizeSession else { return }
         var minimum = DrawerMetrics.notesMinimumSize
         let tabExtent = (currentEdge.isVertical ? currentTabFrame.height : currentTabFrame.width)
-            + 2 * CGFloat(preferences.cornerRadius)
+            + 2 * model.appearance.cornerRadius(following: preferences.cornerRadius)
         if currentEdge.isVertical { minimum.height = max(minimum.height, tabExtent) }
         else { minimum.width = max(minimum.width, tabExtent) }
 

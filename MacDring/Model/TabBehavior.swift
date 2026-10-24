@@ -7,6 +7,21 @@ import Foundation
 /// global setting is now a live default, overridable per tab. See BACKLOG.md's legacy ID index (I3).
 struct TabBehavior: Codable, Equatable {
 
+    enum FolderOpening: String, Codable, CaseIterable, Identifiable {
+        case finder, popover
+        var id: Self { self }
+        var displayName: String { self == .finder ? "Finder" : "Folder Pop-up" }
+    }
+
+    enum WebsiteOpening: String, Codable, CaseIterable, Identifiable {
+        case browser, popover
+        var id: Self { self }
+        var displayName: String { self == .browser ? "Browser" : "Website Preview" }
+    }
+
+    var folderOpening: FolderOpening
+    var websiteOpening: WebsiteOpening
+
     /// Open the drawer on hover instead of requiring a click. Honored only when
     /// `overridesOpenOnHover` is set; otherwise the global default wins (see
     /// `resolved(openOnHoverDefault:autoHideDefault:)`).
@@ -35,13 +50,16 @@ struct TabBehavior: Codable, Equatable {
 
     init(openOnHover: Bool = false, autoHide: Bool = true, keepOpenAfterLaunch: Bool = false,
          concealment: TabConcealment = .never,
-         overridesOpenOnHover: Bool = false, overridesAutoHide: Bool = false) {
+         overridesOpenOnHover: Bool = false, overridesAutoHide: Bool = false,
+         folderOpening: FolderOpening = .finder, websiteOpening: WebsiteOpening = .browser) {
         self.openOnHover = openOnHover
         self.autoHide = autoHide
         self.keepOpenAfterLaunch = keepOpenAfterLaunch
         self.concealment = concealment
         self.overridesOpenOnHover = overridesOpenOnHover
         self.overridesAutoHide = overridesAutoHide
+        self.folderOpening = folderOpening
+        self.websiteOpening = websiteOpening
     }
 
     init(from decoder: Decoder) throws {
@@ -56,11 +74,14 @@ struct TabBehavior: Codable, Equatable {
         // the old bulk-apply model, is the value those tabs already had.
         overridesOpenOnHover = try c.decodeIfPresent(Bool.self, forKey: .overridesOpenOnHover) ?? false
         overridesAutoHide = try c.decodeIfPresent(Bool.self, forKey: .overridesAutoHide) ?? false
+        folderOpening = c.decodeLenient(FolderOpening.self, forKey: .folderOpening, fallback: .finder)
+        websiteOpening = c.decodeLenient(WebsiteOpening.self, forKey: .websiteOpening, fallback: .browser)
     }
 
     private enum CodingKeys: String, CodingKey {
         case openOnHover, autoHide, keepOpenAfterLaunch, concealment
         case overridesOpenOnHover, overridesAutoHide
+        case folderOpening, websiteOpening
     }
 
     /// The effective behavior for live use: fields this tab doesn't override fall

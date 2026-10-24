@@ -32,6 +32,21 @@ final class TabBehaviorTests: XCTestCase {
 
     // MARK: Defaults & Codable
 
+    func testOpeningModesPreserveDefaultsAndRoundTrip() throws {
+        let legacy = try JSONDecoder().decode(TabBehavior.self, from: Data("{}".utf8))
+        XCTAssertEqual(legacy.folderOpening, .finder)
+        XCTAssertEqual(legacy.websiteOpening, .browser)
+
+        let configured = TabBehavior(folderOpening: .popover, websiteOpening: .popover)
+        let data = try JSONEncoder().encode(configured)
+        XCTAssertEqual(try JSONDecoder().decode(TabBehavior.self, from: data), configured)
+        let malformed = Data(#"{"folderOpening":"future","websiteOpening":123,"keepOpenAfterLaunch":true}"#.utf8)
+        let recovered = try JSONDecoder().decode(TabBehavior.self, from: malformed)
+        XCTAssertEqual(recovered.folderOpening, .finder)
+        XCTAssertEqual(recovered.websiteOpening, .browser)
+        XCTAssertTrue(recovered.keepOpenAfterLaunch)
+    }
+
     func testDefaultFollowsGlobal() {
         XCTAssertFalse(TabBehavior.default.overridesOpenOnHover)
         XCTAssertFalse(TabBehavior.default.overridesAutoHide)
