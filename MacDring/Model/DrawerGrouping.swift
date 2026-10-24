@@ -69,6 +69,23 @@ enum DrawerGrouping {
         return dissolvingSmallGroups(result).assigningMissingSlots()
     }
 
+    /// Dissolves `groupID`, promoting its children to the top level in slot order at
+    /// the group's position — what "Delete Group" must do so the container goes away
+    /// without taking its launchers with it. Returns `items` unchanged if the id isn't
+    /// a top-level group.
+    static func dissolvingGroup(_ items: [DrawerItem], id groupID: UUID) -> [DrawerItem] {
+        guard let index = items.firstIndex(where: { $0.id == groupID && $0.kind == .group })
+        else { return items }
+        var result = items
+        let group = result.remove(at: index)
+        var children = group.children.sorted { $0.slot < $1.slot }
+        // The first child inherits the group's slot so something lands where the group
+        // was; the rest take whatever free slots assigningMissingSlots finds.
+        for i in children.indices { children[i].slot = i == children.startIndex ? group.slot : -1 }
+        result.insert(contentsOf: children, at: index)
+        return result.assigningMissingSlots()
+    }
+
     /// Permanently removes an item at the top level or one level inside a group.
     /// Deleting a child also dissolves its group when fewer than two children remain.
     static func removingItem(_ items: [DrawerItem], id itemID: UUID) -> [DrawerItem] {
