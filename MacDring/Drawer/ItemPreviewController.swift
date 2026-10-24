@@ -28,6 +28,15 @@ final class ItemPreviewController: NSObject {
     /// that opens another preview (or calls `close()` again) can't disturb it.
     var onClose: (() -> Void)?
     var onOpenExternally: ((URL) -> Void)?
+    #if DEBUG
+    private(set) var activationTrace: [String] = []
+    #endif
+
+    private func traceActivation(_ stage: String) {
+        #if DEBUG
+        activationTrace.append("\(stage)=\(NSApp.isActive)")
+        #endif
+    }
 
     /// "Open File" / "Open in Browser" go through the shared launch service, never
     /// `NSWorkspace` from the view layer (AGENTS.md's layering rule). Injectable.
@@ -69,10 +78,10 @@ final class ItemPreviewController: NSObject {
     func showFile(_ url: URL, relativeTo parent: NSWindow) -> Bool {
         teardown(reason: .replaced)
         guard let kind = ItemActionService.previewFileKind(at: url) else { return false }
-        NSLog("Preview focus before panel: \(NSApp.isActive)")
+        traceActivation("before panel")
         target = .file(url)
         presentPanel(titled: url.lastPathComponent, relativeTo: parent)
-        NSLog("Preview focus after panel: \(NSApp.isActive)")
+        traceActivation("after panel")
         openButton?.title = kind == .folder ? "Open Folder" : "Open File"
         setStatus("Quick Look", activity: .idle)
         guard showQuickLook(url) else {
@@ -199,15 +208,15 @@ final class ItemPreviewController: NSObject {
         }
 
         parent.addChildWindow(panel, ordered: .above)
-        NSLog("Preview focus after child attachment: \(NSApp.isActive)")
+        traceActivation("after child attachment")
         panel.orderFrontRegardless()
-        NSLog("Preview focus after ordering: \(NSApp.isActive)")
+        traceActivation("after ordering")
         // Same stranding rule as the drawer: over a foreign full-screen Space a
         // non-activating panel that takes key focus gets sited on our own hidden
         // desktop Space instead of the visible one — order in front, stay non-key.
         let screen = parent.screen ?? NSScreen.main
         if let screen, !ForeignFullScreen.covers(screen) { panel.makeKey() }
-        NSLog("Preview focus after key focus: \(NSApp.isActive)")
+        traceActivation("after key focus")
     }
 
     /// The toolbar strip: status + spinner on the left, Open-externally and Close
@@ -319,14 +328,14 @@ final class ItemPreviewController: NSObject {
     private func showQuickLook(_ url: URL) -> Bool {
         guard let contentArea,
               let preview = QLPreviewView(frame: contentArea.bounds, style: .normal) else { return false }
-        NSLog("Preview focus after Quick Look init: \(NSApp.isActive)")
+        traceActivation("after Quick Look init")
         preview.autostarts = true
-        NSLog("Preview focus after autostart: \(NSApp.isActive)")
+        traceActivation("after autostart")
         preview.previewItem = url as NSURL   // NSURL conforms to QLPreviewItem
-        NSLog("Preview focus after preview item: \(NSApp.isActive)")
+        traceActivation("after preview item")
         quickLookView = preview
         installContent(preview)
-        NSLog("Preview focus after content install: \(NSApp.isActive)")
+        traceActivation("after content install")
         return true
     }
 
