@@ -118,6 +118,71 @@ final class LinuxRecentsTests: XCTestCase {
         XCTAssertEqual(hits("B", mac: overlap).count, 2, "a file in both sources isn't double-listed")
     }
 
+    // MARK: - CachedRecentsProvider
+
+    private final class CountingRecents: RecentsProviding, @unchecked Sendable {
+        private(set) var systemCalls = 0
+        private(set) var freshCalls = 0
+        var systemHits: [RecentFileHit]
+        var freshHits: [RecentFileHit]
+        init(system: [RecentFileHit], fresh: [RecentFileHit]) {
+            systemHits = system; freshHits = fresh
+        }
+        func systemRecents(limit: Int) -> [RecentFileHit] {
+            systemCalls += 1; return Array(systemHits.prefix(limit))
+        }
+        func fresh(limit: Int) -> [RecentFileHit] {
+            freshCalls += 1; return Array(freshHits.prefix(limit))
+        }
+    }
+
+    private func hit(_ name: String) -> RecentFileHit {
+        RecentFileHit(url: URL(fileURLWithPath: "/home/alice/\(name)"), name: name, date: Date())
+    }
+
+    func testCacheServesRepeatCallsWithinTTL() {
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let inner = CountingRecents(system: [hit("a.txt"), hit("b.txt")], fresh: [hit("f.txt")])
+        let cache = CachedRecentsProvider(wrapping: inner, ttl: 2, now: { clock })
+
+        XCTAssertEqual(cache.systemRecents(limit: 10).map(\.name), ["a.txt", "b.txt"])
+        XCTAssertEqual(cache.systemRecents(limit: 10).count, 2)
+        XCTAssertEqual(inner.systemCalls, 1, "second call inside the TTL is served from cache")
+        _ = cache.fresh(limit: 10)
+        _ = cache.fresh(limit: 10)
+        XCTAssertEqual(inner.freshCalls, 1, "the two buckets cache independently")
+
+        clock = clock.addingTimeInterval(3)   // past the TTL
+        _ = cache.systemRecents(limit: 10)
+        XCTAssertEqual(inner.systemCalls, 2, "an expired entry refetches")
+    }
+
+    func testCacheHonorsTheCachedFetchLimit() {
+        let clock = Date(timeIntervalSince1970: 1_000)
+        let inner = CountingRecents(system: [hit("a.txt")], fresh: [])
+        let cache = CachedRecentsProvider(wrapping: inner, ttl: 60, now: { clock })
+
+        // The cached fetch asked for 10 and got 1 — the true full result. A later
+        // call for 5 must not refetch (entry.limit covers it) and returns the one hit.
+        XCTAssertEqual(cache.systemRecents(limit: 10).count, 1)
+        XCTAssertEqual(cache.systemRecents(limit: 5).count, 1)
+        XCTAssertEqual(inner.systemCalls, 1, "a smaller limit is served by the bigger cached fetch")
+        _ = cache.systemRecents(limit: 20)
+        XCTAssertEqual(inner.systemCalls, 2, "a bigger limit than the cached fetch refetches")
+    }
+
+    func testCacheInvalidateForcesRefetch() {
+        let clock = Date(timeIntervalSince1970: 1_000)
+        let inner = CountingRecents(system: [hit("a.txt")], fresh: [])
+        let cache = CachedRecentsProvider(wrapping: inner, ttl: 60, now: { clock })
+
+        _ = cache.systemRecents(limit: 10)
+        cache.invalidate()   // the daemon does this before RecentsChanged
+        inner.systemHits = [hit("new.txt"), hit("a.txt")]
+        XCTAssertEqual(cache.systemRecents(limit: 10).map(\.name), ["new.txt", "a.txt"])
+        XCTAssertEqual(inner.systemCalls, 2)
+    }
+
     func testEncodeRecentsShape() {
         XCTAssertEqual(TopDrawerService.encodeRecents([]), #"{"recents":[]}"#)
         let hit = RecentFileHit(url: URL(fileURLWithPath: "/a/b.txt"), name: "b.txt",
