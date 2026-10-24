@@ -1157,6 +1157,43 @@ final class TabStoreTests: XCTestCase {
 
     // MARK: Persistence health
 
+    /// Spins the run loop until `condition` holds or the deadline passes.
+    private func waitUntil(_ condition: () -> Bool, timeout: TimeInterval = 5) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+    }
+
+    func testDebouncedAutosaveWritesWithoutSaveNow() throws {
+        // The autosave now runs on a background queue; pin that it still completes
+        // on its own after a mutation (the synchronous saveNow path is pinned by
+        // testAddSaveAndReload) and writes this mutation's content, not a stale
+        // snapshot.
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Work"))
+
+        waitUntil { FileManager.default.fileExists(atPath: self.storeURL.path) }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path),
+                      "a mutation must reach disk without an explicit saveNow")
+        XCTAssertNil(store.persistenceError)
+        let onDisk = try JSONDecoder().decode(LauncherDocument.self, from: Data(contentsOf: storeURL))
+        XCTAssertEqual(onDisk.tabs.map(\.title), ["Work"])
+    }
+
+    func testFailedAutosavePublishesPersistenceError() throws {
+        // The async save path must publish its outcome too — the error is how the
+        // user learns a mutation never reached disk.
+        let store = TabStore(storeURL: storeURL)
+        try blockStorePath()
+
+        store.addTab(makeTab("Work"))
+
+        waitUntil { store.persistenceError != nil }
+        XCTAssertNotNil(store.persistenceError)
+    }
+
     /// Blocks `storeURL` with a directory of the same name, so `Data.write` fails.
     private func blockStorePath() throws {
         try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
