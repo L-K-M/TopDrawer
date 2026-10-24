@@ -74,11 +74,18 @@ final class DesktopEntryTests: XCTestCase {
     func testCRLFLineEndingsParse() {
         // A Windows-authored or autocrlf-checked-out file must parse like LF text:
         // the header, keys, and values all carried a trailing \r before the trim fix.
-        let text = "[Desktop Entry]\r\nType=Application\r\nName=Editor\r\nExec=gedit %U\r\n"
+        let text = "[Desktop Entry]\r\n\r\nType=Application\r\nName=Editor\r\nExec=gedit %U\r\n"
         let e = DesktopEntry.parse(text, id: "gedit", path: URL(fileURLWithPath: "/x.desktop"))
         XCTAssertEqual(e?.name, "Editor")
         XCTAssertEqual(e?.exec, "gedit %U")
         XCTAssertEqual(e?.isShown, true)
+    }
+
+    func testUTF8BOMParses() {
+        // A leading BOM is not whitespace and otherwise defeats the "[" group test.
+        let text = "\u{FEFF}[Desktop Entry]\nType=Application\nName=Editor\nExec=gedit %U\n"
+        let e = DesktopEntry.parse(text, id: "gedit", path: URL(fileURLWithPath: "/x.desktop"))
+        XCTAssertEqual(e?.name, "Editor")
     }
 
     func testGarbageAndCommentsYieldNilOrEmpty() {
