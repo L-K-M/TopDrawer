@@ -83,6 +83,20 @@ final class FileMoverTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: dst.appendingPathComponent("b.txt").path))
     }
 
+    func testMovingFilesReportsFailedSources() throws {
+        // A failed move must be as visible as a successful one: the caller needs the
+        // exact sources that stayed put to tell the user about them.
+        let moved = src.appendingPathComponent("moved.txt")
+        let ghost = src.appendingPathComponent("ghost.txt")   // never created
+        try Data("x".utf8).write(to: moved)
+
+        let result = FileMover.movingFiles([moved, ghost], into: dst)
+
+        XCTAssertFalse(result.allSucceeded)
+        XCTAssertEqual(result.moves.map(\.from), [moved])
+        XCTAssertEqual(result.failed, [ghost])
+    }
+
     func testTrashReturnsFalseWhenThereAreNoEligibleFileURLs() throws {
         let link = try XCTUnwrap(URL(string: "https://example.com"))
         var attempted: [URL] = []

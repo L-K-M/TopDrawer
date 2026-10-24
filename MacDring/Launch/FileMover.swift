@@ -7,17 +7,27 @@ enum FileMover {
     /// A completed move, for undo: the file went from `from` to `to`.
     struct Move: Equatable { let from: URL; let to: URL }
 
+    /// What a move batch accomplished: the completed `from → to` pairs (for undo)
+    /// and the sources that stayed put. A partial batch must be reported as such —
+    /// `allSucceeded` is false whenever anything failed.
+    struct Outcome: Equatable {
+        let moves: [Move]
+        let failed: [URL]
+        var allSucceeded: Bool { failed.isEmpty }
+    }
+
     @discardableResult
     static func move(_ urls: [URL], into directory: URL) -> Bool {
         movingFiles(urls, into: directory).allSucceeded
     }
 
     /// Moves files into `directory` and returns the completed `from → to` pairs (so a
-    /// caller can offer an Undo) plus whether every move succeeded.
+    /// caller can offer an Undo) plus the sources that failed to move (so a caller
+    /// can report them instead of silently dropping them).
     static func movingFiles(_ urls: [URL], into directory: URL,
-                            fileManager: FileManager = .default) -> (moves: [Move], allSucceeded: Bool) {
+                            fileManager: FileManager = .default) -> Outcome {
         var moves: [Move] = []
-        var allSucceeded = true
+        var failed: [URL] = []
         for url in urls {
             // A file dropped into the directory it already lives in is a no-op
             // (e.g. dragging a folder tab's own item a few pixels and releasing
@@ -32,11 +42,11 @@ enum FileMover {
                 try fileManager.moveItem(at: url, to: destination)
                 moves.append(Move(from: url, to: destination))
             } catch {
-                allSucceeded = false
+                failed.append(url)
                 NSLog("Top Drawer: couldn't move \(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
-        return (moves, allSucceeded)
+        return Outcome(moves: moves, failed: failed)
     }
 
     /// Reverses completed moves (best-effort), putting each file back where it came
