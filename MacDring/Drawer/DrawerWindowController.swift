@@ -138,6 +138,9 @@ final class DrawerWindowController {
     private var notesDrawerSize: NotesDrawerSize?
     private var isOpening = false
     private var presentationGeneration: UInt = 0
+    /// A new identity for every `apply` that gathers a live listing off the main
+    /// thread — a stale gather finishing late must not overwrite a newer result.
+    private var listingGeneration: UInt = 0
     var isResizing: Bool { resizeSession != nil }
 
     private(set) var isVisible = false
@@ -308,6 +311,45 @@ final class DrawerWindowController {
         panel.setFrame(openFrame, display: true)
     }
 
+    /// Enumerates a live listing (folder contents, volumes, cloud roots, or the
+    /// opt-in Fresh direct scan) on a background queue — each walks or stats the
+    /// filesystem and can block for seconds on a large or network-backed target —
+    /// then applies the result on main. `generation` must still be current when the
+    /// gather lands, or a newer `apply`/tab switch has already superseded it.
+    private func gatherListing(tab: Tab, generation: UInt) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let items: [DrawerItem]
+            var truncated = false
+            var folderURL: URL?
+            switch tab.kind {
+            case .folder:
+                let listing = FolderLister.listing(of: tab)
+                items = listing.items
+                truncated = listing.truncated
+                folderURL = FolderLister.resolveFolder(tab)
+            case .disks: items = DisksLister.contents(of: tab)
+            case .network: items = NetworkLister.contents(of: tab)
+            case .cloud: items = CloudLister.contents(of: tab)
+            case .fresh:
+                items = FreshLister.items(from: FreshScanner.results(scopes: FreshLister.scopes(),
+                                                                     limit: FreshLister.limit))
+            default: return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isVisible, self.listingGeneration == generation else { return }
+                self.model.items = items.applyingIconStyles(from: tab.iconStyles)
+                self.model.itemsTruncated = truncated
+                self.model.notes = ""
+                self.model.folderURL = folderURL
+                if tab.kind == .fresh { self.model.sparklingItemIDs = self.sparkleIDs(for: self.model.items) }
+                if let screen = self.currentScreen {
+                    self.openFrame = self.computeOpenFrame(in: screen.visibleFrame)
+                    self.panel.setFrame(self.openFrame, display: true)
+                }
+            }
+        }
+    }
+
     /// Shows or clears the undo toast, inside `withAnimation` so the banner's
     /// declared move-and-fade transition actually plays (a bare `@Published` write
     /// from AppKit code pops it in with no animation).
@@ -399,30 +441,16 @@ final class DrawerWindowController {
             && !RecentsStore.shared.items.isEmpty
         // Like the undo toast, a clipboard error belongs to this drawer session.
         if !preserveLiveNotes { model.clipboardError = nil; model.actionError = nil }
+        listingGeneration &+= 1
         switch tab.kind {
         case .items:
             model.items = tab.items
             model.notes = ""
             model.folderURL = nil
-        case .folder:
-            // Live listings re-apply the tab's per-target icon overrides each open.
-            let listing = FolderLister.listing(of: tab)
-            model.items = listing.items.applyingIconStyles(from: tab.iconStyles)
-            model.itemsTruncated = listing.truncated
-            model.notes = ""
-            model.folderURL = FolderLister.resolveFolder(tab)
-        case .disks:
-            model.items = DisksLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
-            model.notes = ""
-            model.folderURL = nil
-        case .network:
-            model.items = NetworkLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
-            model.notes = ""
-            model.folderURL = nil
-        case .cloud:
-            model.items = CloudLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
-            model.notes = ""
-            model.folderURL = nil
+        case .folder, .disks, .network, .cloud:
+            // Gathered off the main thread — enumerating and statting entries
+            // (worst on network volumes) can block for seconds.
+            gatherListing(tab: tab, generation: listingGeneration)
         case .recents:
             // Top Drawer's own history shows immediately; a `system`/`both` source folds
             // in the Spotlight recents asynchronously via `updateLiveItems`.
@@ -441,10 +469,9 @@ final class DrawerWindowController {
             // so the list doesn't blank out while a gather is running.
             if !preserveLiveNotes {
                 if preferences.freshDirectScan {
-                    model.items = FreshLister.items(from: FreshScanner.results(scopes: FreshLister.scopes(),
-                                                                               limit: FreshLister.limit))
-                        .applyingIconStyles(from: tab.iconStyles)
-                    model.sparklingItemIDs = sparkleIDs(for: model.items)
+                    // The opt-in by-Date-Added walk of the landing zones is file I/O —
+                    // gather it off the main thread like the other live listings.
+                    gatherListing(tab: tab, generation: listingGeneration)
                 } else {
                     model.items = []
                     model.sparklingItemIDs = []
