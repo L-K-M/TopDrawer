@@ -94,6 +94,12 @@ final class DrawerModel: ObservableObject {
     /// drop moved files. `nil` when no toast is showing. Set/cleared by the controller.
     @Published var undoToast: DrawerUndo?
 
+    /// A reorder drag that wandered out of the drawer wants to drag the item *out*
+    /// to another app (Finder, Mail, an upload dialog). Wired by
+    /// `DrawerWindowController`, which owns the native dragging session; returns
+    /// whether the session started (so a fallible item keeps reordering instead).
+    var onDragOutItem: ((DrawerItem) -> Bool)?
+
     /// Disk items currently being ejected (Eject All), shown with a per-item spinner.
     @Published var ejectingItemIDs: Set<UUID> = []
     /// Fresh items that just arrived this update, shown with a brief sparkle.
