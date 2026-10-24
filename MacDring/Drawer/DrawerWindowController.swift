@@ -215,7 +215,8 @@ final class DrawerWindowController {
     /// Shows the drawer for `tab` over `duration` seconds (0 = instant) with a fade
     /// + small inward slide. The slide stays on the drawer's own screen, so it
     /// never bleeds onto an adjacent display at a shared edge.
-    func show(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen, duration: TimeInterval) {
+    func show(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen, duration: TimeInterval,
+              takeKeyFocus: Bool = true) {
         finishResize()
         presentationGeneration &+= 1
         let generation = presentationGeneration
@@ -234,7 +235,7 @@ final class DrawerWindowController {
         if duration > 0 {
             panel.setFrame(EdgeLayout.nudgedDrawerFrame(edge: edge, openFrame: openFrame, by: Self.nudge), display: false)
             panel.alphaValue = 0
-            present(over: screen)
+            present(over: screen, takeKey: takeKeyFocus)
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = duration
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -248,7 +249,7 @@ final class DrawerWindowController {
         } else {
             panel.alphaValue = 1
             panel.setFrame(openFrame, display: true)
-            present(over: screen)
+            present(over: screen, takeKey: takeKeyFocus)
         }
         isVisible = true
     }
@@ -265,9 +266,12 @@ final class DrawerWindowController {
     /// once, at open — the only moment the stranding bites — and is not re-evaluated
     /// if the foreground Space or full-screen state changes while the drawer stays
     /// open. See `ForeignFullScreen`.
-    private func present(over screen: NSScreen) {
+    private func present(over screen: NSScreen, takeKey: Bool) {
         panel.orderFrontRegardless()
-        if !ForeignFullScreen.covers(screen) { panel.makeKey() }
+        // A hover-opened drawer must not steal key focus: the cursor grazing a pill
+        // while the user types elsewhere would hijack their keystrokes. Mouse input
+        // still works; the first click in makes it key.
+        if takeKey, !ForeignFullScreen.covers(screen) { panel.makeKey() }
     }
 
     /// Refreshes content for the currently shown tab (e.g. after a drop / reorder)
