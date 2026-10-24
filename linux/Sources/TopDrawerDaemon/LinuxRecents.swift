@@ -163,6 +163,66 @@ public struct LinuxRecentsProvider: RecentsProviding {
     }
 }
 
+/// A `RecentsProviding` decorator that serves the wrapped provider's last result for
+/// `ttl` seconds. `GetRecents` is served per tab, so a frontend holding several
+/// recents/fresh tabs would otherwise pay the full xbel parse + the fresh statx sweep
+/// once per tab per refresh.
+///
+/// `invalidate()` drops both buckets; the daemon calls it before every `RecentsChanged`
+/// signal, so a cached snapshot never survives a change the watchers saw. Changes the
+/// daemon can't see (an xbel rewrite preserving mtime) age out within `ttl` anyway.
+public final class CachedRecentsProvider: RecentsProviding, @unchecked Sendable {
+    private enum Bucket { case system, fresh }
+
+    private let wrapped: RecentsProviding
+    private let ttl: TimeInterval
+    private let now: @Sendable () -> Date
+    private let lock = NSLock()
+    private var cached: [Bucket: (at: Date, limit: Int, hits: [RecentFileHit])] = [:]
+
+    public init(wrapping wrapped: RecentsProviding, ttl: TimeInterval = 2,
+                now: @escaping @Sendable () -> Date = { Date() }) {
+        self.wrapped = wrapped
+        self.ttl = ttl
+        self.now = now
+    }
+
+    public func systemRecents(limit: Int) -> [RecentFileHit] {
+        serve(.system, limit: limit) { wrapped.systemRecents(limit: $0) }
+    }
+
+    public func fresh(limit: Int) -> [RecentFileHit] {
+        serve(.fresh, limit: limit) { wrapped.fresh(limit: $0) }
+    }
+
+    public func invalidate() {
+        lock.lock()
+        cached = [:]
+        lock.unlock()
+    }
+
+    private func serve(_ bucket: Bucket, limit: Int,
+                       fetch: (Int) -> [RecentFileHit]) -> [RecentFileHit] {
+        lock.lock()
+        // A cached fetch whose requested limit covers this call is complete for it,
+        // even when the provider returned fewer hits than asked.
+        if let entry = cached[bucket], entry.limit >= limit,
+           now().timeIntervalSince(entry.at) < ttl {
+            lock.unlock()
+            return Array(entry.hits.prefix(limit))
+        }
+        lock.unlock()
+        // Fetch outside the lock — a slow provider (the statx sweep) must not serialize
+        // unrelated buckets. Concurrent misses may both fetch; last writer wins, which
+        // is fine: same inputs, same result.
+        let hits = fetch(limit)
+        lock.lock()
+        cached[bucket] = (now(), limit, hits)
+        lock.unlock()
+        return hits
+    }
+}
+
 // MARK: - Tab lookup (raw launcher JSON)
 
 /// The bits of a tab the daemon needs to answer `GetRecents`, read straight from the
