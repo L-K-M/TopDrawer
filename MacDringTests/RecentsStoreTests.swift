@@ -3,6 +3,8 @@ import XCTest
 
 final class RecentsStoreTests: XCTestCase {
 
+    private let archiveKey = "recentItems"
+
     private func recent(_ name: String, _ path: String, kind: ItemKind = .file) -> RecentItem {
         RecentItem(url: URL(fileURLWithPath: path), kind: kind, name: name, date: Date())
     }
@@ -72,7 +74,39 @@ final class RecentsStoreTests: XCTestCase {
 
     /// Writes raw JSON into the store's UserDefaults key, bypassing the encoder.
     private func writeRaw(_ json: String, to defaults: UserDefaults) {
-        defaults.set(Data(json.utf8), forKey: "recentItems")
+        defaults.set(Data(json.utf8), forKey: archiveKey)
+    }
+
+    func testRecordingPreservesUnreadableArchiveAcrossSessions() {
+        let defaults = freshDefaults()
+        for json in ["[", #"{"unexpected":"object"}"#] {
+            let archive = Data(json.utf8)
+            defaults.set(archive, forKey: archiveKey)
+
+            let store = RecentsStore(defaults: defaults)
+            XCTAssertTrue(store.items.isEmpty)
+            store.record(recent("Session item", "/session"))
+            XCTAssertEqual(store.items.map(\.name), ["Session item"])
+            XCTAssertEqual(defaults.data(forKey: archiveKey), archive)
+
+            let reloaded = RecentsStore(defaults: defaults)
+            reloaded.record(recent("Next session", "/next"))
+            XCTAssertEqual(defaults.data(forKey: archiveKey), archive)
+        }
+    }
+
+    func testExplicitClearAllowsReplacingUnreadableArchive() {
+        let defaults = freshDefaults()
+        writeRaw("[", to: defaults)
+        let store = RecentsStore(defaults: defaults)
+        store.record(recent("Before clear", "/before"))
+
+        store.clear()
+        XCTAssertEqual(defaults.data(forKey: archiveKey), Data("[]".utf8))
+        XCTAssertTrue(RecentsStore(defaults: defaults).items.isEmpty)
+
+        store.record(recent("After clear", "/after"))
+        XCTAssertEqual(RecentsStore(defaults: defaults).items.map(\.name), ["After clear"])
     }
 
     func testUnknownKindDegradesToFileInsteadOfWipingHistory() {
