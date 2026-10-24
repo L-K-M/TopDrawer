@@ -59,6 +59,62 @@ final class FolderListerTests: XCTestCase {
         XCTAssertTrue(FolderLister.contents(of: tab).isEmpty)
     }
 
+    func testReadableDirectoryReportsNoError() {
+        let listing = FolderLister.listing(of: folderTab())
+        XCTAssertEqual(listing.items.count, 3)
+        XCTAssertNil(listing.error)
+    }
+
+    func testUnreadableDirectoryReportsErrorInsteadOfEmpty() throws {
+        // A permission-denied folder must not masquerade as an empty one.
+        // Root bypasses the permission bits, so this flavor only runs as a normal user.
+        try XCTSkipIf(NSUserName() == "root", "root can read chmod-000 directories")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path) }
+
+        let listing = FolderLister.listing(of: folderTab())
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
+    func testMissingDirectoryReportsError() throws {
+        // The root-proof error flavor: a folder tab whose target never existed fails
+        // for every user, and the failure must surface instead of a bare empty
+        // listing.
+        let tab = Tab(title: "F", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                      kind: .folder, folderURL: dir.appendingPathComponent("never-created"))
+
+        let listing = FolderLister.listing(of: tab)
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
+    func testUnresolvableBookmarkReportsError() {
+        // A configured folder whose bookmark is dead must report itself — not read
+        // as the "no folder chosen" empty state.
+        let tab = Tab(title: "F", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                      kind: .folder, folderBookmark: Data([0x01, 0x02, 0x03]))
+
+        let listing = FolderLister.listing(of: tab)
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
+    func testDeletedDirectoryReportsError() throws {
+        let tab = folderTab()
+        try FileManager.default.removeItem(at: dir)
+
+        let listing = FolderLister.listing(of: tab)
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
     // MARK: Sort + show-hidden
 
     private func entry(_ name: String, dir: Bool = false, modified: TimeInterval = 0) -> FolderLister.Entry {
