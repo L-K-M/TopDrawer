@@ -109,20 +109,23 @@ public enum VolumeClassifier {
     ]
 
     /// Mount points we never surface even with a real fstype (system areas).
-    static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap", "/var/lib/docker",
-                                 "/home", "/usr", "/var", "/opt", "/etc", "/root"]
+    /// `/home` is deliberately absent: the `home` ancestor check already excludes a
+    /// mount at or above `$HOME`, and a prefix would also hide data drives mounted
+    /// *inside* the user's home (`$HOME/Games`, `$HOME/VMs`) that are safe to eject.
+    static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap",
+                                 "/usr", "/var", "/opt", "/etc", "/root"]
 
     /// - Parameters:
     ///   - mounts: parsed `/proc/self/mountinfo`.
     ///   - user: `$USER`, for the `/media/$USER` + `/run/media/$USER` removable convention.
     ///   - isRemovable: whether a block device is removable (`/sys/block/<base>/removable`).
+    ///   - dropboxRoots: cloud folders that aren't mounts (e.g. from `~/.dropbox/info.json`).
     ///   - home: `$HOME`; a mount at or above it (a separate `/home`, `/users`, …) holds
     ///     the running system's data and is never ejectable, same as `/` itself.
-    ///   - dropboxRoots: cloud folders that aren't mounts (e.g. from `~/.dropbox/info.json`).
     public static func classify(mounts: [RawMount], user: String,
                                 isRemovable: (String) -> Bool,
-                                home: String = "",
-                                dropboxRoots: [String] = []) -> [LinuxVolume] {
+                                dropboxRoots: [String] = [],
+                                home: String = "") -> [LinuxVolume] {
         var volumes: [LinuxVolume] = []
         var seenPaths = Set<String>()
 
@@ -213,8 +216,9 @@ public struct ProcMounts: VolumeSnapshotProviding {
             mounts: MountInfoParser.parse(mountinfo),
             user: user,
             isRemovable: Self.isRemovable(device:),
-            home: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory(),
-            dropboxRoots: dropboxRoots())
+            dropboxRoots: dropboxRoots(),
+            home: ProcessInfo.processInfo.environment["HOME"].flatMap { $0.isEmpty ? nil : $0 }
+                ?? NSHomeDirectory())
     }
 
     /// `true` when `device`'s parent block device is removable per
