@@ -5,9 +5,11 @@ Consolidated from two review passes of the repository, most recently against
 launcher entries, and occasional large or remote folders. The experimental
 Linux port is included.
 
-All eight focus areas were covered. No blocking finding was established.
+All eight focus areas were covered. No blocking finding remains: the one
+established (silent launcher-save failures) is implemented in an open PR.
 Findings implemented in an open PR are omitted. Remaining findings follow
-severity order, grouped by focus area.
+severity order, grouped by focus area. The tail block merges a third review
+pass (MiMo.md) after deduplication.
 
 macOS layout, focus, VoiceOver, multi-display behavior, and Linux compositor
 interactions need on-device verification. The retained EditorWeb harness is not
@@ -36,14 +38,6 @@ bugs — important
 `linux/Sources/TopDrawerDaemon/LinuxVolumes.swift:50-67` appends individual UTF-8 bytes as Unicode scalars whenever a field contains an escape. A mount named `Clé\040USB` becomes `ClÃ© USB`; displayed paths and network/cloud unmount targets become invalid. Accented and non-Latin mount names containing escaped characters are affected.
 
 Accumulate decoded bytes, then decode UTF-8 once. Bound octal conversion so malformed escapes cannot trap. Add mixed Unicode/escape fixtures. Effort: about one hour.
-
-### Filing onto a closed folder pill loses Undo (SOL-06)
-
-bugs — important
-
-`MacDring/Tabs/TabController.swift:940-942,1469-1485` moves files and creates Undo before opening the destination drawer. `MacDring/Drawer/DrawerWindowController.swift:378-385` then clears that action. Users filing through a closed folder pill must reverse the move manually.
-
-Associate the move result with the destination session and publish Undo after opening that drawer. Verify a closed destination and a different drawer already open. Effort: half a day.
 
 ### Group-name drafts disappear on uncommitted exits (SOL-07)
 
@@ -524,3 +518,163 @@ novel, delightful, or quirky ideas worth trying — nice-to-have
 A subtle edge-glow pulse on the pill when a watched folder or Fresh listing gains items — ambient notification without a badge.
 
 A brief pill highlight driven by the existing watch callbacks. Effort: small.
+
+### A plain file named like an app is treated as an application
+
+bugs — nice-to-have
+
+`MacDring/Model/DrawerItem.swift:218-224` classifies any path ending in `.app` as `.application` without checking it is a bundle directory, so a plain file named `notes.app` is routed through app-launch paths and fails instead of opening as a file.
+
+Require `isDirectory` for `.application` and fall through to the file classification otherwise. Effort: ten minutes plus a test.
+
+### Quarantine failure leaves a corrupt store in place
+
+bugs — nice-to-have
+
+`MacDring/Store/TabStore.swift:95-107` only logs when moving a corrupt `launcher.json` aside fails (destination name taken in the same second, read-only directory). The corrupt file stays at the primary path and `saveNow` then rotates those bytes over the `.bak`, straining the preserved-copy contract the comment above it promises.
+
+Make `quarantine` report success and, on failure, skip the normal save rotation (or write to a fresh destination name). Effort: one hour.
+
+### The prerelease update scan reads only the first 30 releases
+
+bugs — nice-to-have
+
+`MacDring/Updates/GitHubReleaseClient.swift:31-39` takes the max version of `releases?per_page=30`, so a higher-versioned prerelease older than the first 30 entries is missed and the app reports an older prerelease as latest.
+
+Page through releases until the version stops increasing. Effort: small.
+
+### Drop dedupe resolves every existing item's bookmark per incoming file
+
+performance problems, stuttering, and jank — nice-to-have
+
+`MacDring/Store/TabStore.swift:363-370` re-runs `flattenedLaunchable()` and resolves every existing item's bookmark for each dropped item, so dropping m files onto an n-item tab performs O(n·m) security-scoped resolves on the main thread before the drop appears.
+
+Build the existing standardized-target set once per `addItems` call and do membership lookups per incoming item. Effort: one hour.
+
+### The clipboard archive loads and saves on the main thread
+
+performance problems, stuttering, and jank — nice-to-have
+
+`MacDring/Store/ClipboardHistoryStore.swift:12-14,132-140` reads and decodes up to `maximumArchiveBytes` (~79 MB worst case) during `TabController.init`, and `saveNow` re-encodes the archive on the main queue after each capture.
+
+Load and encode on a background queue, and cap the archive near the realistic payload size. Effort: two to three hours.
+
+### Trash emptiness is probed while building an item's context menu
+
+performance problems, stuttering, and jank — nice-to-have
+
+`MacDring/Drawer/ItemView.swift:148` sweeps every volume's Trash (`TrashInspector.trashIsEmpty()`) on the main thread while the context menu is being built; a slow or network volume's Trash delays the menu.
+
+Reuse the answer the icon resolution already computes off-main, or a small cache invalidated by the Trash watch. Effort: one hour.
+
+### Launcher decode parses the document twice
+
+general issues — nice-to-have
+
+`MacDring/Store/TabStore.swift:133-141` runs `JSONSerialization.jsonObject` over the same bytes `JSONDecoder` just parsed, only to count a `tabs` array — double parse cost and peak memory at launch on large documents.
+
+Derive the raw-tab count from the lenient decode itself, or drop the sentinel check. Effort: one hour.
+
+### Icon style overrides are never pruned
+
+general issues — nice-to-have
+
+`MacDring/Store/TabStore.swift:531` accumulates one `Tab.iconStyles` entry per styled live item and never removes stale path-keyed entries when files are renamed/deleted or the tab's folder is repointed (`TabsView.chooseFolder`), so the document grows and a style can silently attach to a later file that reuses the path.
+
+Prune overrides absent from the latest listing and clear the map when the tab's folder changes. Effort: two hours.
+
+### Removing an item has no Undo
+
+missing features — nice-to-have
+
+`MacDring/Tabs/TabController.swift:1104-1112` poofs a removed item with no way back; one mis-click loses a configured launcher entry (placement, name, icon, lock state) even though the file itself is safe.
+
+Reuse the existing `DrawerUndo` toast: keep the removed item (and its slot) for one toast window and restore on Undo. Effort: two to three hours.
+
+### An update download has no completion feedback
+
+missing features — nice-to-have
+
+`MacDring/Updates/UpdateChecker.swift:164-186` starts a download from the alert with no in-app signal when the asset lands (or fails) — a user who closed Settings learns nothing beyond the Finder reveal.
+
+Show a transient confirmation on completion and an error banner on failure. Effort: one to two hours.
+
+### New-tab actions fail silently without a display
+
+usability: speed, convenience, and clarity — nice-to-have
+
+`MacDring/Settings/NewTabWindowController.swift:44-46` and `MacDring/Settings/TabsView.swift:133-139` silently return when `registry.mainScreenUUID()` is nil, so the "+" button or dialog does nothing with no explanation.
+
+Surface a short explanatory alert instead of a silent no-op. Effort: one hour.
+
+### The header truncation badge is a dead end
+
+usability: speed, convenience, and clarity — nice-to-have
+
+`MacDring/Drawer/DrawerView.swift:232-238` shows "300+" when a listing was capped, but the badge takes no action and its tooltip is the only explanation; items tabs give no way to see the rest.
+
+Make the badge clickable to reveal the folder or explain the cap. Effort: one to two hours.
+
+### The appearance preview misrepresents the thickness slider
+
+visual issues and layout problems — nice-to-have
+
+`MacDring/Settings/AppearanceView.swift:115-152` renders the preview tab at `max(18, tabThickness * 0.52 * scale)`, so it floors at 18 pt and can never show the thinnest setting; the undocumented factor makes the slider look weaker than it is.
+
+Render the preview at the configured thickness under one documented preview scale. Effort: one hour.
+
+### Recency sections go stale while a drawer stays open
+
+visual issues and layout problems — nice-to-have
+
+`MacDring/Drawer/DrawerView.swift:356-365` computes the Today/Yesterday/This Week/Older sections with the wall clock of each render, so a drawer left open across midnight keeps items under stale headings.
+
+Re-evaluate the buckets on a coarse timer, or document open/refresh-only behavior. Effort: one hour.
+
+### Generated icons drop their glyph on unknown symbol names
+
+aesthetics and theming — nice-to-have
+
+`MacDring/Common/IconRenderer.swift:55-63` silently skips drawing when `iconStyle.symbol` fails to resolve (corrupted document, or an SF Symbol retired by an OS update), leaving user-styled icons as bare tiles.
+
+Fall back to the kind's default glyph (or a neutral placeholder) when the symbol lookup fails. Effort: one hour.
+
+### The drawer's tab tint is flat
+
+aesthetics and theming — nice-to-have
+
+`MacDring/Drawer/DrawerView.swift:100-110` paints the tab color as a uniform 10% wash, so many open drawers read alike and tab identity lives mostly in the pill.
+
+Deepen the tint toward the drawer's inner edge (a subtle gradient from the tab color), checking text contrast in the high-contrast preset. Effort: two to three hours.
+
+### Drag one tab onto another to merge drawers
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+`MacDring/Tabs/TabController.swift:1242-1251` already moves tabs between edges from a menu; a playful consolidation path is missing.
+
+Extend the spring-load/drag-hover plumbing to tab pills: dwell on a tab shows a merge halo, and dropping appends the dragged tab's items (keeping the target tab) with an undo toast. Effort: one to two days.
+
+### Pills could lift on hover
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+`MacDring/Tabs/TabStripView.swift:38-63` changes on drop highlights only; a gentle scale/shadow on hover would give pills the same physicality the poof and haptics give actions.
+
+Animate scale/shadow on `onHover`, respecting Reduce Motion. Effort: two to three hours.
+
+### A hotkey variant that opens straight into search
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+`MacDring/Tabs/TabController.swift:982-1046` per-tab hotkeys open the drawer, but nothing opens it deliberately focused for typing (a "search launcher" mode) — for example a variant for non-searchable drawers.
+
+Option-hotkey (or double-press) opens the drawer with the filter field forced visible and focused. Effort: half a day.
+
+### Drag out of group preview tiles
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+`MacDring/Drawer/ItemView.swift:195-205` renders a mini-preview of group children; dragging a child straight out of the preview (to another app) is the natural next step for the iOS-style grouping interactions.
+
+Allow `onDrag` providers for group children in the preview tiles. Effort: one day.
