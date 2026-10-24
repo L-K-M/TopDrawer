@@ -183,10 +183,8 @@ final class ItemPreviewController: NSObject {
             backing: .buffered,
             defer: false)
         panel.title = title
-        // Ordering above the drawer comes from the child-window bond, not from
-        // floating level — a floating level is what turns things into persistently
-        // hovering mini-docks, which is exactly what this is not.
-        panel.isFloatingPanel = false
+        // Floating-panel behavior keeps key focus nonactivating, like the drawer.
+        panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false   // teardown owns the panel's lifetime

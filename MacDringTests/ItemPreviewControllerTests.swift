@@ -47,9 +47,11 @@ final class ItemPreviewControllerTests: XCTestCase {
         var closes = 0
         preview.onClose = { closes += 1 }
         let wasActive = NSApp.isActive
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
         XCTAssertTrue(preview.showFile(file, relativeTo: parent))
         XCTAssertEqual(NSApp.isActive, wasActive,
                        "policy=\(NSApp.activationPolicy().rawValue); \(preview.activationTrace.joined(separator: ", "))")
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, frontmost)
         let child = try XCTUnwrap(parent.childWindows?.first)
         XCTAssertTrue(preview.contains(child))
         XCTAssertTrue(child.styleMask.contains(.nonactivatingPanel))
