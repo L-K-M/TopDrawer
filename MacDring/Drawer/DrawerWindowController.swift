@@ -60,6 +60,25 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
         [.urlReadingFileURLsOnly: model.kind == .folder]
     }
 
+    /// Hands `item` to the system as a real dragging session — drag-out to Finder,
+    /// Mail, an upload dialog… The SwiftUI reorder gesture calls this once a drag
+    /// wanders out of the drawer's content. Returns false when the item has no
+    /// resolvable URL or there is no live drag event to attach the session to, so
+    /// the caller can fall back to plain reordering.
+    func startExternalDrag(of item: DrawerItem) -> Bool {
+        guard let url = BookmarkResolver.url(for: item),
+              let event = NSApp.currentEvent else { return false }
+        beginDraggingSession(with: [NSItemProvider(object: url as NSURL)], event: event, source: self)
+        return true
+    }
+
+    /// This view is the *source* of drag-out sessions too (not just the drop
+    /// destination): offer copy semantics like dragging out of Finder.
+    override func draggingSession(_ session: NSDraggingSession,
+                                  sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        .copy
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { updateDrag(sender) }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { updateDrag(sender) }
 
@@ -157,6 +176,7 @@ final class DrawerWindowController {
 
         let hosting = DrawerHostingView(rootView: DrawerView(model: model, preferences: preferences))
         hosting.model = model
+        model.onDragOutItem = { [weak hosting] item in hosting?.startExternalDrag(of: item) ?? false }
         hosting.registerForDraggedTypes([.fileURL, .URL])
         hosting.translatesAutoresizingMaskIntoConstraints = true
         hosting.autoresizingMask = [.width, .height]
