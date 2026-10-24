@@ -15,12 +15,14 @@ enum DrawerOpenReason {
     case hotkey
     case hover
     case springLoad
+    case drop
 
     /// Whether this open may take key focus (and auto-focus the filter field).
+    /// Pointer-context opens (hover, spring-load, drop) stay pointer-only.
     var takesKeyFocus: Bool {
         switch self {
         case .click, .hotkey: return true
-        case .hover, .springLoad: return false
+        case .hover, .springLoad, .drop: return false
         }
     }
 }

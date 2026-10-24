@@ -940,12 +940,12 @@ final class TabController {
         case .folder:
             guard let directory = FolderLister.resolveFolder(tab) else { return }
             moveFilesWithUndo(fileURLs, into: directory)
-            if openTabID == id { refreshOpenDrawer() } else { openDrawer(id, reason: .click) }
+            if openTabID == id { refreshOpenDrawer() } else { openDrawer(id, reason: .drop) }
         case .items:
             let dropped = urls.map { DrawerItem.fromDroppedURL($0) }   // files & links, in drop order
             // Add, dedup, and optionally place the whole drop in one store mutation.
             store.addItems(dropped, toTab: id, startingAt: placementSlot)
-            if openTabID != id { openDrawer(id, reason: .click) }   // a store change already refreshed an open drawer
+            if openTabID != id { openDrawer(id, reason: .drop) }   // a store change already refreshed an open drawer
         }
     }
 

@@ -275,5 +275,6 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertTrue(DrawerOpenReason.hotkey.takesKeyFocus)
         XCTAssertFalse(DrawerOpenReason.hover.takesKeyFocus)
         XCTAssertFalse(DrawerOpenReason.springLoad.takesKeyFocus)
+        XCTAssertFalse(DrawerOpenReason.drop.takesKeyFocus)
     }
 }
