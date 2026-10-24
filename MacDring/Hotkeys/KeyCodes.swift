@@ -43,10 +43,42 @@ enum KeyCodes {
 
     /// Whether a key + modifier combination is usable as a global hotkey: it needs
     /// a commanding modifier (⌘/⌃/⌥ — Shift alone would swallow ordinary typing),
-    /// unless the key is a function key, which is safe bare.
+    /// unless the key is a function key, which is safe bare. Combos the OS owns
+    /// (⌘Q, ⇧⌘4…) are refused outright — registering one swallows it for every app.
     static func isUsableHotkey(keyCode: UInt32, modifiers: UInt32) -> Bool {
-        hasCommandingModifier(modifiers) || isFunctionKey(keyCode)
+        if isSystemReserved(keyCode: keyCode, modifiers: modifiers) { return false }
+        return hasCommandingModifier(modifiers) || isFunctionKey(keyCode)
     }
+
+    /// Whether a Carbon key+modifier combo collides with a shortcut the OS owns.
+    /// Only plain ⌘/⇧⌘ combos count as reserved; adding ⌥ or ⌃ produces a combo
+    /// the system doesn't claim, so those stay available to the user.
+    private static func isSystemReserved(keyCode: UInt32, modifiers: UInt32) -> Bool {
+        let mods = modifiers & (UInt32(cmdKey) | UInt32(optionKey) | UInt32(controlKey) | UInt32(shiftKey))
+        switch mods {
+        case UInt32(cmdKey):
+            return commandReservedKeys.contains(keyCode)
+        case UInt32(cmdKey) | UInt32(shiftKey):
+            return commandReservedKeys.contains(keyCode) || commandShiftReservedKeys.contains(keyCode)
+        default:
+            return false
+        }
+    }
+
+    /// Keys that stay reserved under plain ⌘ or ⇧⌘.
+    private static let commandReservedKeys: Set<UInt32> = [
+        UInt32(kVK_ANSI_Q),   // ⌘Q quit app · ⇧⌘Q log out
+        UInt32(kVK_ANSI_W),   // ⌘W close window
+        UInt32(kVK_ANSI_H),   // ⌘H hide
+        UInt32(kVK_ANSI_M),   // ⌘M minimize
+        UInt32(kVK_Space),    // ⌘Space Spotlight
+        UInt32(kVK_Tab),      // ⌘Tab app switcher
+    ]
+
+    /// Keys reserved only together with ⇧⌘ — the screenshot shortcuts.
+    private static let commandShiftReservedKeys: Set<UInt32> = [
+        UInt32(kVK_ANSI_3), UInt32(kVK_ANSI_4), UInt32(kVK_ANSI_5), UInt32(kVK_ANSI_6),
+    ]
 
     private static let functionKeys: Set<UInt32> = [
         UInt32(kVK_F1), UInt32(kVK_F2), UInt32(kVK_F3), UInt32(kVK_F4), UInt32(kVK_F5),
