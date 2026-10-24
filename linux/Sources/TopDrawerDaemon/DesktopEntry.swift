@@ -42,7 +42,9 @@ public struct DesktopEntry: Sendable, Equatable {
     public static func parse(_ text: String, id: String, path: URL) -> DesktopEntry? {
         var inGroup = false
         var values: [String: String] = [:]
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        // U+FEFF is not whitespace, so strip a UTF-8 BOM or "[Desktop Entry]" detection fails.
+        let body = text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
+        for rawLine in body.split(separator: "\n", omittingEmptySubsequences: false) {
             // .whitespacesAndNewlines also drops a trailing \r, so CRLF files parse.
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
