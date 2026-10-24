@@ -774,6 +774,11 @@ final class TabStore: ObservableObject {
 
     // MARK: Persistence
 
+    /// Serializes the encode/write work off the main queue: a save re-encodes the
+    /// whole document (notes and bookmark blobs included) and performs two atomic
+    /// writes — none of which may hitch typing, dragging, or Settings edits.
+    private let saveQueue = DispatchQueue(label: "ch.lkmc.TopDrawer.TabStore.save", qos: .utility)
+
     private func mutate(notifyChange: Bool = true, _ change: (inout LauncherDocument) -> Void) {
         var doc = document
         change(&doc)
@@ -784,15 +789,27 @@ final class TabStore: ObservableObject {
 
     private func scheduleSave() {
         saveWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.saveNow() }
+        let work = DispatchWorkItem { [weak self] in self?.saveSoon() }
         saveWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
-    /// Writes immediately (used on quit and in tests). Keeps a `.bak` copy of the
-    /// previous file and writes atomically. The backup is rotated only **after**
-    /// the new write succeeds — rotating first would destroy the previous good
-    /// copy exactly when writes are failing (e.g. disk full), leaving the
+    /// The debounced autosave: snapshot the document on the main queue, then encode
+    /// and write it on `saveQueue`, publishing the outcome back on main.
+    private func saveSoon() {
+        let snapshot = document
+        saveQueue.async { [weak self] in
+            guard let self else { return }
+            let error = self.performSave(snapshot)
+            DispatchQueue.main.async { self.persistenceError = error }
+        }
+    }
+
+    /// Writes immediately and synchronously (used on quit and in tests): the caller
+    /// needs the file safely on disk before the process can end. Keeps a `.bak` copy
+    /// of the previous file and writes atomically. The backup is rotated only
+    /// **after** the new write succeeds — rotating first would destroy the previous
+    /// good copy exactly when writes are failing (e.g. disk full), leaving the
     /// document nowhere but memory.
     func saveNow() {
         // Every caller (quit flush, debounced autosave, tests) is main-bound, and
@@ -800,19 +817,25 @@ final class TabStore: ObservableObject {
         dispatchPrecondition(condition: .onQueue(.main))
         saveWorkItem?.cancel()
         saveWorkItem = nil
+        persistenceError = saveQueue.sync { performSave(document) }
+    }
+
+    /// The shared write path, always running on `saveQueue` so concurrent saves can
+    /// interleave neither with each other nor with the main queue. Returns the
+    /// user-facing persistence error, `nil` when the document is safely on disk.
+    private func performSave(_ snapshot: LauncherDocument) -> String? {
         // A document written by a newer Top Drawer (schema version above ours)
         // must never be rewritten by this build: our encoder would silently
         // drop everything it doesn't know about. The in-memory session still
         // works; only persistence is disabled.
-        guard document.version <= LauncherDocument.currentVersion else {
-            NSLog("Top Drawer: launcher document is version \(document.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
-            persistenceError = Self.newerVersionMessage
-            return
+        guard snapshot.version <= LauncherDocument.currentVersion else {
+            NSLog("Top Drawer: launcher document is version \(snapshot.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
+            return Self.newerVersionMessage
         }
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(document)
+            let data = try encoder.encode(snapshot)
             let previous = fileManager.fileExists(atPath: storeURL.path)
                 ? try? Data(contentsOf: storeURL)
                 : nil
@@ -820,10 +843,10 @@ final class TabStore: ObservableObject {
             if let previous {
                 try? previous.write(to: bakURL, options: .atomic)
             }
-            persistenceError = nil
+            return nil
         } catch {
             NSLog("Top Drawer: failed to save launcher document: \(error.localizedDescription)")
-            persistenceError = "Couldn't save your layout. Check free space and Application Support permissions."
+            return "Couldn't save your layout. Check free space and Application Support permissions."
         }
     }
 }
