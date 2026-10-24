@@ -394,4 +394,13 @@ final class DrawerModelTests: XCTestCase {
         model.launchSelection()
         XCTAssertEqual(launched, [items[0].id])
     }
+
+    func testOnlyDeliberateOpensTakeKeyboardFocus() {
+        // A hover- or spring-load-opened drawer must not pull keystrokes out of
+        // whatever the user is doing; click/hotkey opens may.
+        XCTAssertTrue(DrawerOpenReason.click.takesKeyFocus)
+        XCTAssertTrue(DrawerOpenReason.hotkey.takesKeyFocus)
+        XCTAssertFalse(DrawerOpenReason.hover.takesKeyFocus)
+        XCTAssertFalse(DrawerOpenReason.springLoad.takesKeyFocus)
+    }
 }
