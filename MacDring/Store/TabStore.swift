@@ -17,6 +17,13 @@ final class TabStore: ObservableObject {
     /// Called after every mutation (on the main thread).
     var onChange: (() -> Void)?
 
+    /// The reason persistence is currently failing (a failed write, or a document
+    /// this build must not rewrite), `nil` while saves are healthy. Mirrors
+    /// `ClipboardHistoryStore.persistenceError` so both stores surface trouble the
+    /// same way — a save that can't reach disk is a data-loss risk the user must see,
+    /// not a log line. Cleared by the next successful save.
+    @Published private(set) var persistenceError: String?
+
     /// Whether a document was loaded from disk (vs. a fresh first run). Used to
     /// decide whether to seed a starter tab.
     let loadedFromDisk: Bool
@@ -787,6 +794,7 @@ final class TabStore: ObservableObject {
         // works; only persistence is disabled.
         guard document.version <= LauncherDocument.currentVersion else {
             NSLog("Top Drawer: launcher document is version \(document.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
+            persistenceError = "This layout was saved by a newer version of Top Drawer. Changes are kept for this session only, so the newer document isn't damaged."
             return
         }
         do {
@@ -800,8 +808,10 @@ final class TabStore: ObservableObject {
             if let previous {
                 try? previous.write(to: bakURL, options: .atomic)
             }
+            persistenceError = nil
         } catch {
             NSLog("Top Drawer: failed to save launcher document: \(error.localizedDescription)")
+            persistenceError = "Couldn't save your layout. Check free space and Application Support permissions."
         }
     }
 }

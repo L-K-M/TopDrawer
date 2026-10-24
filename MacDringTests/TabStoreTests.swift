@@ -1154,4 +1154,58 @@ final class TabStoreTests: XCTestCase {
         XCTAssertNil(store.tab(id: notes.id)?.notesSize)
         XCTAssertEqual(store.tab(id: notes.id)?.notes, "remember the milk")
     }
+
+    // MARK: Persistence health
+
+    /// Blocks `storeURL` with a directory of the same name, so `Data.write` fails.
+    private func blockStorePath() throws {
+        try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
+    }
+
+    func testFailedSaveSurfacesPersistenceError() throws {
+        let store = TabStore(storeURL: storeURL)
+        XCTAssertNil(store.persistenceError)
+
+        store.addTab(makeTab("Work"))
+        try blockStorePath()
+        store.saveNow()
+
+        XCTAssertNotNil(store.persistenceError,
+                        "a save that can't reach disk must be visible to the user, not just logged")
+    }
+
+    func testSuccessfulSaveClearsPersistenceError() throws {
+        let store = TabStore(storeURL: storeURL)
+        store.addTab(makeTab("Work"))
+        try blockStorePath()
+        store.saveNow()
+        XCTAssertNotNil(store.persistenceError)
+
+        try FileManager.default.removeItem(at: storeURL)
+        store.saveNow()
+
+        XCTAssertNil(store.persistenceError)
+        XCTAssertTrue(store.loadedFromDisk || !store.tabs.isEmpty)
+    }
+
+    func testNewerSchemaDocumentRefusesSaveAndSurfacesPersistenceError() throws {
+        // A document written by a future build must not be rewritten by this one…
+        let future = LauncherDocument(version: LauncherDocument.currentVersion + 1, tabs: [makeTab("Future")])
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(future).write(to: storeURL)
+
+        let store = TabStore(storeURL: storeURL)
+        XCTAssertTrue(store.loadedFromDisk)
+        XCTAssertNil(store.persistenceError)
+
+        store.addTab(makeTab("Edits still work in memory"))
+        store.saveNow()
+
+        // …and the refusal must be surfaced, so the session's edits being unsaved
+        // is never a surprise at quit.
+        XCTAssertNotNil(store.persistenceError)
+        let onDisk = try JSONDecoder().decode(LauncherDocument.self, from: Data(contentsOf: storeURL))
+        XCTAssertEqual(onDisk.version, LauncherDocument.currentVersion + 1)
+        XCTAssertEqual(onDisk.tabs.count, 1, "the future document must be left byte-for-byte alone")
+    }
 }
