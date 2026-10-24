@@ -32,6 +32,9 @@ struct Tab: Codable, Identifiable, Equatable {
     /// When locked, the tab can't be dragged to a new position.
     var locked: Bool
 
+    var lockNewItems: Bool
+    var appearance: DrawerAppearance
+
     /// What this tab's drawer shows (items / notes / folder).
     var kind: TabKind
 
@@ -75,6 +78,8 @@ struct Tab: Codable, Identifiable, Equatable {
          gridColumns: Int = 4,
          gridRows: Int = 2,
          locked: Bool = false,
+         lockNewItems: Bool = false,
+         appearance: DrawerAppearance = .init(),
          kind: TabKind = .items,
          layout: DrawerLayout = .grid,
          notes: String = "",
@@ -96,6 +101,8 @@ struct Tab: Codable, Identifiable, Equatable {
         self.gridColumns = PersistedLayoutBounds.clampedGridColumns(gridColumns)
         self.gridRows = PersistedLayoutBounds.clampedGridRows(gridRows)
         self.locked = locked
+        self.lockNewItems = lockNewItems
+        self.appearance = appearance
         self.kind = kind
         self.layout = layout
         self.notes = notes
@@ -135,6 +142,8 @@ struct Tab: Codable, Identifiable, Equatable {
             try c.decodeIfPresent(Int.self, forKey: .gridRows) ?? 2
         )
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+        lockNewItems = c.decodeLenient(Bool.self, forKey: .lockNewItems, fallback: false)
+        appearance = c.decodeLenient(DrawerAppearance.self, forKey: .appearance, fallback: .init())
         kind = c.decodeLenient(TabKind.self, forKey: .kind, fallback: .items)
         // Older documents wrote a per-tab `useGlobal` (or nothing); both fall back to
         // `.grid`, the layout the global default used to be.
@@ -151,7 +160,7 @@ struct Tab: Codable, Identifiable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, colorHex, glyph, anchor, items, behavior, hotkey
-        case gridColumns, gridRows, locked, kind, layout, notes, notesSize, folderBookmark, folderURL
+        case gridColumns, gridRows, locked, lockNewItems, appearance, kind, layout, notes, notesSize, folderBookmark, folderURL
         case folderSort, folderShowsHidden, recentsSource, iconStyles
     }
 }

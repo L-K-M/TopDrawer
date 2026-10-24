@@ -18,10 +18,14 @@ struct TabStripView: View {
     @State private var isDragging = false
 
     private var isVertical: Bool { model.edge.isVertical }
-    private var isClassic: Bool { preferences.tabStyle == .classic }
+    private var tabStyle: TabStyle { model.appearance.tabStyle(following: preferences.tabStyle) }
+    private var isClassic: Bool { tabStyle == .classic }
     /// The pill's thickness, scaled down for the (more compact) classic style. Must
     /// match `TabWindowController`'s window sizing, which applies the same scale.
-    private var thickness: CGFloat { CGFloat(preferences.tabThickness) * preferences.tabStyle.thicknessScale }
+    private var thickness: CGFloat {
+        model.appearance.tabThickness(following: preferences.tabThickness, style: tabStyle,
+                                      title: preferences.showTabLabels ? model.title : nil)
+    }
     /// Glyph size relative to thickness — a little smaller for classic so its icon
     /// reads as a compact folder-tab marker rather than filling the pill.
     private var glyphScale: CGFloat { isClassic ? 0.36 : 0.42 }
@@ -53,12 +57,14 @@ struct TabStripView: View {
                 }
                 Divider()
                 Button("Remove Tab", role: .destructive) { model.onDelete?() }
+                    .disabled(model.hasLockedItems)
+                    .help(model.hasLockedItems ? "Unlock this tab's items before removing it" : "Remove this tab")
             }
     }
 
     @ViewBuilder
     private var styledTab: some View {
-        switch preferences.tabStyle {
+        switch tabStyle {
         case .modern:  modernTab
         case .classic: classicTab
         }
@@ -81,29 +87,36 @@ struct TabStripView: View {
     // MARK: Modern pill
 
     private var modernTab: some View {
-        let shape = edgeRoundedRect(edge: model.edge, radius: CGFloat(preferences.cornerRadius))
+        let shape = edgeRoundedRect(edge: model.edge,
+                                    radius: model.appearance.cornerRadius(following: preferences.cornerRadius))
         // Pick a legible foreground from the tab color, exactly like the classic
         // style: hardcoded white was unreadable on light tab colors (yellow, mint).
         // The dark drop shadow only helps white text pop off a dark tint; under
         // near-black text on a light pill it reads as smudge, so it goes with it.
-        let foreground = Color(hexString: model.colorHex).readableForeground
+        let highContrast = model.appearance.preset == .highContrast
+        let foreground = highContrast ? Color.primary : Color(hexString: model.colorHex).readableForeground
         return contentStack
             .foregroundStyle(foreground)
             .shadow(color: .black.opacity(foreground == .white ? 0.35 : 0), radius: 1, y: 0.5)
-            .padding(.vertical, isVertical ? 9 : 4)
-            .padding(.horizontal, isVertical ? 4 : 11)
+            .padding(.vertical, isVertical ? 9 : DrawerMetrics.tabLabelCrossPadding)
+            .padding(.horizontal, isVertical ? DrawerMetrics.tabLabelCrossPadding : 11)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 ZStack {
                     VisualEffectBlur(material: .popover, blendingMode: .behindWindow)
-                    Color(hexString: model.colorHex).opacity(model.isOpen ? 0.88 : 0.62)
+                    if highContrast {
+                        Color(nsColor: .windowBackgroundColor)
+                    } else {
+                        Color(hexString: model.colorHex)
+                            .opacity(model.appearance.preset == .flat ? 1 : (model.isOpen ? 0.88 : 0.62))
+                    }
                 }
                 .clipShape(shape)
             )
             .overlay(
                 shape.stroke(
-                    .white.opacity(model.isDropTargeted ? 0.95 : (model.isOpen ? 0.5 : 0.18)),
-                    lineWidth: model.isDropTargeted ? 2 : 1
+                    highContrast ? Color.primary : .white.opacity(model.isDropTargeted ? 0.95 : (model.isOpen ? 0.5 : 0.18)),
+                    lineWidth: model.appearance.outlineWidth(for: model.isDropTargeted ? .dropTargeted : (model.isOpen ? .open : .idle))
                 )
             )
     }
@@ -182,7 +195,7 @@ struct TabStripView: View {
     private var labelView: some View {
         if preferences.showTabLabels && !model.title.isEmpty {
             Text(model.title)
-                .font(.caption.weight(.medium))
+                .font(.system(size: model.appearance.tabFontSize, weight: model.appearance.tabFontWeight.swiftUIWeight))
                 .lineLimit(1)
                 .fixedSize()
         }
@@ -200,9 +213,10 @@ struct TabStripView: View {
     private var rotatedLabel: some View {
         if preferences.showTabLabels && !model.title.isEmpty {
             let measured = (model.title as NSString)
-                .size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium)])
+                .size(withAttributes: [.font: NSFont.systemFont(ofSize: model.appearance.tabFontSize,
+                                                              weight: model.appearance.tabFontWeight.appKitWeight)])
             Text(model.title)
-                .font(.caption.weight(.medium))
+                .font(.system(size: model.appearance.tabFontSize, weight: model.appearance.tabFontWeight.swiftUIWeight))
                 .lineLimit(1)
                 .fixedSize()
                 .rotationEffect(.degrees(-90))

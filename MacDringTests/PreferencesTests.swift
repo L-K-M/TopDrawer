@@ -39,6 +39,15 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(Preferences(defaults: defaults).revealAllConcealedTogether)
     }
 
+    func testScrollSwitchingIsOptInAndRoundTrips() {
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertFalse(prefs.scrollToSwitchTabs)
+        prefs.scrollToSwitchTabs = true
+        XCTAssertTrue(Preferences(defaults: defaults).scrollToSwitchTabs)
+        prefs.scrollToSwitchTabs = false
+        XCTAssertFalse(Preferences(defaults: defaults).scrollToSwitchTabs)
+    }
+
     func testFreshDirectScanDefaultsOffAndRoundTrips() {
         // Off by default: the Fresh pipeline must stay Spotlight-only — and so
         // prompt-free — until the user explicitly opts into the direct folder
