@@ -69,8 +69,10 @@ final class ItemPreviewController: NSObject {
     func showFile(_ url: URL, relativeTo parent: NSWindow) -> Bool {
         teardown(reason: .replaced)
         guard let kind = ItemActionService.previewFileKind(at: url) else { return false }
+        NSLog("Preview focus before panel: \(NSApp.isActive)")
         target = .file(url)
         presentPanel(titled: url.lastPathComponent, relativeTo: parent)
+        NSLog("Preview focus after panel: \(NSApp.isActive)")
         openButton?.title = kind == .folder ? "Open Folder" : "Open File"
         setStatus("Quick Look", activity: .idle)
         guard showQuickLook(url) else {
@@ -197,12 +199,15 @@ final class ItemPreviewController: NSObject {
         }
 
         parent.addChildWindow(panel, ordered: .above)
+        NSLog("Preview focus after child attachment: \(NSApp.isActive)")
         panel.orderFrontRegardless()
+        NSLog("Preview focus after ordering: \(NSApp.isActive)")
         // Same stranding rule as the drawer: over a foreign full-screen Space a
         // non-activating panel that takes key focus gets sited on our own hidden
         // desktop Space instead of the visible one — order in front, stay non-key.
         let screen = parent.screen ?? NSScreen.main
         if let screen, !ForeignFullScreen.covers(screen) { panel.makeKey() }
+        NSLog("Preview focus after key focus: \(NSApp.isActive)")
     }
 
     /// The toolbar strip: status + spinner on the left, Open-externally and Close
@@ -314,10 +319,14 @@ final class ItemPreviewController: NSObject {
     private func showQuickLook(_ url: URL) -> Bool {
         guard let contentArea,
               let preview = QLPreviewView(frame: contentArea.bounds, style: .normal) else { return false }
+        NSLog("Preview focus after Quick Look init: \(NSApp.isActive)")
         preview.autostarts = true
+        NSLog("Preview focus after autostart: \(NSApp.isActive)")
         preview.previewItem = url as NSURL   // NSURL conforms to QLPreviewItem
+        NSLog("Preview focus after preview item: \(NSApp.isActive)")
         quickLookView = preview
         installContent(preview)
+        NSLog("Preview focus after content install: \(NSApp.isActive)")
         return true
     }
 
