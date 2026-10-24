@@ -67,10 +67,26 @@ final class FolderListerTests: XCTestCase {
 
     func testUnreadableDirectoryReportsErrorInsteadOfEmpty() throws {
         // A permission-denied folder must not masquerade as an empty one.
+        // Root bypasses the permission bits, so this flavor only runs as a normal user.
+        try XCTSkipIf(NSUserName() == "root", "root can read chmod-000 directories")
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path) }
 
         let listing = FolderLister.listing(of: folderTab())
+
+        XCTAssertTrue(listing.items.isEmpty)
+        XCTAssertNotNil(listing.error)
+    }
+
+    func testMissingDirectoryReportsError() throws {
+        // The root-proof error flavor: a folder tab whose target never existed fails
+        // for every user, and the failure must surface instead of a bare empty
+        // listing.
+        let tab = Tab(title: "F", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "D", edge: .right, position: 0.5),
+                      kind: .folder, folderURL: dir.appendingPathComponent("never-created"))
+
+        let listing = FolderLister.listing(of: tab)
 
         XCTAssertTrue(listing.items.isEmpty)
         XCTAssertNotNil(listing.error)
