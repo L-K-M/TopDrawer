@@ -227,7 +227,7 @@ public actor TopDrawerService {
                     logger.info("Eject(\(volumeID)): volume is not ejectable")
                     return [.boolean(false)]
                 }
-                return [.boolean(ejector(volume))]
+                return [.boolean(await Self.offloaded { ejector(volume) })]
             },
             DBusObjectServer.Method(
                 name: "GetTrashState",
@@ -251,8 +251,10 @@ public actor TopDrawerService {
                 // macDring history — a fresh/system/unknown tab discards it in `recentsHits`.
                 let needsMacDring = LauncherTabs.find(id: tabID, in: json)?.servesMacDringRecents ?? false
                 let macDringHits = needsMacDring ? await recorder.recents(limit: Self.recentsLimit) : []
-                let hits = Self.recentsHits(forTab: tabID, document: json,
-                                            provider: recentsProvider, macDringHits: macDringHits)
+                let hits = await Self.offloaded {
+                    Self.recentsHits(forTab: tabID, document: json,
+                                     provider: recentsProvider, macDringHits: macDringHits)
+                }
                 return [.string(Self.encodeRecents(hits))]
             },
             DBusObjectServer.Method(
@@ -265,7 +267,7 @@ public actor TopDrawerService {
                     logger.info("Launch(\(itemID)): no such item in the launcher document")
                     return [.boolean(false)]
                 }
-                let ok = launcher.launch(item)
+                let ok = await Self.offloaded { launcher.launch(item) }
                 // Record a successful open into Top Drawer's own recents history (the
                 // macDring source of a `.recents` tab), mirroring the macOS app's
                 // launch → RecentsStore.record path, and notify the affected tabs so a live
@@ -284,7 +286,7 @@ public actor TopDrawerService {
             ) { context in
                 let appID = context.arguments.first?.string ?? ""
                 let uris = context.arguments.dropFirst().first?.array?.compactMap(\.string) ?? []
-                return [.boolean(launcher.openWith(desktopID: appID, uris: uris))]
+                return [.boolean(await Self.offloaded { launcher.openWith(desktopID: appID, uris: uris) })]
             },
             DBusObjectServer.Method(
                 name: "Reveal",
@@ -292,7 +294,7 @@ public actor TopDrawerService {
                 outputArgs: [.init(name: "ok", type: "b")]
             ) { context in
                 let uri = context.arguments.first?.string ?? ""
-                return [.boolean(launcher.reveal(uri: uri))]
+                return [.boolean(await Self.offloaded { launcher.reveal(uri: uri) })]
             },
             DBusObjectServer.Method(
                 name: "GetRunningAppIDs",
@@ -316,6 +318,15 @@ public actor TopDrawerService {
                 return [.boolean(false)]
             },
         ]
+    }
+
+    /// Runs a synchronous, potentially blocking call off the D-Bus actor. The object
+    /// server is an actor, so a blocking subprocess inside a handler (the eject chain
+    /// alone can take ~20s) stalls every other method — Ping included — behind it.
+    /// `Task.detached` drops the work onto the global concurrency pool; the handler
+    /// still awaits the result before replying, so the method contract is unchanged.
+    private static func offloaded<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await Task.detached(priority: nil, operation: work).value
     }
 
     // MARK: - Bus name
