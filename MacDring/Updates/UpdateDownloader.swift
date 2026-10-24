@@ -64,7 +64,22 @@ struct UpdateDownloader {
         let destination = Self.uniqueDestination(in: downloads, fileName: asset.name, fileManager: fileManager)
         try fileManager.moveItem(at: tempURL, to: destination)
         shouldRemoveTemp = false
+        Self.applyQuarantine(to: destination)
         return destination
+    }
+
+    /// Tags the download with `com.apple.quarantine`, the same flag a browser
+    /// download carries — URLSession does not set it itself. Without it a tampered
+    /// release payload would open with no Gatekeeper evaluation; with it macOS
+    /// runs its notarization/signature check on first open, same as any browser
+    /// download. Failure is non-fatal: the file is still a normal download.
+    static func applyQuarantine(to url: URL, agentName: String = "TopDrawer") {
+        #if os(macOS)
+        // Flags 0x0081: quarantined + Gatekeeper "lethal" checks pending — the
+        // value browsers stamp on potentially executable payloads.
+        let value = "0081;\(String(UInt64(Date().timeIntervalSince1970), radix: 16));\(agentName);\(UUID().uuidString)"
+        setxattr(url.path, "com.apple.quarantine", value, value.utf8.count, 0, 0)
+        #endif
     }
 
     /// A non-colliding URL in `directory` for `fileName` (`Foo.dmg`, then `Foo-1.dmg`,

@@ -74,6 +74,28 @@ final class UpdateDownloaderTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: tempURL.path))
     }
 
+    #if os(macOS)
+    func testApplyQuarantineTagsFileForGatekeeper() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("UpdateDownloaderTests-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+
+        let file = dir.appendingPathComponent("Top Drawer.dmg")
+        try Data("payload".utf8).write(to: file)
+
+        UpdateDownloader.applyQuarantine(to: file)
+
+        var length = getxattr(file.path, "com.apple.quarantine", nil, 0, 0, 0)
+        XCTAssertGreaterThan(length, 0)
+        var buffer = [CChar](repeating: 0, count: length)
+        length = getxattr(file.path, "com.apple.quarantine", &buffer, buffer.count, 0, 0)
+        let value = String(decoding: buffer.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        XCTAssertTrue(value.hasPrefix("0081;"))
+        XCTAssertTrue(value.contains(";TopDrawer;"))
+    }
+    #endif
+
     func testUniqueDestinationAvoidsCollisions() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("UpdateDownloaderTests-\(UUID().uuidString)")
