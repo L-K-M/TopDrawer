@@ -6,6 +6,25 @@ import Foundation
 import Combine
 #endif
 
+/// Why a drawer is opening — drives whether it may take keyboard focus. A hover-
+/// or spring-load-opened drawer must stay pointer-only: it appears under the
+/// cursor while the user is doing something else (typing in another app, dragging
+/// a file), and taking key focus there would redirect their keystrokes.
+enum DrawerOpenReason {
+    case click
+    case hotkey
+    case hover
+    case springLoad
+
+    /// Whether this open may take key focus (and auto-focus the filter field).
+    var takesKeyFocus: Bool {
+        switch self {
+        case .click, .hotkey: return true
+        case .hover, .springLoad: return false
+        }
+    }
+}
+
 /// Observable content + callbacks for the shared drawer panel. The
 /// `TabController` swaps these values as different tabs' drawers are shown.
 final class DrawerModel: ObservableObject {
@@ -42,6 +61,11 @@ final class DrawerModel: ObservableObject {
         didSet { if openGroupID != oldValue { selectedItemID = nil } }
     }
     @Published var isDropTargeted: Bool = false
+    /// Whether the current open may take keyboard focus (set by
+    /// `DrawerWindowController.show` from the `DrawerOpenReason`): the filter field
+    /// auto-focuses only for a drawer the user deliberately opened (click/hotkey),
+    /// never for one that opened itself under the cursor (hover/spring-load).
+    var openTakesKeyFocus = true
     /// The displayed item or empty grid cell a file drag is currently hovering over.
     /// `nil` means the background (or no active file drag).
     @Published var fileDropTarget: ExternalDropTarget?

@@ -148,8 +148,14 @@ struct DrawerView: View {
         .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
         // Defer a tick so the field is in the responder chain before we focus it (the
-        // panel has just become key as it slides open).
-        .onAppear { DispatchQueue.main.async { focus = .search } }
+        // panel has just become key as it slides open). Type-to-find focus is taken
+        // only when the user deliberately opened this drawer (click/hotkey) — a
+        // hover- or spring-opened drawer must not pull keystrokes out of whatever
+        // app the user is typing in.
+        .onAppear {
+            guard model.openTakesKeyFocus else { return }
+            DispatchQueue.main.async { focus = .search }
+        }
     }
 
     /// The filtered results as a compact, keyboard-navigable list (Up/Down select,

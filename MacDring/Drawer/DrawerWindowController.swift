@@ -215,13 +215,15 @@ final class DrawerWindowController {
     /// Shows the drawer for `tab` over `duration` seconds (0 = instant) with a fade
     /// + small inward slide. The slide stays on the drawer's own screen, so it
     /// never bleeds onto an adjacent display at a shared edge.
-    func show(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen, duration: TimeInterval) {
+    func show(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen, duration: TimeInterval,
+              reason: DrawerOpenReason) {
         finishResize()
         presentationGeneration &+= 1
         let generation = presentationGeneration
         isOpening = duration > 0
         panel.level = preferences.tabWindowLevel.drawerWindowLevel
         apply(tab: tab)
+        model.openTakesKeyFocus = reason.takesKeyFocus
         model.clearSearch()   // each open starts unfiltered
         model.openGroupID = nil   // …and at the top level, not inside a group
         model.edge = edge
@@ -234,7 +236,7 @@ final class DrawerWindowController {
         if duration > 0 {
             panel.setFrame(EdgeLayout.nudgedDrawerFrame(edge: edge, openFrame: openFrame, by: Self.nudge), display: false)
             panel.alphaValue = 0
-            present(over: screen)
+            present(over: screen, reason: reason)
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = duration
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -248,7 +250,7 @@ final class DrawerWindowController {
         } else {
             panel.alphaValue = 1
             panel.setFrame(openFrame, display: true)
-            present(over: screen)
+            present(over: screen, reason: reason)
         }
         isVisible = true
     }
@@ -256,18 +258,18 @@ final class DrawerWindowController {
     /// Orders the drawer to the front of its level without activating the app, then
     /// takes key focus so its filter field, drag-to-reorder, and Esc work with no
     /// prior click — **except** when opening over another app's native full-screen
-    /// Space, where the drawer stays non-key. Becoming key there would bind this
+    /// Space, where the drawer stays non-key (becoming key there would bind this
     /// non-activating panel to our own (hidden) desktop Space and drop the drawer off
-    /// the visible full-screen Space, so it never appeared at all; ordering front
-    /// alone shows it just like the always-working tab pill. Over full-screen the
-    /// drawer is still mouse-interactive (the hosting view accepts the first mouse),
-    /// with keyboard focus arriving on the first click into it. The choice is made
+    /// the visible full-screen Space), and **except** for hover/spring-load opens,
+    /// which stay pointer-only (see `DrawerOpenReason`). Over full-screen the drawer
+    /// is still mouse-interactive (the hosting view accepts the first mouse), with
+    /// keyboard focus arriving on the first click into it. The choice is made
     /// once, at open — the only moment the stranding bites — and is not re-evaluated
     /// if the foreground Space or full-screen state changes while the drawer stays
     /// open. See `ForeignFullScreen`.
-    private func present(over screen: NSScreen) {
+    private func present(over screen: NSScreen, reason: DrawerOpenReason) {
         panel.orderFrontRegardless()
-        if !ForeignFullScreen.covers(screen) { panel.makeKey() }
+        if reason.takesKeyFocus, !ForeignFullScreen.covers(screen) { panel.makeKey() }
     }
 
     /// Refreshes content for the currently shown tab (e.g. after a drop / reorder)
