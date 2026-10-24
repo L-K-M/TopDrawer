@@ -51,7 +51,9 @@ struct DrawerView: View {
     private var renderedSlotCount: Int {
         DrawerMetrics.renderedGridSlotCount(rows: rows, columns: columns)
     }
-    private var cellHeight: CGFloat { CGFloat(preferences.iconSize) + 26 }
+    private var cellHeight: CGFloat {
+        DrawerMetrics.gridCellHeight(iconSize: CGFloat(preferences.iconSize), itemFontSize: model.appearance.itemFontSize)
+    }
     /// Only `.items` tabs support internal reorder / remove (and groups only ever live
     /// in an `.items` tab).
     private var editable: Bool { model.kind == .items }
@@ -60,12 +62,16 @@ struct DrawerView: View {
         // The two corners touching the screen edge stay sharp; the inward corners
         // are rounded — so the drawer reads as sliding flush out of the edge. An
         // inner corner the tab sits against is squared so the tab joins flush.
-        let shape = edgeRoundedRect(edge: model.edge, radius: CGFloat(preferences.cornerRadius),
+        let shape = edgeRoundedRect(edge: model.edge,
+                                    radius: model.appearance.cornerRadius(following: preferences.cornerRadius),
                                     squareStart: model.squareInnerStart, squareEnd: model.squareInnerEnd)
 
         VStack(alignment: .leading, spacing: 10) {
             header
             if let undo = model.undoToast { undoBanner(undo) }
+            if let error = model.actionError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
             if model.isSearchable { searchBar }
             bodyContent
         }
@@ -76,16 +82,17 @@ struct DrawerView: View {
                 VisualEffectBlur(material: .popover, blendingMode: .behindWindow)
                 // Paint an opaque backing over the blur to taste: nothing for
                 // Translucent, half for Frosted, fully Solid.
-                Color(nsColor: .windowBackgroundColor).opacity(preferences.drawerTranslucency.backingOpacity)
-                Color(hexString: model.colorHex).opacity(0.10)
+                Color(nsColor: .windowBackgroundColor)
+                    .opacity(model.appearance.translucency(following: preferences.drawerTranslucency).backingOpacity)
+                if model.appearance.preset != .highContrast { Color(hexString: model.colorHex).opacity(0.10) }
             }
         )
         .clipShape(shape)
         // Primary (not hardcoded white): the outline has to read over the light
         // appearance's Frosted/Solid backing too, where white-on-white vanishes.
         .overlay(
-            shape.stroke(Color.primary.opacity(model.isDropTargeted ? 0.85 : 0.14),
-                         lineWidth: model.isDropTargeted ? 2 : 1)
+            shape.stroke(Color.primary.opacity(model.appearance.preset == .highContrast ? 1 : (model.isDropTargeted ? 0.85 : 0.14)),
+                         lineWidth: model.isDropTargeted || model.appearance.preset == .highContrast ? 2 : 1)
         )
         .onHover { inside in
             if inside { model.onMouseEntered?() } else { model.onMouseExited?() }
@@ -97,6 +104,8 @@ struct DrawerView: View {
         .overlay(alignment: .topLeading) { draggedOverlay }
         .onPreferenceChange(SlotFramesKey.self) { slotFrames = $0 }
         .onPreferenceChange(ExternalDropTargetFramesKey.self) { model.externalDropTargetFrames = $0 }
+        .onChange(of: focus) { model.isEditingGroupName = $0 == .groupName }
+        .onDisappear { model.isEditingGroupName = false }
     }
 
     @ViewBuilder
@@ -280,7 +289,13 @@ struct DrawerView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 8) {
             if model.openGroup != nil { groupHeader }
-            ScrollView { itemsLayout }
+            ScrollViewReader { proxy in
+                ScrollView { itemsLayout }
+                    .onChange(of: model.selectedItemID) { id in
+                        guard let id else { return }
+                        withAnimation(.easeInOut(duration: 0.12)) { proxy.scrollTo(id, anchor: .center) }
+                    }
+            }
                 // Recreate the grid when the open group changes so the crossfade fires;
                 // `withAnimation` at the open/close call sites drives the transition.
                 .id(model.openGroupID)
@@ -307,6 +322,7 @@ struct DrawerView: View {
                 .multilineTextAlignment(.trailing)
                 .font(.headline)
                 .focused($focus, equals: .groupName)
+                .disabled(model.openGroup?.isLocked == true)
                 .onSubmit { commitGroupName() }
                 .frame(maxWidth: 180)
         }
@@ -365,6 +381,8 @@ struct DrawerView: View {
             .padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 8)
                 .fill(Color.primary.opacity(fileDropHere ? 0.12 : 0)))
+            .background(RoundedRectangle(cornerRadius: 8)
+                .fill(model.selectedItemID == item.id ? Color.accentColor.opacity(0.30) : .clear))
             .overlay {
                 if intoTarget {
                     RoundedRectangle(cornerRadius: 8)
@@ -373,12 +391,14 @@ struct DrawerView: View {
             }
             .background(slotFrameReporter(item.slot))
             .background(externalDropTargetFrameReporter(target))
+            .id(item.id)
     }
 
     private func gridSlot(_ slot: Int) -> some View {
         let item = model.visibleItem(atSlot: slot)
         let externalTarget = model.externalDropTarget(for: item, atLocalSlot: slot)
         let reorderHere = dropTargetSlot == slot && dragging?.slot != slot
+            && item.map({ !model.isEditingLocked($0) }) != false
         let fileDropHere = model.fileDropTarget == externalTarget
         // A file dragged onto a folder/app is a "file into / open with" target, not a
         // plain slot drop — give it a distinct ring so the difference is obvious.
@@ -389,7 +409,9 @@ struct DrawerView: View {
             // Primary adapts to light/dark; hardcoded white washed out over the
             // light appearance's Frosted/Solid backing.
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity((reorderHere || fileDropHere || groupHere) ? 0.12 : 0))
+                .fill(model.selectedItemID == item?.id && item != nil
+                      ? Color.accentColor.opacity(0.30)
+                      : Color.primary.opacity((reorderHere || fileDropHere || groupHere) ? 0.12 : 0))
             if let item {
                 inCellItem(item)
                     .scaleEffect(groupHere ? 1.12 : 1)
@@ -419,8 +441,10 @@ struct DrawerView: View {
     @ViewBuilder
     private func inCellItem(_ item: DrawerItem) -> some View {
         let cell = itemView(item).opacity(dragging?.id == item.id ? 0.25 : 1)
-        if editable {
+        if editable, !model.isEditingLocked(item) {
             cell.gesture(reorderGesture(item))
+        } else if editable {
+            cell
         } else {
             cell.onDrag { dragProvider(item) }
         }
@@ -473,10 +497,9 @@ struct DrawerView: View {
     /// otherwise it's a reorder. Inside an open group: a reorder within the sub-grid.
     private func finishDrag(dragged: DrawerItem, dropSlot: Int?) {
         let topLevel = model.openGroupID == nil
+        guard !model.isEditingLocked(dragged) else { return }
         if topLevel, let g = groupTargetSlot, g == dropSlot,
-           let target = model.visibleItem(atSlot: g), target.id != dragged.id,
-           DrawerGrouping.isGroupable(dragged),
-           target.kind == .group || DrawerGrouping.isGroupable(target) {
+           let target = model.visibleItem(atSlot: g), DrawerGrouping.canGroup(dragged, onto: target) {
             model.onGroupItems?(dragged.id, target.id)
             return
         }
@@ -495,10 +518,9 @@ struct DrawerView: View {
     /// slot, and never while dragging a group (groups don't nest). Moving to a new slot
     /// resets the countdown, so brushing past an item to reorder doesn't group.
     private func updateDwell(target: Int?, dragged: DrawerItem) {
-        guard model.openGroupID == nil, DrawerGrouping.isGroupable(dragged),
+        guard model.openGroupID == nil,
               let target, let occupant = model.visibleItem(atSlot: target),
-              occupant.id != dragged.id,
-              occupant.kind == .group || DrawerGrouping.isGroupable(occupant) else {
+              DrawerGrouping.canGroup(dragged, onto: occupant) else {
             cancelDwell()
             return
         }
@@ -542,6 +564,7 @@ struct DrawerView: View {
             item: item,
             iconSize: CGFloat(preferences.iconSize),
             layout: layout ?? model.layout,
+            appearance: model.appearance,
             listColumns: columns,
             launchOnSingleClick: preferences.launchOnSingleClick,
             onLaunch: {
@@ -552,15 +575,23 @@ struct DrawerView: View {
                 }
             },
             onReveal: { model.onRevealItem?(item) },
-            onRemove: editable ? { model.onRemoveItem?(item) } : nil,
+            onRemove: editable && !model.isRemovalLocked(item) ? { model.onRemoveItem?(item) } : nil,
             onRename: editable ? { model.onRenameItem?(item) } : nil,
             onChangeIcon: editable ? { model.onChangeItemIcon?(item) } : nil,
             onResetIcon: editable ? { model.onResetItemIcon?(item) } : nil,
             onEmptyTrash: item.kind == .trash ? { model.onEmptyTrash?() } : nil,
+            onPreview: item.kind == .file || item.kind == .folder ? { model.onPreviewItem?(item) } : nil,
+            onBrowseFolder: item.kind == .folder ? { model.onBrowseFolder?(item) } : nil,
+            onPreviewWebsite: item.kind == .url && item.url.map(ItemPreviewPolicy.isWebsite) == true
+                ? { model.onPreviewWebsite?(item) } : nil,
+            onLaunchExternally: { model.onLaunchExternally?(item) },
+            onOpenWith: item.kind == .file ? { model.onOpenWith?(item, $0) } : nil,
+            onToggleLock: editable && model.openGroup?.isLocked != true ? { model.onToggleItemLock?(item) } : nil,
+            editingLocked: model.isEditingLocked(item),
             iconNonce: model.iconNonce,
             onEject: item.kind == .disk ? { model.onEjectItem?(item) } : nil,
             onCustomizeIcon: { model.onCustomizeItemIcon?(item) },   // any item, any tab kind
-            onUngroup: (editable && model.openGroupID != nil && !item.isGroup)
+            onUngroup: (editable && model.openGroupID != nil && !item.isGroup && !model.isRemovalLocked(item))
                 ? {
                     if let gid = model.openGroupID {
                         withAnimation(.easeInOut(duration: 0.2)) { model.onRemoveFromGroup?(item.id, gid) }
@@ -571,6 +602,7 @@ struct DrawerView: View {
             isEjecting: model.ejectingItemIDs.contains(item.id),
             sparkle: model.sparklingItemIDs.contains(item.id)
         )
+        .id(item.id)
     }
 
     // MARK: Empty state

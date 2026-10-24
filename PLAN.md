@@ -652,6 +652,24 @@ MacDring/
 > - **Locked tabs** — a `locked` tab ignores drag-to-reposition. The **open drawer's
 >   header** shows a **lock toggle** and a **gear** (Configure Tab…); the
 >   always-visible pill stays uncluttered.
+> - **Drawer interactions:** unfiltered grid/list arrow navigation, Return to open,
+>   Space for Quick Look, and Command-[ / Command-] to switch available tabs on the
+>   same display edge. Optional wheel/swipe switching is confined to tab pills.
+>   All key handling stays local; panels remain nonactivating and edge-anchored.
+> - **Item actions:** folder pop-ups share `FolderLister`'s bounded listing and
+>   surface read failures. Quick Look uses `QLPreviewView`; website previews use
+>   a nonpersistent `WKWebView`, with HTTP(S)-only navigation and no downloads.
+>   Preview panels are transient children, not persisted floating docks. Folder
+>   and URL clicks retain Finder/browser defaults unless changed per tab.
+>   Open With enumeration and launch completion live in `ItemActionService`.
+> - **Item locks and presentation:** `DrawerItem.isLocked` protects launcher
+>   mutations, including indirect moves through groups. `Tab.lockNewItems` applies
+>   only to newly added entries. Locked folder/app targets still accept file drops.
+>   `Tab.appearance` holds leniently decoded typography, title/extension controls,
+>   and visual presets; legacy tabs follow global appearance settings.
+>   English-only and edge-only placement are deliberate product constraints.
+>   Native Shortcuts selection is backlog-only. See
+>   [drawer interactions](docs/drawer-interactions.md) for usage and GUI checks.
 > - **Glyph picker** — SF Symbols are chosen from a **searchable** visual popover
 >   grid (`SymbolPickerView`); the Letters mode accepts **emoji** (with an Emoji &
 >   Symbols palette button).

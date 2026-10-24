@@ -44,6 +44,12 @@ final class TabStore: ObservableObject {
         var isEmpty: Bool { folders.isEmpty && targets.isEmpty && icons.isEmpty }
     }
 
+    /// Lock intent for the explicit item-lock APIs — an enum so calls read
+    /// `setItemLock(.locked, …)` rather than passing an ambiguous Bool.
+    enum ItemLockState {
+        case locked, unlocked
+    }
+
     // MARK: Init
 
     /// - Parameters:
@@ -160,7 +166,12 @@ final class TabStore: ObservableObject {
     }
 
     func removeTab(id: UUID) {
-        mutate { $0.tabs.removeAll { $0.id == id } }
+        mutate {
+            guard let i = $0.tabs.firstIndex(where: { $0.id == id }),
+                  // Removing the tab destroys every item it holds — locks included.
+                  !$0.tabs[i].items.contains(where: { $0.containsLockedItems }) else { return }
+            $0.tabs.remove(at: i)
+        }
     }
 
     /// Mutates the current value of a tab in place. Reading the tab inside the
@@ -322,6 +333,10 @@ final class TabStore: ObservableObject {
                 resultID = existing.id   // already present (top level or inside a group) — reuse it, don't duplicate
                 return
             }
+            var item = item
+            // `lockNewItems` applies to new entries only — the dedup hit above has
+            // already returned, leaving the existing item's lock state untouched.
+            if $0.tabs[i].lockNewItems { item.isLocked = true }
             $0.tabs[i].items.append(item)
             $0.tabs[i].items = $0.tabs[i].items.assigningMissingSlots()   // fill the new item's slot
             resultID = item.id
@@ -342,6 +357,7 @@ final class TabStore: ObservableObject {
         var resultIDs: [UUID] = []
         var seenIDs = Set<UUID>()
         var addedItem = false
+        var newIDs = Set<UUID>()
 
         for item in items {
             let resultID: UUID
@@ -351,9 +367,14 @@ final class TabStore: ObservableObject {
                }) {
                 resultID = existing.id
             } else {
+                var item = item
+                // `lockNewItems` locks new entries only — a deduplicated existing
+                // item keeps its own lock state.
+                if tab.lockNewItems { item.isLocked = true }
                 tab.items.append(item)
                 resultID = item.id
                 addedItem = true
+                newIDs.insert(item.id)
             }
             if seenIDs.insert(resultID).inserted { resultIDs.append(resultID) }
         }
@@ -363,7 +384,15 @@ final class TabStore: ObservableObject {
         var changed = addedItem
         if let start {
             let topLevelIDs = Set(tab.items.map(\.id))
-            let placingIDs = resultIDs.filter { topLevelIDs.contains($0) }
+            let placingIDs = resultIDs.filter { id in
+                guard topLevelIDs.contains(id) else { return false }
+                // First placement isn't a move: a newly added entry may take its
+                // requested slot even while locked. A deduplicated existing entry
+                // is reused but never repositioned while it (or a child inside it)
+                // is locked — its slot stays a blocked occupant for the run below.
+                return newIDs.contains(id)
+                    || !(tab.items.first { $0.id == id }?.containsLockedItems ?? true)
+            }
             let moving = Set(placingIDs)
             var blocked = Set(tab.items.filter { !moving.contains($0.id) }.map(\.slot))
             let maximum = PersistedLayoutBounds.maximumSlotOrOrder
@@ -401,9 +430,11 @@ final class TabStore: ObservableObject {
         guard !ids.isEmpty else { return }
         mutate { document in
             guard let ti = document.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            // Locked entries never join a bulk move: they keep their slots and
+            // stay occupied blockers for the run that does place.
             let itemIndices = ids.compactMap { id in
                 document.tabs[ti].items.firstIndex(where: { $0.id == id })
-            }
+            }.filter { !document.tabs[ti].items[$0].containsLockedItems }
             guard !itemIndices.isEmpty else { return }
             let moving = Set(itemIndices.map { document.tabs[ti].items[$0].id })
             var blocked = Set(document.tabs[ti].items.filter { !moving.contains($0.id) }.map(\.slot))
@@ -425,17 +456,26 @@ final class TabStore: ObservableObject {
 
     func removeItem(id itemID: UUID, fromTab tabID: UUID) {
         mutate {
-            if let i = $0.tabs.firstIndex(where: { $0.id == tabID }) {
-                $0.tabs[i].items = DrawerGrouping.removingItem($0.tabs[i].items, id: itemID)
-            }
+            guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  !Self.editingLocked(itemID, in: $0.tabs[i].items) else { return }
+            // Removing an unlocked group child can still be denied: if it drops
+            // the group below the dissolve threshold, the surviving children are
+            // ejected back to the top level — an indirect move while one is locked.
+            if let group = $0.tabs[i].items.first(where: {
+                $0.kind == .group && $0.children.contains(where: { $0.id == itemID })
+            }), Self.dissolutionWouldMoveLockedItems(group, removing: itemID) { return }
+            $0.tabs[i].items = DrawerGrouping.removingItem($0.tabs[i].items, id: itemID)
         }
     }
 
     func updateItem(_ item: DrawerItem, inTab tabID: UUID) {
         mutate {
-            if let i = $0.tabs.firstIndex(where: { $0.id == tabID }) {
-                $0.tabs[i].items = DrawerGrouping.updatingItem($0.tabs[i].items, with: item)
-            }
+            guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  !Self.editingLocked(item.id, in: $0.tabs[i].items) else { return }
+            // Lock state changes only through setItemLock/setAllItemLocks: an item
+            // update must never smuggle an unlock past them (or flip one on).
+            let item = Self.restoringPersistedLocks(item, in: $0.tabs[i].items)
+            $0.tabs[i].items = DrawerGrouping.updatingItem($0.tabs[i].items, with: item)
         }
     }
 
@@ -443,7 +483,8 @@ final class TabStore: ObservableObject {
     /// there is only one custom icon source. Passing `nil` clears both overrides.
     func setCustomIconBookmark(_ bookmark: Data?, forItem itemID: UUID, inTab tabID: UUID) {
         mutate {
-            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  !Self.editingLocked(itemID, in: $0.tabs[ti].items) else { return }
             Self.mutateItem(itemID, in: &$0.tabs[ti].items) {
                 $0.customIconBookmark = bookmark
                 $0.iconStyle = nil
@@ -455,7 +496,8 @@ final class TabStore: ObservableObject {
     /// bookmark. A `nil` style is the generated editor's "Use Default" result.
     func setIconStyle(_ style: IconStyle?, forItem itemID: UUID, inTab tabID: UUID) {
         mutate {
-            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  !Self.editingLocked(itemID, in: $0.tabs[ti].items) else { return }
             Self.mutateItem(itemID, in: &$0.tabs[ti].items) {
                 $0.iconStyle = style
                 $0.customIconBookmark = nil
@@ -499,10 +541,15 @@ final class TabStore: ObservableObject {
         guard PersistedLayoutBounds.normalizedSlot(slot) == slot else { return }
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
-                  let ii = $0.tabs[ti].items.firstIndex(where: { $0.id == itemID }) else { return }
+                  let ii = $0.tabs[ti].items.firstIndex(where: { $0.id == itemID }),
+                  // A locked item can't move — and a group holding a locked child
+                  // can't either: moving the container would move the child.
+                  !$0.tabs[ti].items[ii].containsLockedItems else { return }
             let oldSlot = $0.tabs[ti].items[ii].slot
             guard oldSlot != slot else { return }
             if let occupant = $0.tabs[ti].items.firstIndex(where: { $0.slot == slot }) {
+                // The swap moves the occupant too — denied while it's protected.
+                guard !$0.tabs[ti].items[occupant].containsLockedItems else { return }
                 $0.tabs[ti].items[occupant].slot = oldSlot
             }
             $0.tabs[ti].items[ii].slot = slot
@@ -518,7 +565,7 @@ final class TabStore: ObservableObject {
     func groupItems(draggedID: UUID, ontoTargetID targetID: UUID, inTab tabID: UUID) {
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
-                  let grouped = DrawerGrouping.grouped($0.tabs[ti].items,
+                   let grouped = DrawerGrouping.grouped($0.tabs[ti].items,
                                                        draggedID: draggedID, ontoTargetID: targetID) else { return }
             $0.tabs[ti].items = grouped
         }
@@ -528,7 +575,15 @@ final class TabStore: ObservableObject {
     /// group if it drops below two items.
     func removeFromGroup(childID: UUID, groupID: UUID, inTab tabID: UUID) {
         mutate {
-            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  let group = $0.tabs[ti].items.first(where: { $0.id == groupID && $0.kind == .group }),
+                  // A locked group protects every child edit; a locked child can't
+                  // be popped (that moves it); and a pop that dissolves the group
+                  // can't eject a locked survivor.
+                  !group.isLocked,
+                  let child = group.children.first(where: { $0.id == childID }),
+                  !child.isLocked,
+                  !Self.dissolutionWouldMoveLockedItems(group, removing: childID) else { return }
             $0.tabs[ti].items = DrawerGrouping.removingFromGroup($0.tabs[ti].items,
                                                                  childID: childID, groupID: groupID)
         }
@@ -537,7 +592,9 @@ final class TabStore: ObservableObject {
     /// Renames group `groupID` (the inline field in the open-group header).
     func renameGroup(groupID: UUID, to name: String, inTab tabID: UUID) {
         mutate {
-            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
+                  let group = $0.tabs[ti].items.first(where: { $0.id == groupID && $0.kind == .group }),
+                  !group.isLocked else { return }
             $0.tabs[ti].items = DrawerGrouping.renaming($0.tabs[ti].items, groupID: groupID, to: name)
         }
     }
@@ -549,10 +606,15 @@ final class TabStore: ObservableObject {
         mutate {
             guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }),
                   let gi = $0.tabs[ti].items.firstIndex(where: { $0.id == groupID && $0.kind == .group }),
-                  let ii = $0.tabs[ti].items[gi].children.firstIndex(where: { $0.id == itemID }) else { return }
+                  // The group's lock covers its children; a locked child can't move.
+                  !$0.tabs[ti].items[gi].isLocked,
+                  let ii = $0.tabs[ti].items[gi].children.firstIndex(where: { $0.id == itemID }),
+                  !$0.tabs[ti].items[gi].children[ii].isLocked else { return }
             let oldSlot = $0.tabs[ti].items[gi].children[ii].slot
             guard oldSlot != slot else { return }
             if let occupant = $0.tabs[ti].items[gi].children.firstIndex(where: { $0.slot == slot }) {
+                // The swap would move the occupant child too — denied while locked.
+                guard !$0.tabs[ti].items[gi].children[occupant].isLocked else { return }
                 $0.tabs[ti].items[gi].children[occupant].slot = oldSlot
             }
             $0.tabs[ti].items[gi].children[ii].slot = slot
@@ -597,6 +659,101 @@ final class TabStore: ObservableObject {
             guard let i = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
             $0.tabs[i].notesSize = size
         }
+    }
+
+    // MARK: Item locks
+
+    /// Whether edits to `id` are currently locked out — the item's own lock, a
+    /// locked owning group, or (for a group) a locked child whose container can't
+    /// move or dissolve without disturbing it. Drives UI/controller editing checks.
+    func isItemEditingLocked(_ id: UUID, inTab tabID: UUID) -> Bool {
+        guard let tab = tab(id: tabID) else { return false }
+        return Self.editingLocked(id, in: tab.items)
+    }
+
+    /// Explicitly locks or unlocks one item — the only per-item way lock state can
+    /// change (`updateItem` preserves the persisted lock). Locking a group covers
+    /// its children through `editingLocked` without rewriting their own flags, so
+    /// unlocking the group later loses nothing. Unlocking a child *inside* a locked
+    /// group is denied until the group is unlocked — the group's lock owns its
+    /// children, so a lone child unlock would be a half-state. `setAllItemLocks`
+    /// clears a group and its children together.
+    func setItemLock(_ state: ItemLockState, forItem id: UUID, inTab tabID: UUID) {
+        guard state == .locked
+                || !Self.insideLockedGroup(id, in: tab(id: tabID)?.items ?? []) else { return }
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            Self.mutateItem(id, in: &$0.tabs[ti].items) { $0.isLocked = state == .locked }
+        }
+    }
+
+    /// Explicitly locks or unlocks every item in the tab, groups and their children
+    /// included — the one call that can clear a locked group and its children in a
+    /// single pass.
+    func setAllItemLocks(_ state: ItemLockState, inTab tabID: UUID) {
+        let locked = state == .locked
+        mutate {
+            guard let ti = $0.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            for i in $0.tabs[ti].items.indices {
+                $0.tabs[ti].items[i].isLocked = locked
+                for j in $0.tabs[ti].items[i].children.indices {
+                    $0.tabs[ti].items[i].children[j].isLocked = locked
+                }
+            }
+        }
+    }
+
+    /// Whether a lock protects `itemID` from editing inside `items`: the item's own
+    /// lock; a locked group's ownership when it's a child; or, for a top-level
+    /// group, a locked child within — moving or deleting the container would move
+    /// or destroy that child.
+    private static func editingLocked(_ itemID: UUID, in items: [DrawerItem]) -> Bool {
+        if let item = items.first(where: { $0.id == itemID }) {
+            return item.containsLockedItems
+        }
+        for group in items where group.kind == .group {
+            if let child = group.children.first(where: { $0.id == itemID }) {
+                return group.isLocked || child.isLocked
+            }
+        }
+        return false
+    }
+
+    /// Whether `itemID` sits inside a locked group.
+    private static func insideLockedGroup(_ itemID: UUID, in items: [DrawerItem]) -> Bool {
+        items.contains {
+            $0.kind == .group && $0.isLocked && $0.children.contains(where: { $0.id == itemID })
+        }
+    }
+
+    /// Whether removing `childID` from `group` drops it below the dissolve
+    /// threshold while a locked child survives: dissolving ejects the survivors to
+    /// the top level — an indirect move a lock must block.
+    private static func dissolutionWouldMoveLockedItems(_ group: DrawerItem, removing childID: UUID) -> Bool {
+        let survivors = group.children.filter { $0.id != childID }
+        return survivors.count < DrawerGrouping.dissolveThreshold
+            && survivors.contains(where: { $0.isLocked })
+    }
+
+    /// Finds an item at the top level or one level inside a group (groups don't
+    /// nest).
+    private static func item(_ itemID: UUID, in items: [DrawerItem]) -> DrawerItem? {
+        if let item = items.first(where: { $0.id == itemID }) { return item }
+        for group in items where group.kind == .group {
+            if let child = group.children.first(where: { $0.id == itemID }) { return child }
+        }
+        return nil
+    }
+
+    /// Copies each persisted `isLocked` back onto an incoming item update (matching
+    /// by id, one level into groups) so `updateItem` can't change a lock either way.
+    private static func restoringPersistedLocks(_ item: DrawerItem, in items: [DrawerItem]) -> DrawerItem {
+        var item = item
+        if let persisted = Self.item(item.id, in: items) {
+            item.isLocked = persisted.isLocked
+        }
+        item.children = item.children.map { Self.restoringPersistedLocks($0, in: items) }
+        return item
     }
 
     // MARK: Persistence

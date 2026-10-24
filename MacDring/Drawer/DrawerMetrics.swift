@@ -29,6 +29,17 @@ enum DrawerMetrics {
     /// date. Above it, the configured columns drive the width (and which metadata
     /// columns fit — see `ItemView`).
     static let listMinWidth: CGFloat = 220
+    static let tabLabelCrossPadding: CGFloat = 4
+
+    static func tabThickness(configured: CGFloat, style: TabStyle, labelLineHeight: CGFloat?) -> CGFloat {
+        let base = configured * style.thicknessScale
+        guard style == .modern, let labelLineHeight else { return base }
+        return max(base, labelLineHeight.rounded(.up) + 2 * tabLabelCrossPadding)
+    }
+
+    static func gridCellHeight(iconSize: CGFloat, itemFontSize: Double = 12) -> CGFloat {
+        iconSize + CGFloat(max(26, itemFontSize + 14))
+    }
 
     /// A saved notes size wins over the legacy grid-derived initial size.
     /// Screen clamping is transient: a smaller display must not erase the saved size.
@@ -91,6 +102,7 @@ enum DrawerMetrics {
                             iconSize: CGFloat,
                             columns: Int,
                             searchable: Bool = false,
+                            itemFontSize: Double = 12,
                             in visibleFrame: CGRect) -> CGSize {
         let configuredRows = PersistedLayoutBounds.clampedGridRows(configuredRows)
         let columns = PersistedLayoutBounds.clampedGridColumns(columns)
@@ -100,7 +112,7 @@ enum DrawerMetrics {
             let cols = columns
             let rows = gridRowCount(configuredRows: configuredRows, maxSlot: maxSlot, itemCount: itemCount, columns: cols)
             let cellWidth = iconSize + 28
-            let cellHeight = iconSize + 26
+            let cellHeight = gridCellHeight(iconSize: iconSize, itemFontSize: itemFontSize)
             let width = padding + CGFloat(cols) * cellWidth + CGFloat(cols - 1) * gridInterColumn
             let height = padding + headerHeight
                 + CGFloat(rows) * cellHeight + CGFloat(max(rows - 1, 0)) * gridSpacing
@@ -110,7 +122,7 @@ enum DrawerMetrics {
             // Rows / Columns steppers drive the drawer directly. It shows that many
             // (small) rows' worth of height and scrolls past it; it never balloons to
             // fit every item, nor shrinks to hide the configured size for a few items.
-            let gridCellHeight = iconSize + 26
+            let gridCellHeight = Self.gridCellHeight(iconSize: iconSize, itemFontSize: itemFontSize)
             let configuredCellsHeight = CGFloat(configuredRows) * gridCellHeight
                 + CGFloat(max(configuredRows - 1, 0)) * gridSpacing
             let rows = max(1, Int((configuredCellsHeight / listRowHeight).rounded()))   // visible rows; scrolls beyond

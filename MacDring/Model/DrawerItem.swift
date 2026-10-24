@@ -34,6 +34,11 @@ struct DrawerItem: Codable, Identifiable, Equatable {
     /// items it's filled in from the owning `Tab.iconStyles` at list time.
     var iconStyle: IconStyle?
 
+    /// Protects the launcher entry, not the file it points to.
+    var isLocked: Bool
+
+    var containsLockedItems: Bool { isLocked || children.contains(where: \.isLocked) }
+
     /// The item's position in the drawer's grid (row-major linear index). Lets
     /// items be arranged freely with gaps. `-1` means "unassigned" — `TabStore`
     /// fills it with the lowest free bounded slot when available (used for new items
@@ -65,6 +70,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
          url: URL? = nil,
          customIconBookmark: Data? = nil,
          iconStyle: IconStyle? = nil,
+         isLocked: Bool = false,
          slot: Int = -1,
          date: Date? = nil,
          children: [DrawerItem] = []) {
@@ -75,6 +81,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         self.url = url
         self.customIconBookmark = customIconBookmark
         self.iconStyle = iconStyle
+        self.isLocked = isLocked
         self.slot = PersistedLayoutBounds.normalizedSlot(slot)
         self.date = date
         self.children = children
@@ -95,6 +102,7 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         displayName = name.isEmpty ? (url?.lastPathComponent ?? "Item") : name
         customIconBookmark = try c.decodeIfPresent(Data.self, forKey: .customIconBookmark)
         iconStyle = c.decodeLenient(IconStyle?.self, forKey: .iconStyle, fallback: nil)
+        isLocked = c.decodeLenient(Bool.self, forKey: .isLocked, fallback: false)
         slot = PersistedLayoutBounds.normalizedSlot(try c.decodeIfPresent(Int.self, forKey: .slot) ?? -1)
         date = try c.decodeIfPresent(Date.self, forKey: .date)
         children = c.decodeLenient([FailableDrawerItem].self, forKey: .children, fallback: [])
@@ -114,13 +122,14 @@ struct DrawerItem: Codable, Identifiable, Equatable {
         try c.encodeIfPresent(url, forKey: .url)
         try c.encodeIfPresent(customIconBookmark, forKey: .customIconBookmark)
         try c.encodeIfPresent(iconStyle, forKey: .iconStyle)
+        if isLocked { try c.encode(isLocked, forKey: .isLocked) }
         try c.encode(slot, forKey: .slot)
         try c.encodeIfPresent(date, forKey: .date)
         if !children.isEmpty { try c.encode(children, forKey: .children) }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, displayName, bookmark, url, customIconBookmark, iconStyle, slot, date, children
+        case id, kind, displayName, bookmark, url, customIconBookmark, iconStyle, isLocked, slot, date, children
     }
 }
 

@@ -35,14 +35,19 @@ enum FolderLister {
     /// than `limit` (so the drawer can show a "300+" truncation badge).
     static func listing(of tab: Tab) -> (items: [DrawerItem], truncated: Bool) {
         guard tab.kind == .folder, let url = resolveFolder(tab) else { return ([], false) }
+        return (try? listing(at: url, sort: tab.folderSort, showsHidden: tab.folderShowsHidden)) ?? ([], false)
+    }
+
+    /// Pop-up browsers use the same bounded listing but surface unreadable folders.
+    static func listing(at url: URL, sort: FolderSort = .name,
+                        showsHidden: Bool = false) throws -> (items: [DrawerItem], truncated: Bool) {
         let fileManager = FileManager.default
         var options: FileManager.DirectoryEnumerationOptions = []
-        if !tab.folderShowsHidden { options.insert(.skipsHiddenFiles) }
+        if !showsHidden { options.insert(.skipsHiddenFiles) }
         let keys: [URLResourceKey] = [.isDirectoryKey, .contentModificationDateKey]
-        guard let urls = try? fileManager.contentsOfDirectory(
-            at: url, includingPropertiesForKeys: keys, options: options) else { return ([], false) }
+        let urls = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: options)
 
-        let entries = sorted(urls.map(entry(for:)), by: tab.folderSort)
+        let entries = sorted(urls.map(entry(for:)), by: sort)
         let items = entries.prefix(limit).enumerated().map { index, entry -> DrawerItem in
             // Transient items skip the per-file bookmark — folder items are never
             // persisted and every read path falls back to `url`. See BACKLOG.md's legacy ID index (I1).

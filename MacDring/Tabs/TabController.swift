@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import UniformTypeIdentifiers
+import Carbon.HIToolbox
 
 /// The orchestrator. Reconciles the stored tabs against the live display set
 /// into on-screen tab windows, owns the shared drawer, and routes every
@@ -13,6 +14,9 @@ final class TabController {
     private let drawer: DrawerWindowController
     private let clipboardHistory: ClipboardHistoryStore
     private lazy var clipboardMonitor = ClipboardMonitor(history: clipboardHistory)
+    private let previewController = ItemPreviewController()
+    private let folderBrowser = FolderBrowserController()
+    private var previewIsOpen = false
 
     /// Presents the generated-icon editor (built lazily on first use).
     private lazy var iconEditor = IconEditorWindowController()
@@ -409,10 +413,25 @@ final class TabController {
         wc.onDragWillBegin = { [weak self] in self?.beginDrag(id) }
         wc.onDragChanged = { [weak self] in self?.previewDrag(id) }
         wc.onDragEnded = { [weak self] in self?.endDrag(id) }
+        wc.onCycle = { [weak self] direction in self?.cycleTab(from: id, direction: direction) }
         wc.model.onRequestSettings = { [weak self] in self?.onOpenSettings?(id) }
         wc.model.onDelete = { [weak self] in self?.store.removeTab(id: id) }
         wc.model.onMoveToEdge = { [weak self] edge in self?.moveTab(id, toEdge: edge) }
         return wc
+    }
+
+    private func cycleTab(from id: UUID, direction: TabCycling.Direction) {
+        let visibleTabs = store.tabs.compactMap { tab -> Tab? in
+            guard tabWindows[tab.id]?.isShown == true, let screen = resolvedScreen(for: tab),
+                  let display = registry.uuid(for: screen) else { return nil }
+            var displayed = tab
+            displayed.anchor.displayUUID = display
+            return displayed
+        }
+        let available = Set(visibleTabs.map(\.id))
+        guard let next = TabCycling.adjacentID(to: id, direction: direction,
+                                             in: visibleTabs, availableIDs: available) else { return }
+        openDrawer(next)
     }
 
     /// Re-anchors a tab to a different edge (pill context menu), keeping its display
@@ -448,6 +467,9 @@ final class TabController {
               // keeps its old screen reference, so a hotkey/spring-open must not slide a
               // drawer out onto a detached display. See BACKLOG.md's legacy ID index (B3).
               let screen = resolvedScreen(for: tab) else { return }
+        previewController.close()
+        previewIsOpen = false
+        folderBrowser.close()
         drawerInteractionGeneration &+= 1
         if let prev = openTabID, prev != id {
             tabWindows[prev]?.setOpen(false)
@@ -478,8 +500,11 @@ final class TabController {
     }
 
     private func closeDrawer() {
-        cancelHoverClose()
         cancelSpringOpen()
+        previewController.close()
+        previewIsOpen = false
+        folderBrowser.close()
+        cancelHoverClose()
         if openTabID != nil { drawerInteractionGeneration &+= 1 }
         let duration = animationDuration
         if let id = openTabID, let wc = tabWindows[id] {
@@ -547,7 +572,7 @@ final class TabController {
 
     private func scheduleHoverClose() {
         cancelHoverClose()
-        guard !drawer.isResizing else { return }
+        guard !drawer.isResizing, !previewIsOpen, !folderBrowser.isShown else { return }
         let work = DispatchWorkItem { [weak self] in self?.closeDrawer() }
         pendingHoverClose = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
@@ -556,6 +581,13 @@ final class TabController {
     private func cancelHoverClose() {
         pendingHoverClose?.cancel()
         pendingHoverClose = nil
+    }
+
+    private func resumeHoverClose() {
+        guard let id = openTabID, let tab = store.tab(id: id), let wc = tabWindows[id],
+              effectiveBehavior(tab).openOnHover else { return }
+        let mouse = NSEvent.mouseLocation
+        if !drawer.frame.contains(mouse), !wc.frame.contains(mouse) { scheduleHoverClose() }
     }
 
     // MARK: Auto-hide / auto-fade (Dock-style concealment)
@@ -1016,6 +1048,12 @@ final class TabController {
     // MARK: Drawer wiring & launching
 
     private func wireDrawer() {
+        previewController.onClose = { [weak self] in
+            guard let self else { return }
+            self.previewIsOpen = false
+            self.resumeHoverClose()
+        }
+        folderBrowser.onClose = { [weak self] in self?.resumeHoverClose() }
         drawer.onFrameChanged = { [weak self] frame in
             guard let self, let id = self.openTabID, let wc = self.tabWindows[id],
                   let tab = self.store.tab(id: id) else { return }
@@ -1032,8 +1070,18 @@ final class TabController {
             if !self.drawer.frame.contains(mouse), !wc.frame.contains(mouse) { self.scheduleHoverClose() }
         }
         drawer.model.onLaunch = { [weak self] item in self?.launch(item) }
-        drawer.model.onRemoveItem = { [weak self] item in
+        drawer.model.onLaunchExternally = { [weak self] item in self?.launchExternally(item) }
+        drawer.model.onPreviewItem = { [weak self] item in self?.previewItem(item) }
+        drawer.model.onBrowseFolder = { [weak self] item in self?.browseFolder(item) }
+        drawer.model.onPreviewWebsite = { [weak self] item in self?.previewWebsite(item) }
+        drawer.model.onOpenWith = { [weak self] item, application in self?.openWith(item, application: application) }
+        drawer.model.onToggleItemLock = { [weak self] item in
             guard let self, let id = self.openTabID else { return }
+            self.store.setItemLock(item.isLocked ? .unlocked : .locked, forItem: item.id, inTab: id)
+        }
+        drawer.model.onRemoveItem = { [weak self] item in
+            guard let self, let id = self.openTabID,
+                  !self.drawer.model.isRemovalLocked(item) else { return }
             // The classic poof, same as drop-on-Trash — physical feedback that the
             // item left the grid (only the launcher entry goes; the file stays put).
             NSAnimationEffect.poof.show(centeredAt: NSEvent.mouseLocation,
@@ -1139,32 +1187,119 @@ final class TabController {
     }
 
     private func launch(_ item: DrawerItem) {
+        guard let tabID = openTabID, let tab = store.tab(id: tabID) else { return }
+        if item.kind == .folder, tab.behavior.folderOpening == .popover {
+            browseFolder(item)
+            return
+        }
+        if item.kind == .url, tab.behavior.websiteOpening == .popover,
+           let url = item.url, ItemPreviewPolicy.isWebsite(url) {
+            previewWebsite(item)
+            return
+        }
+        launchExternally(item)
+    }
+
+    private func browseFolder(_ item: DrawerItem) {
+        guard item.kind == .folder, openTabID != nil, let session = drawerSessionID else { return }
+        activeLaunchRequestID = nil
+        previewController.close()
+        previewIsOpen = false
+        cancelHoverClose()
+        drawer.browseFolder(item, using: folderBrowser,
+            onLaunch: { [weak self] item in
+                guard self?.drawerSessionID == session else { return }
+                self?.launchExternally(item)
+            },
+            onReveal: { [weak self] item in
+                guard self?.drawerSessionID == session else { return }
+                ItemLauncher.revealInFinder(item)
+            },
+            onPreview: { [weak self] item in
+                guard self?.drawerSessionID == session else { return }
+                self?.previewItem(item)
+            })
+    }
+
+    private func previewItem(_ item: DrawerItem) {
+        guard openTabID != nil else { return }
+        activeLaunchRequestID = nil
+        guard ItemPreviewPolicy.canPreview(item),
+              let url = BookmarkResolver.url(for: item) else {
+            drawer.model.actionError = "This item is unavailable for Quick Look."
+            return
+        }
+        folderBrowser.close()
+        cancelHoverClose()
+        previewIsOpen = previewController.showFile(url, relativeTo: drawer.window)
+        wirePreviewExternalOpen(for: item)
+        drawer.model.actionError = previewIsOpen ? nil : "Couldn't preview this file."
+        if !previewIsOpen { resumeHoverClose() }
+    }
+
+    private func previewWebsite(_ item: DrawerItem) {
+        guard openTabID != nil, let url = item.url, ItemPreviewPolicy.isWebsite(url) else { return }
+        activeLaunchRequestID = nil
+        folderBrowser.close()
+        cancelHoverClose()
+        previewIsOpen = previewController.showWebsite(url, relativeTo: drawer.window)
+        wirePreviewExternalOpen(for: item)
+        drawer.model.actionError = previewIsOpen ? nil : "Couldn't preview this website."
+        if !previewIsOpen { resumeHoverClose() }
+    }
+
+    private func wirePreviewExternalOpen(for item: DrawerItem) {
+        guard previewIsOpen, let session = drawerSessionID else { return }
+        previewController.onOpenExternally = { [weak self] url in
+            guard let self, self.drawerSessionID == session else { return }
+            var opened = item
+            if item.kind == .url, item.url != url {
+                opened.url = url
+                opened.displayName = url.host ?? item.displayName
+            }
+            self.launchExternally(opened)
+        }
+    }
+
+    private func openWith(_ item: DrawerItem, application: URL) {
         guard let tabID = openTabID, let sessionID = drawerSessionID else { return }
         let request = DrawerLaunchRequest(tabID: tabID, sessionID: sessionID)
         activeLaunchRequestID = request.requestID
-        ItemLauncher.launch(item) { [weak self] result in
-            guard let self else { return }
-            let canUpdateDrawer = request.canUpdateDrawer(
-                openTabID: self.openTabID,
-                sessionID: self.drawerSessionID,
-                requestID: self.activeLaunchRequestID
-            )
-            guard case let .success(url) = result else {
-                if canUpdateDrawer { self.activeLaunchRequestID = nil }
-                return
-            }
+        drawer.model.actionError = nil
+        ItemActionService.open(item, withApplicationAt: application) { [weak self] result in
+            self?.completeLaunch(result, item: item, request: request)
+        }
+    }
 
-            // Recents tracks confirmed opens, even when a newer launch or drawer
-            // session has superseded the request that initiated this one.
-            self.recordRecent(item, url: url)
-            guard canUpdateDrawer else { return }
-            self.activeLaunchRequestID = nil
-            let tab = self.store.tab(id: request.tabID)
-            if tab?.behavior.keepOpenAfterLaunch != true {
-                self.closeDrawer()
-            } else if tab?.kind == .recents {
-                self.refreshOpenDrawer()   // re-list so the just-opened item jumps to the top
+    private func launchExternally(_ item: DrawerItem) {
+        guard let tabID = openTabID, let sessionID = drawerSessionID else { return }
+        folderBrowser.close()
+        let request = DrawerLaunchRequest(tabID: tabID, sessionID: sessionID)
+        activeLaunchRequestID = request.requestID
+        drawer.model.actionError = nil
+        ItemLauncher.launch(item) { [weak self] result in
+            self?.completeLaunch(result.mapError { $0 as Error }, item: item, request: request)
+        }
+    }
+
+    private func completeLaunch(_ result: Result<URL, Error>, item: DrawerItem, request: DrawerLaunchRequest) {
+        let canUpdateDrawer = request.canUpdateDrawer(openTabID: openTabID, sessionID: drawerSessionID,
+                                                      requestID: activeLaunchRequestID)
+        guard case let .success(url) = result else {
+            if canUpdateDrawer, case .failure(let error) = result {
+                activeLaunchRequestID = nil
+                drawer.model.actionError = "Couldn't open \(item.displayName): \(error.localizedDescription)"
             }
+            return
+        }
+        recordRecent(item, url: url)
+        guard canUpdateDrawer else { return }
+        activeLaunchRequestID = nil
+        let tab = store.tab(id: request.tabID)
+        if tab?.behavior.keepOpenAfterLaunch != true {
+            closeDrawer()
+        } else if tab?.kind == .recents {
+            refreshOpenDrawer()
         }
     }
 
@@ -1187,7 +1322,7 @@ final class TabController {
 
     /// Renames an item via a small modal prompt, then commits it to the store.
     private func renameItem(_ item: DrawerItem) {
-        guard let id = openTabID else { return }
+        guard let id = openTabID, !store.isItemEditingLocked(item.id, inTab: id) else { return }
         let alert = NSAlert()
         alert.messageText = "Rename Item"
         alert.informativeText = "Enter a new name for “\(item.displayName)”."
@@ -1211,7 +1346,7 @@ final class TabController {
     /// Lets the user pick an image to use as an item's icon, then stores it as a
     /// bookmark so it survives moves/renames.
     private func changeItemIcon(_ item: DrawerItem) {
-        guard let id = openTabID else { return }
+        guard let id = openTabID, !store.isItemEditingLocked(item.id, inTab: id) else { return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -1262,6 +1397,7 @@ final class TabController {
     /// its path.
     private func customizeIcon(_ item: DrawerItem) {
         guard let id = openTabID, let kind = store.tab(id: id)?.kind else { return }
+        guard kind != .items || !store.isItemEditingLocked(item.id, inTab: id) else { return }
         let sessionID = UUID()
         let drawerGenerationBeforeEditor = drawerInteractionGeneration
         let expectedDrawerGeneration = drawerGenerationBeforeEditor &+ 1
@@ -1653,17 +1789,35 @@ final class TabController {
     /// key, else the event passes on.
     private func handleDrawerKey(_ event: NSEvent) -> NSEvent? {
         let model = drawer.model
+        guard event.window === drawer.window else { return event }
         // While an input method is composing marked text (CJK, accent pickers, etc.),
         // Return and arrows belong to the text system, not drawer result navigation.
         if (NSApp.keyWindow?.firstResponder as? NSTextInputClient)?.hasMarkedText() == true {
             return event
         }
+        guard !model.isEditingGroupName else { return event }
+        if model.kind != .notes, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
+           let id = openTabID {
+            if event.charactersIgnoringModifiers == "[" {
+                cycleTab(from: id, direction: .previous)
+                return nil
+            }
+            if event.charactersIgnoringModifiers == "]" {
+                cycleTab(from: id, direction: .next)
+                return nil
+            }
+        }
+        guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
         // The filter field (a focused text field) handles character input and Delete
         // itself; the monitor only swallows the keys that drive result navigation so
         // they don't move the text cursor instead.
         switch event.keyCode {
-        case 53:   // Esc — clear a filter, else leave an open group, else close the drawer
-            if model.isSearching {
+        case UInt16(kVK_Escape):
+            if previewIsOpen {
+                previewController.close()
+            } else if folderBrowser.isShown {
+                folderBrowser.close()
+            } else if model.isSearching {
                 model.clearSearch()
             } else if model.openGroupID != nil {
                 model.openGroupID = nil
@@ -1671,13 +1825,22 @@ final class TabController {
                 closeDrawer()
             }
             return nil
-        case 125, 126:   // Down, Up — move the result selection while filtering
-            guard model.isSearching || model.kind == .clipboard else { return event }
-            model.moveSelection(down: event.keyCode == 125)
+        case UInt16(kVK_DownArrow), UInt16(kVK_UpArrow):
+            guard model.kind != .notes else { return event }
+            model.moveSelection(event.keyCode == UInt16(kVK_DownArrow) ? .down : .up)
             return nil
-        case 36, 76:   // Return, Enter — launch the selected result
-            guard model.isSearching || model.kind == .clipboard else { return event }
+        case UInt16(kVK_LeftArrow), UInt16(kVK_RightArrow):
+            guard model.kind != .notes, !model.isSearching else { return event }
+            model.moveSelection(event.keyCode == UInt16(kVK_RightArrow) ? .right : .left)
+            return nil
+        case UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter):
+            guard model.kind != .notes else { return event }
             model.launchSelection()
+            return nil
+        case UInt16(kVK_Space):
+            guard model.kind != .notes, model.kind != .clipboard,
+                  !model.isSearching, model.selectedItemID != nil else { return event }
+            model.previewSelection()
             return nil
         default:
             return event
@@ -1693,6 +1856,9 @@ final class TabController {
 
     /// Persists immediately and tears down all windows/hotkeys (called on quit).
     func saveAndTeardown() {
+        previewController.close()
+        folderBrowser.close()
+        cancelHoverClose()
         drawer.finishResize()
         store.saveNow()
         stopMonitoring()

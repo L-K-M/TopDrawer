@@ -8,6 +8,7 @@ struct ItemView: View {
     let item: DrawerItem
     let iconSize: CGFloat
     let layout: DrawerLayout
+    var appearance = DrawerAppearance()
     /// The tab's configured grid columns — a stand-in for the list's width, deciding
     /// how many metadata columns fit: Date always, Size at ≥ 3 columns, Kind at ≥ 4.
     var listColumns: Int = 4
@@ -19,6 +20,13 @@ struct ItemView: View {
     var onChangeIcon: (() -> Void)?
     var onResetIcon: (() -> Void)?
     var onEmptyTrash: (() -> Void)?
+    var onPreview: (() -> Void)?
+    var onBrowseFolder: (() -> Void)?
+    var onPreviewWebsite: (() -> Void)?
+    var onLaunchExternally: (() -> Void)?
+    var onOpenWith: ((URL) -> Void)?
+    var onToggleLock: (() -> Void)?
+    var editingLocked = false
     /// Bumped by the drawer to force a fresh icon even when `item` is unchanged.
     var iconNonce: Int = 0
     var onEject: (() -> Void)?
@@ -55,6 +63,36 @@ struct ItemView: View {
     /// Up to four child icons for a `.group`'s mini-preview (resolved off the render path).
     @State private var groupPreviewIcons: [NSImage] = []
     @State private var groupPreviewItemID: UUID?
+    @State private var isHovered = false
+
+    private var title: String {
+        item.isGroup && item.displayName.isEmpty ? "Group" : appearance.title(for: item)
+    }
+
+    private var titleOpacity: Double {
+        switch appearance.titleVisibility {
+        case .always: return 1
+        case .onHover: return isHovered ? 1 : 0
+        case .never: return 0
+        }
+    }
+
+    private var lockDescription: String? {
+        if item.isLocked || (editingLocked && !item.isGroup) { return "Locked" }
+        return item.containsLockedItems ? "Contains locked items" : nil
+    }
+
+    @ViewBuilder
+    private var lockBadge: some View {
+        if let lockDescription {
+            Image(systemName: "lock.fill")
+                .font(.system(size: max(6, effectiveIconSize * 0.16), weight: .semibold))
+                .padding(layout == .list ? 1 : 3)
+                .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                .help(lockDescription)
+                .accessibilityHidden(true)
+        }
+    }
 
     /// Finder-style small icon for the list layout, regardless of the grid's icon size.
     static let listIconSize: CGFloat = 16
@@ -82,9 +120,21 @@ struct ItemView: View {
                     onLaunch()   // a group opens instead of launching
                 }
             }
-            .help(broken ? "\(item.displayName) — can’t find this item" : item.displayName)
+            .onHover { isHovered = $0 }
+            .help(broken ? "Can't find \(item.displayName)" : item.displayName)
+            .accessibilityLabel(item.displayName)
+            .accessibilityValue(lockDescription ?? "")
             .contextMenu {
                 Button(groupOrKindOpenTitle, action: onLaunch)
+                if let onPreview { Button("Quick Look", action: onPreview).disabled(broken) }
+                if let onBrowseFolder { Button("Browse Folder", action: onBrowseFolder).disabled(broken) }
+                if let onPreviewWebsite { Button("Preview Website", action: onPreviewWebsite) }
+                if let onLaunchExternally, item.kind == .folder || item.kind == .url {
+                    Button(item.kind == .folder ? "Open in Finder" : "Open Externally", action: onLaunchExternally)
+                }
+                if item.kind == .file, let onOpenWith {
+                    OpenWithMenu(item: item, onSelect: onOpenWith).disabled(broken)
+                }
                 if item.kind != .url, !item.isGroup {
                     Button("Reveal in Finder", action: onReveal)
                 }
@@ -98,10 +148,11 @@ struct ItemView: View {
                         .disabled(TrashInspector.trashIsEmpty())
                 }
                 // Groups get rename but no icon customization (their icon is a preview).
-                if let onRename, item.isGroup {
+                if let onRename, item.isGroup, !editingLocked {
                     Divider()
                     Button("Rename…", action: onRename)
-                } else if !item.isGroup, onRename != nil || onChangeIcon != nil || onCustomizeIcon != nil {
+                } else if !item.isGroup, !editingLocked,
+                          onRename != nil || onChangeIcon != nil || onCustomizeIcon != nil {
                     Divider()
                     if let onRename { Button("Rename…", action: onRename) }
                     if let onCustomizeIcon { Button("Customize Icon…", action: onCustomizeIcon) }
@@ -127,11 +178,15 @@ struct ItemView: View {
                         }
                     }
                 }
-                if let onUngroup, !item.isGroup {
+                if let onUngroup, !item.isGroup, !editingLocked {
                     Divider()
                     Button("Move Out of Group", action: onUngroup)
                 }
-                if let onRemove {
+                if let onToggleLock {
+                    Divider()
+                    Button(item.isLocked ? "Unlock Item" : "Lock Item", action: onToggleLock)
+                }
+                if let onRemove, !editingLocked {
                     Divider()
                     Button(item.isGroup ? "Delete Group" : "Remove", role: .destructive, action: onRemove)
                 }
@@ -210,8 +265,9 @@ struct ItemView: View {
         } else if layout == .grid {
             VStack(spacing: 5) {
                 iconImage
-                Text(item.displayName)
-                    .font(.caption)
+                Text(title)
+                    .font(.system(size: appearance.itemFontSize, weight: appearance.itemFontWeight.swiftUIWeight))
+                    .opacity(titleOpacity)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: iconSize + 28)
@@ -222,7 +278,8 @@ struct ItemView: View {
             // their width even when empty (apps / links have no date or size).
             HStack(spacing: 8) {
                 iconImage
-                Text(item.displayName)
+                Text(title)
+                    .opacity(titleOpacity)
                     .lineLimit(1).truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 metaColumn(item.date.map(ItemView.listDate) ?? "", width: 96, alignment: .trailing)
@@ -233,7 +290,7 @@ struct ItemView: View {
                     metaColumn(typeDescription ?? "", width: 76, alignment: .leading)
                 }
             }
-            .font(.system(size: 12))
+            .font(.system(size: appearance.itemFontSize, weight: appearance.itemFontWeight.swiftUIWeight))
         }
     }
 
@@ -249,8 +306,9 @@ struct ItemView: View {
         if layout == .grid {
             VStack(spacing: 5) {
                 groupPreview
-                Text(item.displayName.isEmpty ? "Group" : item.displayName)
-                    .font(.caption)
+                Text(title)
+                    .font(.system(size: appearance.itemFontSize, weight: appearance.itemFontWeight.swiftUIWeight))
+                    .opacity(titleOpacity)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: iconSize + 28)
@@ -261,12 +319,13 @@ struct ItemView: View {
                     .resizable()
                     .frame(width: Self.listIconSize, height: Self.listIconSize)
                     .foregroundStyle(.secondary)
-                Text(item.displayName.isEmpty ? "Group" : item.displayName)
+                Text(title)
+                    .opacity(titleOpacity)
                     .lineLimit(1).truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 metaColumn("\(item.children.count) items", width: 96, alignment: .trailing)
             }
-            .font(.system(size: 12))
+            .font(.system(size: appearance.itemFontSize, weight: appearance.itemFontWeight.swiftUIWeight))
         }
     }
 
@@ -285,6 +344,7 @@ struct ItemView: View {
                     HStack(spacing: gap) { previewSlot(2, inner); previewSlot(3, inner) }
                 }
             }
+            .overlay(alignment: .bottomTrailing) { lockBadge }
     }
 
     @ViewBuilder
@@ -340,6 +400,7 @@ struct ItemView: View {
             .overlay(alignment: .topTrailing) { trashBadge }
             .overlay { ejectingSpinner }
             .overlay { sparkleOverlay }
+            .overlay(alignment: .bottomTrailing) { lockBadge }
     }
 
     /// A small red count badge on the Trash icon (grid only — a 16 pt list glyph is

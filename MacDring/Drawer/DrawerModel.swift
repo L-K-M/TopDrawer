@@ -11,6 +11,9 @@ import Combine
 final class DrawerModel: ObservableObject {
     @Published var title: String = ""
     @Published var colorHex: String = "#0A84FF"
+    @Published var appearance = DrawerAppearance()
+    @Published var actionError: String?
+    @Published var isEditingGroupName = false
     @Published var edge: Edge = .right
     /// Inner corners to square so the riding tab joins the drawer flush (set by the
     /// window controller from the tab/drawer geometry). `start`/`end` run along the
@@ -26,12 +29,18 @@ final class DrawerModel: ObservableObject {
             if let gid = openGroupID, !items.contains(where: { $0.id == gid && $0.kind == .group }) {
                 openGroupID = nil
             }
+            if kind != .clipboard, let selectedItemID,
+               !displayedItems.contains(where: { $0.id == selectedItemID }) {
+                self.selectedItemID = nil
+            }
         }
     }
     /// The id of the group whose expanded sub-grid is currently open, or `nil` at the
     /// top level. Cleared automatically when that group no longer exists (dissolved,
     /// or gone after a reconcile) — see `items.didSet`.
-    @Published var openGroupID: UUID?
+    @Published var openGroupID: UUID? {
+        didSet { if openGroupID != oldValue { selectedItemID = nil } }
+    }
     @Published var isDropTargeted: Bool = false
     /// The displayed item or empty grid cell a file drag is currently hovering over.
     /// `nil` means the background (or no active file drag).
@@ -148,11 +157,22 @@ final class DrawerModel: ObservableObject {
 
     /// Moves the keyboard selection among the current results.
     func moveSelection(down: Bool) {
-        let ids = searchResultIDs
-        let current = selectedItemID.flatMap { ids.firstIndex(of: $0) }
-        if let next = DrawerSearch.nextIndex(count: ids.count, current: current, down: down) {
-            selectedItemID = ids[next]
+        moveSelection(down ? .down : .up)
+    }
+
+    func moveSelection(_ direction: DrawerNavigation.Direction) {
+        if kind == .clipboard {
+            let ids = clipboardSearchResults.map(\.id)
+            let current = selectedItemID.flatMap { ids.firstIndex(of: $0) }
+            let down = direction == .down || direction == .right
+            if let next = DrawerSearch.nextIndex(count: ids.count, current: current, down: down) {
+                selectedItemID = ids[next]
+            }
+            return
         }
+        let items = isSearching ? searchResults : visibleItems.sorted { $0.slot < $1.slot }
+        selectedItemID = DrawerNavigation.nextID(in: items, current: selectedItemID,
+            direction: direction, columns: columns, layout: isSearching ? .list : layout)
     }
 
     /// Launches the selected result (Return) — or the top result if none is selected.
@@ -163,14 +183,44 @@ final class DrawerModel: ObservableObject {
             if let target { onCopyClipboardEntry?(target.id) }
             return
         }
-        let results = searchResults
+        let results = isSearching ? searchResults : visibleItems.sorted { $0.slot < $1.slot }
         let target = selectedItemID.flatMap { id in results.first { $0.id == id } } ?? results.first
-        if let target { onLaunch?(target) }
+        guard let target else { return }
+        if target.isGroup { openGroupID = target.id } else { onLaunch?(target) }
+    }
+
+    func previewSelection() {
+        guard kind != .clipboard, let selectedItemID,
+              let item = displayedItems.first(where: { $0.id == selectedItemID }) else { return }
+        if item.kind == .url, let url = item.url, ItemPreviewPolicy.isWebsite(url) {
+            onPreviewWebsite?(item)
+        } else if item.kind == .file || item.kind == .folder {
+            onPreviewItem?(item)
+        }
+    }
+
+    func isEditingLocked(_ item: DrawerItem) -> Bool {
+        if item.containsLockedItems { return true }
+        return items.contains { $0.isLocked && $0.children.contains(where: { $0.id == item.id }) }
+    }
+
+    func isRemovalLocked(_ item: DrawerItem) -> Bool {
+        if isEditingLocked(item) { return true }
+        return items.contains {
+            $0.children.count <= DrawerGrouping.dissolveThreshold && $0.children.contains(where: { $0.id == item.id })
+                && $0.children.contains(where: { $0.id != item.id && $0.isLocked })
+        }
     }
 
     var onLaunch: ((DrawerItem) -> Void)?
     var onRemoveItem: ((DrawerItem) -> Void)?
     var onRevealItem: ((DrawerItem) -> Void)?
+    var onPreviewItem: ((DrawerItem) -> Void)?
+    var onBrowseFolder: ((DrawerItem) -> Void)?
+    var onPreviewWebsite: ((DrawerItem) -> Void)?
+    var onLaunchExternally: ((DrawerItem) -> Void)?
+    var onOpenWith: ((DrawerItem, URL) -> Void)?
+    var onToggleItemLock: ((DrawerItem) -> Void)?
     /// Empty the Trash (Trash item context menu).
     var onEmptyTrash: (() -> Void)?
     /// Rename an item (drawer item context menu).

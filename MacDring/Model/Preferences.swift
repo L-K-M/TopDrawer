@@ -46,6 +46,7 @@ final class Preferences: ObservableObject {
         static let freshDirectScan = false
         static let notesFormattingBarVisible = false
         static let persistClipboardHistory = false
+        static let scrollToSwitchTabs = false
     }
 
     private enum Key {
@@ -70,6 +71,7 @@ final class Preferences: ObservableObject {
         static let freshDirectScan = "freshDirectScan"
         static let notesFormattingBarVisible = "notesFormattingBarVisible"
         static let persistClipboardHistory = "persistClipboardHistory"
+        static let scrollToSwitchTabs = "scrollToSwitchTabs"
         static let launchAtLogin = "launchAtLogin"
     }
 
@@ -185,6 +187,10 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(persistClipboardHistory, forKey: Key.persistClipboardHistory) }
     }
 
+    @Published var scrollToSwitchTabs: Bool {
+        didSet { defaults.set(scrollToSwitchTabs, forKey: Key.scrollToSwitchTabs) }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet {
             guard !isSyncingLaunchAtLogin else { return }
@@ -226,6 +232,8 @@ final class Preferences: ObservableObject {
             ?? Default.notesFormattingBarVisible
         persistClipboardHistory = defaults.object(forKey: Key.persistClipboardHistory) as? Bool
             ?? Default.persistClipboardHistory
+        scrollToSwitchTabs = defaults.object(forKey: Key.scrollToSwitchTabs) as? Bool
+            ?? Default.scrollToSwitchTabs
 
         launchAtLogin = loginItem.isEnabled()
             ?? (defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false)

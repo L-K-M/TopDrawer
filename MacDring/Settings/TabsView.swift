@@ -71,7 +71,8 @@ struct TabsView: View {
             HStack(spacing: 2) {
                 Button(action: addTab) { Image(systemName: "plus") }
                 Button(action: removeSelected) { Image(systemName: "minus") }
-                    .disabled(selection == nil)
+                    .disabled(selection == nil || selection.flatMap { store.tab(id: $0) }?.items.contains(where: \.containsLockedItems) == true)
+                    .help("Unlock protected items before removing their tab")
                 Spacer()
                 Button(action: exportLayout) { Image(systemName: "square.and.arrow.up") }
                     .help("Export layout…")
@@ -148,7 +149,7 @@ struct TabsView: View {
     }
 
     private func removeSelected() {
-        guard let id = selection else { return }
+        guard let id = selection, let tab = store.tab(id: id), !tab.items.contains(where: \.containsLockedItems) else { return }
         store.removeTab(id: id)
         selection = store.tabs.first?.id
     }
@@ -269,6 +270,14 @@ private struct TabEditor: View {
                 }
                 Toggle(currentTab.kind == .clipboard ? "Keep open after copying" : "Keep open after launching an item",
                        isOn: tabBinding(\.behavior.keepOpenAfterLaunch))
+                if currentTab.kind != .notes && currentTab.kind != .clipboard {
+                    Picker("Open folder items in", selection: tabBinding(\.behavior.folderOpening)) {
+                        ForEach(TabBehavior.FolderOpening.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    Picker("Open website items in", selection: tabBinding(\.behavior.websiteOpening)) {
+                        ForEach(TabBehavior.WebsiteOpening.allCases) { Text($0.displayName).tag($0) }
+                    }
+                }
                 Picker("When idle", selection: tabBinding(\.behavior.concealment)) {
                     ForEach(TabConcealment.allCases) { Text($0.displayName).tag($0) }
                 }
@@ -277,8 +286,17 @@ private struct TabEditor: View {
                 LabeledContent("Hotkey") { HotkeyRecorderView(hotkey: tabBinding(\.hotkey)) }
             }
 
+            TabAppearanceEditor(appearance: tabBinding(\.appearance), kind: currentTab.kind)
+
             if currentTab.kind == .items {
                 Section("Items") {
+                    Toggle("Lock newly added items", isOn: tabBinding(\.lockNewItems))
+                    HStack {
+                        Button("Lock All Items") { store.setAllItemLocks(.locked, inTab: tab.id) }
+                        Button("Unlock All Items") { store.setAllItemLocks(.unlocked, inTab: tab.id) }
+                    }
+                    Text("Item locks protect launcher edits, not the files. Locked folder and application tiles still accept file drops.")
+                        .font(.caption).foregroundStyle(.secondary)
                     if currentTab.items.isEmpty {
                         Text("No items yet. Add some below, or drag files onto the tab.")
                             .foregroundStyle(.secondary).font(.callout)
@@ -288,12 +306,17 @@ private struct TabEditor: View {
                                 Image(nsImage: ItemView.resolveIcon(item))
                                     .resizable().frame(width: 18, height: 18)
                                 Text(item.displayName).lineLimit(1)
+                                if item.containsLockedItems { Image(systemName: "lock.fill").foregroundStyle(.secondary) }
                                 Spacer(minLength: 0)
                             }
                             .contextMenu {
+                                Button(item.isLocked ? "Unlock Item" : "Lock Item") {
+                                    store.setItemLock(item.isLocked ? .unlocked : .locked, forItem: item.id, inTab: tab.id)
+                                }
                                 Button("Remove", role: .destructive) {
                                     store.removeItem(id: item.id, fromTab: tab.id)
                                 }
+                                .disabled(store.isItemEditingLocked(item.id, inTab: tab.id))
                             }
                         }
                     }

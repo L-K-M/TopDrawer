@@ -43,6 +43,9 @@ struct GeneralView: View {
 
             Section("Drawers") {
                 Toggle("Open items with a single click", isOn: $preferences.launchOnSingleClick)
+                Toggle("Switch tabs with scroll or swipe over a tab", isOn: $preferences.scrollToSwitchTabs)
+                Text("Cycles tabs on the same display edge. Arrow keys navigate drawer items; Command-[ and Command-] switch tabs.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Open on hover instead of click", isOn: $preferences.newTabOpenOnHover)
                 Toggle("Close drawer when you click elsewhere", isOn: $preferences.newTabAutoHide)
                 VStack(alignment: .leading) {
