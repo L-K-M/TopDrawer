@@ -13,6 +13,10 @@ final class DrawerModel: ObservableObject {
     @Published var colorHex: String = "#0A84FF"
     @Published var appearance = DrawerAppearance()
     @Published var actionError: String?
+    /// The launcher store's save health (mirrored by `TabController`): non-nil when
+    /// layout edits cannot reach disk, shown persistently in the header — unlike the
+    /// transient `actionError`.
+    @Published var persistenceError: String?
     @Published var isEditingGroupName = false
     @Published var edge: Edge = .right
     /// Inner corners to square so the riding tab joins the drawer flush (set by the

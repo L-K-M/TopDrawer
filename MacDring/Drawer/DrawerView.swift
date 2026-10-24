@@ -72,6 +72,11 @@ struct DrawerView: View {
             if let error = model.actionError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
+            if let error = model.persistenceError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             if model.isSearchable { searchBar }
             bodyContent
         }

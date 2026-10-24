@@ -5,10 +5,20 @@ import SwiftUI
 /// and the multi-display policy.
 struct GeneralView: View {
     @ObservedObject var preferences: Preferences
+    @ObservedObject var store: TabStore
     @ObservedObject var updateChecker: UpdateChecker
 
     var body: some View {
         Form {
+            // A save that can't reach disk is a data-loss risk — say so here,
+            // above the fold, instead of only logging it.
+            if let error = store.persistenceError {
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+            }
             Section {
                 Toggle("Launch Top Drawer at login", isOn: $preferences.launchAtLogin)
                 if let error = preferences.launchAtLoginError {
