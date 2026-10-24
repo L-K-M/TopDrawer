@@ -43,7 +43,8 @@ public struct DesktopEntry: Sendable, Equatable {
         var inGroup = false
         var values: [String: String] = [:]
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            // .whitespacesAndNewlines also drops a trailing \r, so CRLF files parse.
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
             if line.hasPrefix("[") && line.hasSuffix("]") {
                 // A new group header. We only care about the first [Desktop Entry] group;
