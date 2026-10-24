@@ -206,7 +206,9 @@ struct NotesEditorNativeView: NSViewRepresentable {
 
         private func handle(_ event: NSEvent) -> NSEvent? {
             guard let textView, event.window === textView.window else { return event }
-            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // Caps Lock lives in .deviceIndependentFlagsMask but must not gate the
+            // formatting shortcuts: without subtracting it, ⇪⌘B silently dead-keys.
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock)
             if event.type == .keyDown {
                 guard textView.window?.firstResponder === textView, modifiers == .command else { return event }
                 switch event.charactersIgnoringModifiers?.lowercased() {
