@@ -120,6 +120,10 @@ screen edges and a transient **drawer window** that expands from whichever tab i
 persisted as Codable JSON in Application Support; global prefs in `UserDefaults`.
 **Targets macOS 14+.**
 
+Filesystem drawer listings run off-main through `BackgroundListing`; only the
+current request may update the visible drawer and riding tab. Refreshes retain
+their items, while a new source shows loading. Fresh uses one scan/Spotlight pipeline.
+
 ---
 
 ## 4. Domain Model

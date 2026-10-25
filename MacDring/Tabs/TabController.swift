@@ -80,6 +80,7 @@ final class TabController {
     /// One-shot Spotlight lookup backing the open **Fresh** tab and the **system**
     /// source of a Recents tab; cancelled when the drawer closes or another tab opens.
     private let spotlight = SpotlightQuery()
+    private let freshScan = BackgroundListing<(hits: [RecentFileHit], items: [DrawerItem])>()
     private struct SpotlightWatchKey: Equatable {
         enum Configuration: Equatable {
             case fresh(directScan: Bool)
@@ -1661,6 +1662,8 @@ final class TabController {
               let tab = store.tab(id: id),
               let key = SpotlightWatchKey(tab: tab, preferences: preferences) else { stopSpotlightWatch(); return }
         guard spotlightWatchKey != key else { return }
+        spotlight.cancel()
+        freshScan.cancel()
         completedSpotlightResult = nil
         spotlightWatchKey = key
 
@@ -1670,13 +1673,19 @@ final class TabController {
             // folder-access (TCC) prompt, unlike a direct scan of ~/Downloads & co.
             // (FB1 / PR #61). With the direct-scan opt-in — whose toggle owns those
             // prompts — the landing zones are also read straight from the
-            // filesystem, so the tab works where Spotlight is off or unreliable,
-            // and the two listings merge (the index still adds sub-folder hits).
-            let scanned = directScan
-                ? FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
-                : []
-            spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
-                self?.applySpotlightResult(.fresh(FreshLister.items(from: FreshLister.merge(scanned, results))), for: key)
+            // filesystem off-main. Show scanned items before waiting for Spotlight,
+            // then merge the index's deeper hits through the same guarded pipeline.
+            if directScan {
+                freshScan.load({
+                    let hits = FreshScanner.results(scopes: FreshLister.scopes(), limit: FreshLister.limit)
+                    return (hits, FreshLister.items(from: hits))
+                }) { [weak self] scanned in
+                    guard let self, self.spotlightWatchKey == key else { return }
+                    self.applySpotlightResult(.fresh(scanned.items), for: key)
+                    self.startFreshSpotlight(for: key, scanned: scanned.hits)
+                }
+            } else {
+                startFreshSpotlight(for: key, scanned: [])
             }
         case .recents:
             let home = FileManager.default.homeDirectoryForCurrentUser
@@ -1687,7 +1696,15 @@ final class TabController {
         }
     }
 
+    private func startFreshSpotlight(for key: SpotlightWatchKey, scanned: [RecentFileHit]) {
+        guard spotlightWatchKey == key else { return }
+        spotlight.start(mode: .dateAdded, scopes: FreshLister.scopes(), limit: FreshLister.limit) { [weak self] results in
+            self?.applySpotlightResult(.fresh(FreshLister.items(from: FreshLister.merge(scanned, results))), for: key)
+        }
+    }
+
     private func stopSpotlightWatch() {
+        freshScan.cancel()
         spotlight.cancel()
         spotlightWatchKey = nil
         completedSpotlightResult = nil
@@ -1717,15 +1734,12 @@ final class TabController {
         let id = key.tabID
         guard spotlightWatchKey == key,
               openTabID == id,
-              let wc = tabWindows[id],
+              tabWindows[id] != nil,
               let tab = store.tab(id: id),
               SpotlightWatchKey(tab: tab, preferences: preferences) == key,
               let items = spotlightItems(from: result, for: key) else { return }
         completedSpotlightResult = (key, result)
         drawer.updateLiveItems(items.applyingIconStyles(from: tab.iconStyles))
-        wc.applyFrame(EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
-                                                restingTabFrame: wc.restingFrame,
-                                                drawerFrame: drawer.openFrame))
     }
 
     // MARK: Running-app indicator

@@ -118,6 +118,9 @@ final class DrawerWindowController {
 
     let model = DrawerModel()
     private let preferences: Preferences
+    private let readListing: (Tab) -> DrawerListing
+    private let listing = BackgroundListing<DrawerListing>()
+    private var listingTab: Tab?
     private let panel: NSPanel
     private let hostingView: DrawerHostingView
     private let resizeView: NotesDrawerResizeView
@@ -148,8 +151,9 @@ final class DrawerWindowController {
     private var currentScreen: NSScreen?
     private var currentTabFrame: CGRect = .zero
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences, readListing: @escaping (Tab) -> DrawerListing = DrawerListing.read) {
         self.preferences = preferences
+        self.readListing = readListing
 
         let hosting = DrawerHostingView(rootView: DrawerView(model: model, preferences: preferences))
         hosting.model = model
@@ -244,6 +248,7 @@ final class DrawerWindowController {
                 guard let self, self.isVisible, self.presentationGeneration == generation else { return }
                 self.isOpening = false
                 self.resizeView.isHidden = self.model.kind != .notes
+                self.resizeToLiveItems()
             })
         } else {
             panel.alphaValue = 1
@@ -301,11 +306,30 @@ final class DrawerWindowController {
     /// to fit — **without** re-running `apply` (which would re-issue the query). Called
     /// by `TabController` when a query finishes; the controller re-seats the riding tab.
     func updateLiveItems(_ items: [DrawerItem]) {
-        guard isVisible, let screen = currentScreen else { return }
+        guard isVisible else { return }
         model.items = items
         if model.kind == .fresh { model.sparklingItemIDs = sparkleIDs(for: items) }
+        resizeToLiveItems()
+    }
+
+    private func resizeToLiveItems() {
+        guard let screen = currentScreen, !isResizing, !isOpening else { return }
         openFrame = computeOpenFrame(in: screen.visibleFrame)
         panel.setFrame(openFrame, display: true)
+        onFrameChanged?(openFrame)
+    }
+
+    private func gatherListing(for tab: Tab) {
+        model.isLoadingListing = true
+        let read = readListing
+        listing.load({ read(tab) }) { [weak self] result in
+            // show marks the panel visible in the same main-thread turn as apply.
+            guard let self, self.isVisible else { return }
+            self.model.isLoadingListing = false
+            self.model.itemsTruncated = result.truncated
+            self.model.folderURL = result.folderURL
+            self.updateLiveItems(result.items.applyingIconStyles(from: tab.iconStyles))
+        }
     }
 
     /// Shows or clears the undo toast, inside `withAnimation` so the banner's
@@ -319,6 +343,8 @@ final class DrawerWindowController {
     func hide(duration: TimeInterval) {
         guard isVisible else { return }
         finishResize()
+        listing.cancel()
+        model.isLoadingListing = false
         presentationGeneration &+= 1
         isOpening = false
         resizeView.isHidden = true
@@ -370,10 +396,19 @@ final class DrawerWindowController {
     }
 
     private func apply(tab: Tab, preserveLiveNotes: Bool = false) {
+        listing.cancel()
+        model.isLoadingListing = false
+        // Keep a refresh usable, but never show another folder's items or drop target.
+        let preservesListing = preserveLiveNotes && listingTab?.id == tab.id && listingTab?.kind == tab.kind
+            && listingTab?.folderURL == tab.folderURL && listingTab?.folderBookmark == tab.folderBookmark
+        listingTab = tab
         model.fileDropTarget = nil
         model.isDropTargeted = false
         model.externalDropTargetFrames = [:]
-        model.itemsTruncated = false
+        if !preservesListing {
+            model.itemsTruncated = false
+            model.folderURL = nil
+        }
         model.sparklingItemIDs = []
         if !preserveLiveNotes {
             // A fresh open (or a switch to another tab) must not inherit the previous
@@ -404,25 +439,10 @@ final class DrawerWindowController {
             model.items = tab.items
             model.notes = ""
             model.folderURL = nil
-        case .folder:
-            // Live listings re-apply the tab's per-target icon overrides each open.
-            let listing = FolderLister.listing(of: tab)
-            model.items = listing.items.applyingIconStyles(from: tab.iconStyles)
-            model.itemsTruncated = listing.truncated
+        case .folder, .disks, .network, .cloud:
+            if !preservesListing { model.items = [] }
             model.notes = ""
-            model.folderURL = FolderLister.resolveFolder(tab)
-        case .disks:
-            model.items = DisksLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
-            model.notes = ""
-            model.folderURL = nil
-        case .network:
-            model.items = NetworkLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
-            model.notes = ""
-            model.folderURL = nil
-        case .cloud:
-            model.items = CloudLister.contents(of: tab).applyingIconStyles(from: tab.iconStyles)
-            model.notes = ""
-            model.folderURL = nil
+            gatherListing(for: tab)
         case .recents:
             // Top Drawer's own history shows immediately; a `system`/`both` source folds
             // in the Spotlight recents asynchronously via `updateLiveItems`.
@@ -430,25 +450,11 @@ final class DrawerWindowController {
             model.notes = ""
             model.folderURL = nil
         case .fresh:
-            // Filled asynchronously by the controller's Spotlight watch (via
-            // `updateLiveItems`) — Spotlight reads the index only, so the default
-            // can never trigger a folder-access (TCC) prompt (FB1 / PR #61). With
-            // the opt-in direct scan on, a synchronous by-Date-Added read of the
-            // landing zones seeds the drawer the instant it opens — and keeps the
-            // tab working where Spotlight is off or unreliable; the watch then
-            // merges any deeper (sub-folder) Spotlight hits in. On a refresh of the
-            // already-open drawer (`preserveLiveNotes`), the current items stay put
-            // so the list doesn't blank out while a gather is running.
+            // The controller owns both Fresh sources so a late scan cannot replace
+            // merged Spotlight results. Refreshes retain the last completed listing.
             if !preserveLiveNotes {
-                if preferences.freshDirectScan {
-                    model.items = FreshLister.items(from: FreshScanner.results(scopes: FreshLister.scopes(),
-                                                                               limit: FreshLister.limit))
-                        .applyingIconStyles(from: tab.iconStyles)
-                    model.sparklingItemIDs = sparkleIDs(for: model.items)
-                } else {
-                    model.items = []
-                    model.sparklingItemIDs = []
-                }
+                model.items = []
+                model.sparklingItemIDs = []
             }
             model.notes = ""
             model.folderURL = nil

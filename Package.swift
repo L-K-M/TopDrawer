@@ -63,6 +63,8 @@ let macDringSources: [String] = [
     "Store/RecentsStore.swift",
     "Store/ClipboardHistoryStore.swift",
     "Store/FolderLister.swift",
+    "Store/BackgroundListing.swift",
+    "Store/DrawerListing.swift",
     "Model/Preferences.swift",
     "Drawer/DrawerModel.swift",
     "Tabs/TabStripModel.swift",
@@ -162,6 +164,7 @@ let macDringTestsSources: [String] = [
     "TabStoreTests.swift",
     "RecentsStoreTests.swift",
     "FolderListerTests.swift",
+    "BackgroundListingTests.swift",
     "PreferencesTests.swift",
     "DrawerModelTests.swift",
     // Linux-only: pins the ObservationCompat shim (compiles to nothing on macOS).
