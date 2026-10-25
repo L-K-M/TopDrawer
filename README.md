@@ -5,7 +5,7 @@
 
 Screen-edge tabs that open drawers of your apps, files, folders, and links. Inspired by the classic **[DragThing](https://www.dragthing.com/)**. *(Formerly known as MacDring.)*
 
-**Latest release:** v<!-- version -->2.4.0<!-- /version --> · [Download](https://github.com/L-K-M/TopDrawer/releases/latest)
+**Latest release:** v<!-- version -->2.5.0<!-- /version --> · [Download](https://github.com/L-K-M/TopDrawer/releases/latest)
 
 The build is ad-hoc signed and not notarized. After moving **Top Drawer** to
 Applications, run:
