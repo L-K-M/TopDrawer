@@ -149,6 +149,7 @@ let macDringTestsSources: [String] = [
     "NotesDrawerResizeTests.swift",
     "NotesDrawerResizeViewTests.swift",
     "NotesDrawerResizeControllerTests.swift",
+    "DrawerListingControllerTests.swift",
     "DrawerSearchTests.swift",
     "DrawerLaunchRequestTests.swift",
     "ExternalDropTargetTests.swift",
