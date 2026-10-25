@@ -119,7 +119,13 @@ struct DrawerView: View {
         case .clipboard:
             ClipboardHistoryView(model: model)
         case .items, .folder, .disks, .network, .cloud, .recents, .fresh:
-            if model.isSearching { searchResultsList }
+            if model.isLoadingListing && model.items.isEmpty {
+                ProgressView("Loading…")
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+            }
+            else if model.isSearching { searchResultsList }
             else if model.items.isEmpty { emptyState }
             else { content }
         }

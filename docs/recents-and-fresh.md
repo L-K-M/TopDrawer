@@ -84,14 +84,13 @@ in — either source lights it.
 
 The **system** part of both tabs is backed by Spotlight through a single small wrapper,
 `MacDring/Store/SpotlightQuery.swift` — an `NSMetadataQuery` that ranks by
-`kMDItemLastUsedDate` (Recents · System) or `kMDItemDateAdded` (Fresh). Unlike the
-other listers it is **asynchronous** (Spotlight gathers over time), so it delivers
+`kMDItemLastUsedDate` (Recents · System) or `kMDItemDateAdded` (Fresh). It is
+**asynchronous** (Spotlight gathers over time), so it delivers
 its results through a completion once gathering finishes, and the controller resizes
-the open drawer to fit. The Fresh tab additionally has `FreshScanner`, a synchronous
-direct-filesystem scan that backs it **without** Spotlight when the opt-in direct
-check is on (see above). The pure mapping into ordered, slotted `DrawerItem`s — and
-the merge of the scan with the Spotlight results — lives in `FreshLister` /
-`RecentsLister` and is unit-tested.
+the open drawer to fit. With the direct-check opt-in, `FreshScanner` runs off-main
+and fills Fresh before waiting for Spotlight; the index then adds deeper hits.
+Closing or switching drawers discards late scans. `FreshLister` / `RecentsLister`
+map results into ordered, slotted `DrawerItem`s; unit tests cover ordering and merging.
 
 Like the Network and Cloud tabs, the items are **transient**: nothing is written to
 `launcher.json`, and each item carries a plain `url` (no bookmark), so a closed tab
