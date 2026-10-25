@@ -307,6 +307,7 @@ final class DrawerWindowController {
     /// by `TabController` when a query finishes; the controller re-seats the riding tab.
     func updateLiveItems(_ items: [DrawerItem]) {
         guard isVisible else { return }
+        model.isLoadingListing = false
         model.items = items
         if model.kind == .fresh { model.sparklingItemIDs = sparkleIDs(for: items) }
         resizeToLiveItems()
@@ -325,7 +326,6 @@ final class DrawerWindowController {
         listing.load({ read(tab) }) { [weak self] result in
             // show marks the panel visible in the same main-thread turn as apply.
             guard let self, self.isVisible else { return }
-            self.model.isLoadingListing = false
             self.model.itemsTruncated = result.truncated
             self.model.folderURL = result.folderURL
             self.updateLiveItems(result.items.applyingIconStyles(from: tab.iconStyles))
@@ -456,6 +456,7 @@ final class DrawerWindowController {
                 model.items = []
                 model.sparklingItemIDs = []
             }
+            model.isLoadingListing = preferences.freshDirectScan && model.items.isEmpty
             model.notes = ""
             model.folderURL = nil
         case .notes:
