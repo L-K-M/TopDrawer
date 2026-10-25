@@ -140,10 +140,62 @@ final class DrawerListingControllerTests: XCTestCase {
         }
     }
 
-    private func makeDrawer(read: @escaping (Tab) -> DrawerListing) throws -> DrawerWindowController {
+    func testDirectScanFreshShowsLoadingUntilItsFirstReply() throws {
+        let drawer = try makeDrawer(configure: { $0.freshDirectScan = true }) { _ in
+            XCTFail("Fresh is gathered by TabController")
+            return DrawerListing(items: [], truncated: false, folderURL: nil)
+        }
+        var tab = folderTab(url: URL(fileURLWithPath: "/folder"))
+        tab.kind = .fresh
+        try show(tab, in: drawer)
+        XCTAssertTrue(drawer.model.isLoadingListing)
+        drawer.updateLiveItems([DrawerItem(kind: .file, displayName: "Scanned")])
+        XCTAssertFalse(drawer.model.isLoadingListing)
+    }
+
+    func testAnimatedOpenKeepsHorizontalTabAttachedAfterListingArrives() throws {
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        let items = (0..<20).map { DrawerItem(kind: .file, displayName: "Item \($0)", slot: $0) }
+        let drawer = try makeDrawer { _ in
+            DrawerListing(items: items, truncated: false, folderURL: nil)
+        }
         let suite = "ch.lkmc.MacDring.tests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        let drawer = DrawerWindowController(preferences: Preferences(defaults: defaults), readListing: read)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for edge: Edge in [.top, .bottom] {
+            var tab = folderTab(url: URL(fileURLWithPath: "/folder"))
+            tab.anchor.edge = edge
+            let pill = TabWindowController(tab: tab, preferences: Preferences(defaults: defaults))
+            pill.place(on: screen)
+            pill.show()
+            pill.setOpen(true)
+            defer { pill.hide() }
+            let resting = pill.restingFrame
+            drawer.onFrameChanged = { frame in
+                pill.applyFrame(EdgeLayout.openedTabFrame(edge: edge, restingTabFrame: resting, drawerFrame: frame))
+            }
+            let duration: TimeInterval = 0.2
+            drawer.show(tab: tab, tabFrame: resting, edge: edge, on: screen, duration: duration)
+            let initial = EdgeLayout.openedTabFrame(edge: edge, restingTabFrame: resting, drawerFrame: drawer.openFrame)
+            pill.animate(to: initial, duration: duration)
+            waitForItems(items, in: drawer)
+            let settled = expectation(description: "window animations finished")
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration * 2) { settled.fulfill() }
+            wait(for: [settled], timeout: 5)
+            let expected = EdgeLayout.openedTabFrame(edge: edge, restingTabFrame: resting, drawerFrame: drawer.openFrame)
+            XCTAssertNotEqual(initial, expected)
+            XCTAssertEqual(pill.frame.minY, expected.minY, accuracy: 1)
+            drawer.hide(duration: 0)
+        }
+    }
+
+    private func makeDrawer(configure: (Preferences) -> Void = { _ in },
+                            read: @escaping (Tab) -> DrawerListing) throws -> DrawerWindowController {
+        let suite = "ch.lkmc.MacDring.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let preferences = Preferences(defaults: defaults)
+        configure(preferences)
+        let drawer = DrawerWindowController(preferences: preferences, readListing: read)
         addTeardownBlock {
             drawer.hide(duration: 0)
             defaults.removePersistentDomain(forName: suite)
