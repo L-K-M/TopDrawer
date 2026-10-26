@@ -1,0 +1,90 @@
+{
+  "_comment": [
+    "Spec for scripts/deb-copyright.py: the .deb's DEP-5 copyright file and the",
+    "first part of its Third-Party-Notices.txt (linux/packaging/build-deb.sh",
+    "appends the SwiftPM notices from scripts/swiftpm-notices.py). Paths are",
+    "relative to this file; build-deb.sh sets the $VARS from the toolchain and",
+    "the vendored gtk4-layer-shell, and drops that component when it is not",
+    "vendored. ICU 76.1 is what Swift 6.3's swift-foundation-icu embeds;",
+    "scripts/static-runtime-notices.py fails the build when the binaries link",
+    "another ICU version."
+  ],
+  "package": "topdrawer",
+  "upstream_name": "Top Drawer",
+  "upstream_contact": "https://github.com/L-K-M/TopDrawer",
+  "source": "https://github.com/L-K-M/TopDrawer",
+  "own": {
+    "copyright": [
+      "Top Drawer contributors"
+    ],
+    "license": "Unlicense",
+    "license_files": [
+      "../../../LICENSE"
+    ]
+  },
+  "components": [
+    {
+      "name": "Swift runtime, standard library and Foundation",
+      "version": "$SWIFT_VERSION",
+      "license": "Apache-2.0 WITH Swift-exception",
+      "copyright": [
+        "Apple Inc. and the Swift project authors"
+      ],
+      "source_url": "https://github.com/swiftlang/swift/tree/swift-$SWIFT_VERSION-RELEASE",
+      "license_files": [
+        "$SWIFT_LICENSE"
+      ],
+      "embedded_in": [
+        "usr/bin/topdrawerd",
+        "usr/bin/topdrawer-shell"
+      ],
+      "comment": "Linked by --static-swift-stdlib. The Runtime Library Exception waives attribution; listed for completeness."
+    },
+    {
+      "name": "ICU",
+      "version": "76.1",
+      "license": "Unicode-3.0",
+      "copyright": [
+        "2016-2024 Unicode, Inc.",
+        "1995-2016 International Business Machines Corporation and others"
+      ],
+      "source_url": "https://github.com/swiftlang/swift-foundation-icu/tree/swift-$SWIFT_VERSION-RELEASE",
+      "license_files": [
+        "ICU-76.1-LICENSE.txt"
+      ],
+      "embedded_in": [
+        "usr/bin/topdrawerd",
+        "usr/bin/topdrawer-shell"
+      ],
+      "comment": "Foundation's ICU code and icudt76l data (including the break-iterator dictionaries), whose third-party terms are part of the license text."
+    },
+    {
+      "name": "SwiftPM packages listed in Third-Party-Notices.txt",
+      "license": "LicenseRef-Bundled-SwiftPM",
+      "license_text": "The packages pinned in linux/Package.resolved keep their own licenses: Apache-2.0, several with the Swift Runtime Library Exception. swift-crypto vendors BoringSSL, now also Apache-2.0; swift-nio vendors llhttp and cpp_magic.h under MIT. Their full license texts, NOTICE files and source revisions are in the SwiftPM section of Third-Party-Notices.txt.",
+      "copyright": [
+        "The authors of each package, as listed in Third-Party-Notices.txt"
+      ],
+      "embedded_in": [
+        "usr/bin/topdrawerd",
+        "usr/bin/topdrawer-shell"
+      ]
+    },
+    {
+      "name": "gtk4-layer-shell",
+      "version": "$TOPDRAWER_LAYER_SHELL_VERSION",
+      "license": "MIT",
+      "copyright": [
+        "2023 Sophie Winter"
+      ],
+      "source_url": "https://github.com/wmww/gtk4-layer-shell/tree/v$TOPDRAWER_LAYER_SHELL_VERSION",
+      "license_files": [
+        "$TOPDRAWER_LAYER_SHELL_LICENSE"
+      ],
+      "files": [
+        "usr/lib/topdrawer/libgtk4-layer-shell.so.*"
+      ],
+      "comment": "A private copy, shipped because Ubuntu packages the GTK4 binding only from 25.10."
+    }
+  ]
+}

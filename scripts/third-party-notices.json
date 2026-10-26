@@ -1,0 +1,15 @@
+{
+  "comment": "Overrides for scripts/swiftpm-notices.py (macOS app). Keys under packages are SwiftPM identities from MacDring.xcodeproj's Package.resolved. Every entry needs a reason. Every resolved pin is included, linked or not, so no notice goes missing when a product starts using one.",
+  "preamble": [
+    "Top Drawer's own code is released under the Unlicense (see LICENSE in the",
+    "source repository). The components below are the Swift packages resolved",
+    "for Top Drawer.app and keep their own licenses. The Swift runtime and system",
+    "frameworks ship with macOS."
+  ],
+  "packages": {
+    "swiftmath": {
+      "license": "MIT AND OFL-1.1 AND LicenseRef-GUST-Font-License",
+      "reason": "Sources/SwiftMath/mathFonts.bundle ships math fonts under the SIL OFL 1.1 (OFL.txt, the STIX/XITS text) and the GUST Font License (GUST-FONT-LICENSE.txt, Latin Modern and TeX Gyre), which has no SPDX id, next to the MIT code (LICENSE, mathFonts.bundle/LICENSE)."
+    }
+  }
+}

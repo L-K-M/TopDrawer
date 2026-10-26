@@ -176,7 +176,10 @@ newer; `Depends` name the exact runtime libraries). It carries `/usr/bin/topdraw
 `/usr/bin/topdrawer-shell`, the daemon's systemd **user** unit
 (`/usr/lib/systemd/user/topdrawerd.service`), and a private copy of gtk4-layer-shell
 under `/usr/lib/topdrawer/` — Ubuntu packages the GTK4 binding only from 25.10, so
-the shell would otherwise not run on 24.04. Nothing is enabled automatically:
+the shell would otherwise not run on 24.04. The license notices for what the
+executables link statically (the Swift runtime, Foundation's ICU, the SwiftPM
+packages) and for gtk4-layer-shell are in `/usr/share/doc/topdrawer/copyright` and
+`Third-Party-Notices.txt` next to it. Nothing is enabled automatically:
 
 ```sh
 sudo apt install ./TopDrawer-<version>-amd64.deb
@@ -190,8 +193,8 @@ Remove with `sudo apt remove topdrawer` (after `systemctl --user disable --now
 topdrawerd`). The Swift runtime is linked statically, so the package depends on no
 Swift installation.
 
-To build the package yourself — `dpkg-dev`, `binutils` and (optionally) `lintian`
-installed, gtk4-layer-shell built from source per the CI recipe in
+To build the package yourself — `dpkg-dev`, `binutils`, `python3` and (optionally)
+`lintian` installed, gtk4-layer-shell built from source per the CI recipe in
 `.github/actions/setup-gtk4-layer-shell/action.yml`:
 
 ```sh
@@ -201,9 +204,12 @@ linux/packaging/build-deb.sh 2.2.0-beta.1 --output /tmp/TopDrawer-2.2.0-beta.1-a
 
 The script's header documents what it stages, how `Depends` are computed
 (`dpkg-shlibdeps`), and the environment knobs (where the vendored library and its
-license come from). The release workflow runs the same script, then installs the
-result into a pristine `ubuntu:24.04` container and checks `--version` and a D-Bus
-`Ping` before attaching it to the release.
+license come from). It generates the license notices from the resolved checkouts,
+the toolchain and `linux/packaging/licenses/`, and fails when a package has no
+license text or the binaries link a runtime the notices don't name. The release
+workflow runs the same script, then installs the result into a pristine
+`ubuntu:24.04` container and checks `--version` and a D-Bus `Ping` before attaching
+it to the release.
 
 ## Seed a launcher document
 

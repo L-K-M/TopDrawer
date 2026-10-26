@@ -11,13 +11,15 @@ runs:
   using: composite
   steps:
     # Introspection/vapi are off: nothing in this package uses them, and dropping them
-    # trims the gobject-introspection dev packages from the apt set.
+    # trims the gobject-introspection dev packages from the apt set. dpkg-dev provides
+    # dpkg-architecture for the libdir below.
     - name: Install GTK4 and the build tools
       shell: bash
       run: |
         apt-get update
         apt-get install -y --no-install-recommends \
-          git ca-certificates pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build
+          git ca-certificates pkg-config libgtk-4-dev libwayland-dev wayland-protocols meson ninja-build \
+          dpkg-dev
 
     - name: Build and install gtk4-layer-shell v1.3.0
       shell: bash
@@ -27,8 +29,13 @@ runs:
         # pinned actions/container (a moved tag fails the build loudly). v1.3.0 is also
         # what Ubuntu 26.04 ships.
         test "$(git -C /tmp/gtk4-layer-shell rev-parse HEAD)" = 1c963c51514581c41b9bdae08cdf69171265cdda
+        # Debian's multiarch libdir, where pkg-config and the dynamic loader look. Left
+        # to guess without dpkg-architecture, meson picks /usr/lib64, which neither
+        # searches: build-deb.sh's pkg-config lookup then fails (it did on every release
+        # tag from v2.2.0 to v2.5.0, so no .deb was published).
         meson setup /tmp/gtk4-layer-shell/build /tmp/gtk4-layer-shell \
-          --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false \
+          --prefix=/usr --libdir="lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)" \
+          -Dexamples=false -Ddocs=false -Dtests=false \
           -Dsmoke-tests=false -Dintrospection=false -Dvapi=false
         ninja -C /tmp/gtk4-layer-shell/build install
         ldconfig

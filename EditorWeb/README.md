@@ -135,7 +135,10 @@ npm run smoke     # Playwright: harness gates, shipped-page gates, timings, memo
 `dist/editor.js`, `dist/editor.css` and `dist/editor.html` are committed on
 purpose: they are the reviewed production artifacts the apps load.
 `LICENSES.md` is written by the build from the esbuild metafile, so the
-inventory cannot drift from what ships. Source maps and `dist/meta.json` are
+inventory cannot drift from what ships. `dist/Third-Party-Notices.txt`, generated
+by `scripts/third-party-notices.mjs` in the same build, holds the bundled packages'
+license and notice texts (the build fails on a package without one), and a banner
+in `editor.js` and `editor.css` points to it. Source maps and `dist/meta.json` are
 build-local and gitignored (they embed third-party sources and would swamp
 review diffs). The `EditorWeb CI` workflow rebuilds from the lockfile and fails
 on any diff against the committed artifacts.

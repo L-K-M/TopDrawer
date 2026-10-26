@@ -1,0 +1,42 @@
+{
+  "comment": "Overrides for scripts/swiftpm-notices.py (Linux .deb). Keys under packages are SwiftPM identities from linux/Package.resolved. Every entry needs a reason.",
+  "preamble": [
+    "The SwiftPM packages below are statically linked into /usr/bin/topdrawerd",
+    "and /usr/bin/topdrawer-shell and keep their own licenses."
+  ],
+  "packages": {
+    "dbus": {
+      "add_files": [
+        "dbus-0.4.1-LICENSE"
+      ],
+      "reason": "The 0.4.1 tag has no LICENSE file; its README states Apache-2.0 and points to one. Upstream added it in the next commit (wendylabsinc/dbus 5727296ecaef9655b781f82c7ebde5c9f0d45551, 'Create LICENSE', no code changes); this is that file, verbatim."
+    },
+    "swift-async-algorithms": {
+      "skip_files": [
+        ".license_header_template"
+      ],
+      "reason": "A source-header template for upstream's lint tooling, not a license text; it does not ship. The package's license is LICENSE.txt."
+    },
+    "swift-collections": {
+      "skip_files": [
+        ".license_header_template"
+      ],
+      "reason": "A source-header template for upstream's lint tooling, not a license text; it does not ship. The package's license is LICENSE.txt."
+    },
+    "swift-crypto": {
+      "license": "Apache-2.0",
+      "add_files": [
+        "boringssl-0226f304-LICENSE",
+        "boringssl-0226f304-third_party-fiat-LICENSE",
+        "boringssl-0226f304-third_party-fiat-AUTHORS"
+      ],
+      "reason": "Sources/CCryptoBoringSSL vendors BoringSSL at revision 0226f30467f540a3f62ef48d453f93927da199b6 (its hash.txt), including third_party/fiat, without their license files. These are BoringSSL's LICENSE and third_party/fiat/{LICENSE,AUTHORS} at that revision, verbatim. BoringSSL's LICENSE also quotes the Go license, which it says covers only TLS test-suite code that is not compiled into libcrypto, so every shipped text is Apache-2.0."
+    },
+    "swift-nio": {
+      "add_files": [
+        "ushet-c09e0aca-LICENSE"
+      ],
+      "reason": "Sources/CNIOAtomics/src/cpp_magic.h is uSHET's lib/cpp_magic.h at c09e0acafd86720efe42dc15c63e0cc228244c32 (named in swift-nio's NOTICE.txt as MIT) and carries no copyright line of its own. This is uSHET's LICENSE at that commit, verbatim. llhttp's text ships in the checkout (Sources/CNIOLLHTTP/LICENSE)."
+    }
+  }
+}
