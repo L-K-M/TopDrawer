@@ -44,6 +44,16 @@ jobs:
       - name: Check the notes-editor protocol versions agree
         run: scripts/check-notes-protocol-version.sh
 
+      # Also before the build: license statements must agree with LICENSE (the
+      # Unlicense). The README's License section says where the bundled notices
+      # ship; the app's copyright line (Finder's Get Info, the About panel) is set
+      # in both build configurations.
+      - name: Check license statements
+        run: |
+          grep -q '^## License$' README.md
+          grep -q 'Third-Party-Notices.txt' README.md
+          test "$(grep -c 'INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense)\.' MacDring.xcodeproj/project.pbxproj)" -eq 2
+
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
