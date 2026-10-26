@@ -23,14 +23,17 @@
 #                                                    GTK4 binding only from 25.10; the shell
 #                                                    is linked with an rpath to this directory,
 #                                                    so it runs on 24.04 too)
-#   /usr/share/doc/topdrawer/{copyright,changelog.gz,README.md}
+#   /usr/share/doc/topdrawer/{copyright,Third-Party-Notices.txt,changelog.gz,README.md}
+#                                                   (the license notices are generated from
+#                                                    the resolved SwiftPM checkouts, the
+#                                                    toolchain and linux/packaging/licenses/)
 # Runtime `Depends` come from dpkg-shlibdeps (the exact shared-library packages the
 # binaries load) plus the CLIs the daemon shells out to and a session bus.
 #
 # Environment:
 #   TOPDRAWER_LAYER_SHELL_LIB      libgtk4-layer-shell.so.0 to vendor. Default: the one
 #                                  pkg-config's gtk4-layer-shell-0 libdir provides.
-#   TOPDRAWER_LAYER_SHELL_LICENSE  its MIT license text, reproduced in the copyright file.
+#   TOPDRAWER_LAYER_SHELL_LICENSE  its MIT license text, reproduced in the license notices.
 #                                  Default: /usr/share/doc/gtk4-layer-shell/LICENSE (where
 #                                  .github/actions/setup-gtk4-layer-shell puts it), then the
 #                                  distro package's /usr/share/doc/libgtk4-layer-shell0/copyright.
@@ -69,8 +72,8 @@ deb_version="${version//-/\~}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 pkg="$root/linux"
 
-for tool in swift dpkg dpkg-deb dpkg-shlibdeps strip objdump gzip install; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "error: $tool not found (need swift, dpkg-dev, binutils)" >&2; exit 1; }
+for tool in swift dpkg dpkg-deb dpkg-shlibdeps strip objdump gzip install python3; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "error: $tool not found (need swift, dpkg-dev, binutils, python3)" >&2; exit 1; }
 done
 arch="$(dpkg --print-architecture)"
 [ -n "$output" ] || output="$pkg/.build/deb/topdrawer_${deb_version}_${arch}.deb"
@@ -80,6 +83,7 @@ vendor_layer_shell=1
 [ "${TOPDRAWER_NO_VENDOR_LAYER_SHELL:-0}" = 1 ] && vendor_layer_shell=0
 layer_shell_lib=""
 layer_shell_license=""
+layer_shell_version=""
 if [ "$vendor_layer_shell" = 1 ]; then
   # Resolve the SONAME link to the real file; the package recreates the link itself.
   layer_shell_lib="${TOPDRAWER_LAYER_SHELL_LIB:-}"
@@ -133,7 +137,12 @@ done
 stage="$(mktemp -d)"
 chmod 755 "$stage"   # mktemp makes it 0700; it becomes the package's `./` entry
 shlibdeps_dir=""     # created later; cleaned here so a failing dpkg-shlibdeps leaks nothing
-cleanup() { restore_version; rm -rf "$stage"; [ -z "$shlibdeps_dir" ] || rm -rf "$shlibdeps_dir"; }
+notices_dir=""       # likewise, for the license notices' intermediate files
+cleanup() {
+  restore_version; rm -rf "$stage"
+  [ -z "$shlibdeps_dir" ] || rm -rf "$shlibdeps_dir"
+  [ -z "$notices_dir" ] || rm -rf "$notices_dir"
+}
 trap cleanup EXIT
 
 install -Dm755 "$bin_path/topdrawerd" "$stage/usr/bin/topdrawerd"
@@ -157,56 +166,74 @@ if [ "$vendor_layer_shell" = 1 ]; then
   soname="$(objdump -p "$stage/usr/lib/topdrawer/$real_name" | awk '/SONAME/ {print $2}')"
   [ -n "$soname" ] || { echo "error: $real_name has no SONAME" >&2; exit 1; }
   [ "$soname" = "$real_name" ] || ln -s "$real_name" "$stage/usr/lib/topdrawer/$soname"
+  # meson names the real file after the release (libgtk4-layer-shell.so.1.3.0); the
+  # notices state that version.
+  layer_shell_version="${real_name#libgtk4-layer-shell.so.}"
+  [[ "$layer_shell_version" =~ ^[0-9]+(\.[0-9]+)+$ ]] \
+    || { echo "error: can't tell gtk4-layer-shell's version from $real_name" >&2; exit 1; }
 fi
 
-# MARK: - Docs: copyright (DEP-5), changelog, README
+# MARK: - Docs: copyright (DEP-5), third-party notices, changelog, README
 
 docdir="$stage/usr/share/doc/topdrawer"
 mkdir -p "$docdir"
-indent() { sed 's/^/ /; s/^ $/ ./'; }   # DEP-5 continuation lines; blank lines become " ."
-{
-  cat <<HDR
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: Top Drawer
-Upstream-Contact: https://github.com/L-K-M/TopDrawer
-Source: https://github.com/L-K-M/TopDrawer
+licenses="$pkg/packaging/licenses"
+notices_dir="$(mktemp -d)"
 
-Files: *
-Copyright: Top Drawer contributors
-License: public-domain
-HDR
-  indent < "$root/LICENSE"
-  cat <<'DEPS'
+# The executables statically link the SwiftPM pins, the Swift runtime and
+# Foundation's ICU, so their notices are generated from what this build used and
+# cannot drift from linux/Package.resolved. First the pins' LICENSE/NOTICE files
+# from the checkouts (fails on a package without license text; gaps are explicit
+# overrides in third-party-notices.json).
+python3 -I "$root/scripts/swiftpm-notices.py" --title "Top Drawer for Linux" \
+  --resolved "$pkg/Package.resolved" --checkouts "$pkg/.build/checkouts" \
+  --overrides "$licenses/third-party-notices.json" --output "$notices_dir/swiftpm.txt"
 
-Files: debian/statically-linked-swift-packages
-Comment:
- The executables statically link the Swift runtime and standard library and these
- SwiftPM packages (see linux/Package.resolved for the exact revisions): the Swift
- runtime, Foundation, swift-log, swift-nio (+ swift-nio-ssl, -extras, -http2),
- swift-collections, swift-atomics, swift-algorithms, swift-async-algorithms,
- swift-system, swift-numerics, swift-http-types, swift-http-structured-headers,
- swift-asn1, swift-certificates, swift-service-lifecycle — all Apache-2.0 (the
- Swift runtime with the runtime library exception); swift-crypto (Apache-2.0),
- which embeds BoringSSL (ISC / OpenSSL / others, see its LICENSE); and
- wendylabsinc/dbus (Apache-2.0).
-Copyright: the respective authors
-License: Apache-2.0
- On Debian systems, the full text of the Apache License 2.0 can be found in
- /usr/share/common-licenses/Apache-2.0.
-DEPS
-  if [ "$vendor_layer_shell" = 1 ]; then
-    cat <<'LS'
+# The toolchain's license text and version. runtimeResourcePath is
+# <prefix>/usr/lib/swift, so its LICENSE.txt is <prefix>/usr/share/swift/LICENSE.txt.
+swift_info="$(swift -print-target-info | python3 -I -c 'import json, re, sys
+info = json.load(sys.stdin)
+version = re.search(r"Swift version (\d+(?:\.\d+)+)", info.get("compilerVersion", ""))
+print(info["paths"]["runtimeResourcePath"])
+print(version.group(1) if version else "")')"
+swift_resources="$(sed -n 1p <<<"$swift_info")"
+swift_version="$(sed -n 2p <<<"$swift_info")"
+[ -n "$swift_version" ] || { echo "error: can't tell the Swift version from swift -print-target-info" >&2; exit 1; }
 
-Files: usr/lib/topdrawer/libgtk4-layer-shell.so.*
-Comment:
- A private copy of gtk4-layer-shell (https://github.com/wmww/gtk4-layer-shell),
- shipped because Ubuntu packages the GTK4 binding only from 25.10.
-Copyright: 2023 Sophie Winter
-License: Expat
-LS
-    indent < "$layer_shell_license"
-  fi
-} > "$docdir/copyright"
+# Then the DEP-5 copyright and Third-Party-Notices.txt from components.json: the own
+# code, the Swift runtime, ICU, the SwiftPM set (the notices above, appended) and the
+# vendored gtk4-layer-shell, each with its full license text. Without vendoring, that
+# last component is dropped; the copy keeps the other license paths resolvable.
+spec="$licenses/components.json"
+if [ "$vendor_layer_shell" = 0 ]; then
+  python3 -I - "$spec" "$notices_dir/components.json" <<'PY'
+import json, os, sys
+source, target = sys.argv[1:]
+base = os.path.dirname(os.path.abspath(source))
+with open(source, encoding="utf-8") as fh:
+    spec = json.load(fh)
+spec["components"] = [c for c in spec["components"] if c["name"] != "gtk4-layer-shell"]
+for item in [spec["own"], *spec["components"]]:
+    if isinstance(item.get("license_files"), list):
+        item["license_files"] = [p if p.startswith(("/", "$")) else os.path.join(base, p)
+                                 for p in item["license_files"]]
+with open(target, "w", encoding="utf-8") as fh:
+    json.dump(spec, fh, indent=2)
+PY
+  spec="$notices_dir/components.json"
+fi
+SWIFT_VERSION="$swift_version" SWIFT_LICENSE="$swift_resources/../../share/swift/LICENSE.txt" \
+TOPDRAWER_LAYER_SHELL_VERSION="$layer_shell_version" TOPDRAWER_LAYER_SHELL_LICENSE="$layer_shell_license" \
+  python3 -I "$root/scripts/deb-copyright.py" generate "$spec" \
+    --copyright-out "$docdir/copyright" --notices-out "$docdir/Third-Party-Notices.txt" \
+    --merge-notices "$notices_dir/swiftpm.txt"
+python3 -I "$root/scripts/deb-copyright.py" check "$docdir/copyright" --no-common-licenses
+# Fail when a binary links a runtime the notices don't name, or another ICU version
+# (a toolchain bump), instead of shipping stale notices.
+for notices in "$docdir/Third-Party-Notices.txt" "$docdir/copyright"; do
+  python3 -I "$root/scripts/static-runtime-notices.py" check "$stage/usr/bin" --notices "$notices"
+done
+chmod 644 "$docdir/copyright" "$docdir/Third-Party-Notices.txt"
 
 # A "native" package (no separate upstream tarball), so the changelog is changelog.gz.
 stamp="${SOURCE_DATE_EPOCH:-$(date +%s)}"

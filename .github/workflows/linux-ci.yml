@@ -79,3 +79,24 @@ jobs:
 
       - name: Test the Linux daemon package (under a private session bus)
         run: dbus-run-session -- env TOPDRAWER_PRIVATE_TEST_BUS=1 swift test -v --package-path linux --disable-automatic-resolution
+
+      # The .deb's license notices are generated while packaging, from the resolved
+      # SwiftPM checkouts and the toolchain, so package here too: a change that breaks
+      # them fails on the pull request rather than on the next release tag. Same
+      # script and container as release.yml's linux-deb job, which builds and checks
+      # the real package on tags (hence skipped there).
+      - name: Install the packaging tools
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: apt-get install -y --no-install-recommends dpkg-dev lintian binutils python3
+
+      - name: Build the .deb and check its license notices
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          linux/packaging/build-deb.sh 0.0.0-ci --output dist/topdrawer-ci.deb
+          dpkg-deb -x dist/topdrawer-ci.deb dist/deb-root
+          doc=dist/deb-root/usr/share/doc/topdrawer
+          test -s "$doc/copyright"
+          test -s "$doc/Third-Party-Notices.txt"
+          grep -q 'Unicode, Inc\.' "$doc/Third-Party-Notices.txt"
+          grep -q '^swift-nio ' "$doc/Third-Party-Notices.txt"
+          grep -q 'Sophie Winter' "$doc/copyright"

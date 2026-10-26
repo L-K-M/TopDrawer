@@ -219,14 +219,15 @@ jobs:
         uses: ./.github/actions/setup-gtk4-layer-shell
 
       - name: Install the packaging tools
-        run: apt-get install -y --no-install-recommends dpkg-dev lintian binutils
+        run: apt-get install -y --no-install-recommends dpkg-dev lintian binutils python3
 
       - name: Version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       # Stamps the version, builds release binaries with the Swift runtime linked
-      # statically, computes Depends with dpkg-shlibdeps, and runs lintian
-      # (errors fail the job; warnings are in the log). See the script's header.
+      # statically, generates the license notices, computes Depends with
+      # dpkg-shlibdeps, and runs lintian (errors fail the job; warnings are in the
+      # log). See the script's header.
       # Output under the workspace (dist/ is git-ignored), not $RUNNER_TEMP: in a
       # container job the `runner.temp` context is the host's path, while
       # workspace-relative paths are translated for the container.
@@ -234,6 +235,19 @@ jobs:
         run: |
           linux/packaging/build-deb.sh "$VERSION" \
             --output "dist/$ASSET_BASE-$VERSION-$(dpkg --print-architecture).deb"
+
+      # The package must carry the notices for everything it links statically or
+      # vendors; fail before it is uploaded. (The smoke test's pristine ubuntu image
+      # excludes /usr/share/doc from installs, so the files are checked here.)
+      - name: Check the package's license notices
+        run: |
+          dpkg-deb -x dist/*.deb dist/deb-root
+          doc=dist/deb-root/usr/share/doc/topdrawer
+          test -s "$doc/copyright"
+          test -s "$doc/Third-Party-Notices.txt"
+          grep -q 'Unicode, Inc\.' "$doc/Third-Party-Notices.txt"
+          grep -q '^swift-nio ' "$doc/Third-Party-Notices.txt"
+          grep -q 'Sophie Winter' "$doc/copyright"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -270,6 +284,8 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$GITHUB_WORKSPACE"/deb/*.deb
           dpkg -s topdrawer
+          # The image's dpkg excludes keep only copyright files from /usr/share/doc.
+          test -s /usr/share/doc/topdrawer/copyright
 
       - name: Both executables run headless and report the tag's version
         run: |
