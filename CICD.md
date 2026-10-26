@@ -7,8 +7,8 @@ Top Drawer (repository: MacDring) is a Swift/Xcode macOS app with a Linux port i
 | Workflow | Trigger | Purpose |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | Pull requests and pushes to `main` | Build and test the app with a pinned Xcode toolchain. |
-| `.github/workflows/editor-web.yml` | Pull requests and pushes to `main` touching `EditorWeb/**` | Type-check and test the notes editor bundle, run its headless-Chromium smoke gates, and rebuild `dist/` from the lockfile to prove the committed artifact matches its sources. |
-| `.github/workflows/linux-ci.yml` | Pull requests and pushes to `main`; also called by `release.yml` | Build and test the shared core and the `linux/` package (daemon + shell) in the pinned `swift:6.3-noble` container, under a private D-Bus session. |
+| `.github/workflows/editor-web.yml` | Pull requests and pushes to `main` touching `EditorWeb/**` | Type-check and test the notes editor bundle, run its headless-Chromium smoke gates, rebuild `dist/` from the lockfile to prove the committed artifact matches its sources, and check its `Third-Party-Notices.txt`. |
+| `.github/workflows/linux-ci.yml` | Pull requests and pushes to `main`; also called by `release.yml` | Build and test the shared core and the `linux/` package (daemon + shell) in the pinned `swift:6.3-noble` container, under a private D-Bus session. Outside tag runs it also builds the `.deb` and checks its license notices. |
 | `.github/workflows/release.yml` | Pushing a `v*` tag (e.g. `v1.2.0`, or `v1.2.0-beta.1` for a pre-release) | Build an unsigned `.app`, package `.zip` + `.dmg`, and publish a GitHub Release; build the Linux `.deb`, smoke-test it in a pristine Ubuntu 24.04 container, and attach it to that release. |
 | `.github/workflows/zai-code-review.yml` | Non-draft pull requests from branches in this repository | Review the diff with GLM and post the findings as PR comments. Skipped for forks: `pull_request_target` would expose the API key to untrusted code. |
 
@@ -17,9 +17,11 @@ Top Drawer (repository: MacDring) is a Swift/Xcode macOS app with a Linux port i
 Runs a single **Build & Test** job on `macos-14`. In-progress runs for the same ref are cancelled when a new commit is pushed.
 
 - Runs `scripts/check-notes-protocol-version.sh` first, which checks the legacy web editor's bridge protocol pins. It runs here rather than in `editor-web.yml` because that workflow is path-filtered to `EditorWeb/**` and would miss a Swift-only change. The macOS app now uses the native editor; its integration tests run with the rest of the macOS suite.
+- Checks the license statements next: the README's `## License` section and the app's `NSHumanReadableCopyright` in both build configurations.
 - Selects **Xcode 16.2** via `maxim-lobanov/setup-xcode` — pinned so a runner-image bump can't silently change the toolchain.
 - Installs `xcbeautify` (for readable build logs).
 - Runs `xcodebuild clean test` against the `MacDring` scheme in `MacDring.xcodeproj`, destination `platform=macOS`, with `CODE_SIGNING_ALLOWED=NO` (no signing needed for CI), writing results to `TestResults.xcresult`.
+- Checks that the built test host (`-derivedDataPath "$RUNNER_TEMP/DerivedData"`) carries `Contents/Resources/Third-Party-Notices.txt`, written by the app target's "Bundle license notices" build phase.
 - On failure, uploads `TestResults.xcresult` as an artifact named `TestResults`.
 
 ### Running CI checks locally
@@ -58,7 +60,7 @@ It produces:
 
 - An **unsigned** Release build of `Top Drawer.app` (`CODE_SIGNING_ALLOWED=NO`), with `MARKETING_VERSION` set from the tag.
 - The app is then **ad-hoc codesigned** (`codesign --force --sign -`). This is not a Developer ID signature and the app is not notarized — it is only required so the app can launch on Apple Silicon. The workflow intentionally avoids deprecated `--deep`; if nested code is ever added, sign each nested component explicitly.
-- A `TopDrawer-<version>.zip` (via `ditto`) and a `TopDrawer-<version>.dmg` (via `create-dmg`).
+- A `TopDrawer-<version>.zip` (via `ditto`) and a `TopDrawer-<version>.dmg` (via `create-dmg`). The app's `Contents/Resources/Third-Party-Notices.txt` is checked before signing and again inside the zip.
 
 Both files are attached to a GitHub Release (named `Top Drawer <version>`, with auto-generated notes) via `softprops/action-gh-release`. The release body explains that, because the app is **unsigned and un-notarized, macOS Gatekeeper warns on first launch**, and tells users to right-click → Open or run `xattr -dr com.apple.quarantine "/Applications/Top Drawer.app"`.
 
@@ -67,8 +69,8 @@ Both files are attached to a GitHub Release (named `Top Drawer <version>`, with 
 Four more jobs run in parallel with the macOS ones and are deliberately decoupled from them — a Linux failure never blocks or changes the macOS release; the `.deb` is simply absent:
 
 1. **`linux-test`** — `linux-ci.yml` reused as a `workflow_call`, so the exact Linux CI job runs on the tagged commit first.
-2. **`linux-deb`** — in the pinned `swift:6.3-noble` container: builds gtk4-layer-shell v1.3.0 from source (the shared composite action `.github/actions/setup-gtk4-layer-shell`), then runs `linux/packaging/build-deb.sh <version>`, which stamps the version, builds `topdrawerd` + `topdrawer-shell` with the Swift runtime linked statically, computes `Depends` with `dpkg-shlibdeps`, vendors gtk4-layer-shell under `/usr/lib/topdrawer/`, and runs `lintian` (errors fail the job). A pre-release version becomes a Debian `~` version inside the package (`Version: 2.2.0~beta.1`, which sorts before `2.2.0`); the asset keeps the tag's hyphenated spelling, `TopDrawer-2.2.0-beta.1-amd64.deb`.
-3. **`linux-smoke`** — installs that file with `apt` into a pristine, digest-pinned `ubuntu:24.04` container, checks both executables' `--version` print exactly the tag's version, checks the shell resolved the vendored library, and checks the daemon's `Ping` over a throwaway session bus answers with it.
+2. **`linux-deb`** — in the pinned `swift:6.3-noble` container: builds gtk4-layer-shell v1.3.0 from source (the shared composite action `.github/actions/setup-gtk4-layer-shell`), then runs `linux/packaging/build-deb.sh <version>`, which stamps the version, builds `topdrawerd` + `topdrawer-shell` with the Swift runtime linked statically, computes `Depends` with `dpkg-shlibdeps`, vendors gtk4-layer-shell under `/usr/lib/topdrawer/`, generates the license notices (`/usr/share/doc/topdrawer/copyright` and `Third-Party-Notices.txt`), and runs `lintian` (errors fail the job). The job then checks the notices inside the package before uploading it. A pre-release version becomes a Debian `~` version inside the package (`Version: 2.2.0~beta.1`, which sorts before `2.2.0`); the asset keeps the tag's hyphenated spelling, `TopDrawer-2.2.0-beta.1-amd64.deb`.
+3. **`linux-smoke`** — installs that file with `apt` into a pristine, digest-pinned `ubuntu:24.04` container, checks both executables' `--version` print exactly the tag's version, checks the shell resolved the vendored library and the copyright file was installed, and checks the daemon's `Ping` over a throwaway session bus answers with it.
 4. **`publish-linux`** — after the macOS release exists: uploads the `.deb` with `gh release upload`, appends a Linux section to the release notes, and downloads and byte-compares the published asset (removing it on mismatch), mirroring the macOS verify step.
 
 ## Secrets

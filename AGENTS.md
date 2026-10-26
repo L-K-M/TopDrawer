@@ -129,6 +129,26 @@ Icon precedence in `ItemView.resolveIcon`, top rung first:
 Rungs 1 and 2 staying on top is what makes this invisible on upgrade, and it is
 also a feature: two items pointing at one app are allowed to differ.
 
+## Licensing
+
+- Top Drawer's own code is the Unlicense (`LICENSE`). Keep license statements
+  (README, `INFOPLIST_KEY_NSHumanReadableCopyright`, the `.deb`'s copyright file)
+  consistent with it; `ci.yml` checks the README section and the copyright line.
+- Before adding a dependency, vendored file or bundled asset (fonts, images, icons,
+  data), confirm its license allows redistribution in our artifacts. Never vendor
+  third-party code without its license file.
+- `Third-Party-Notices.txt` is generated from the real dependency set, and the build
+  fails on a component without license text; record gaps as explicit overrides with
+  a reason. Keep the CI checks on the notices passing.
+  - macOS app: the "Bundle license notices" build phase runs
+    `scripts/bundle-notices.sh` (`scripts/swiftpm-notices.py`, overrides in
+    `scripts/third-party-notices.json`) into `Contents/Resources`.
+  - Linux `.deb`: `linux/packaging/build-deb.sh` writes `copyright` and
+    `Third-Party-Notices.txt` from the checkouts, the toolchain and
+    `linux/packaging/licenses/`. A Swift toolchain bump that changes ICU fails the
+    build until the matching ICU license text is there.
+  - EditorWeb: `npm run build` writes `dist/Third-Party-Notices.txt`.
+
 ## Critical Constraints
 
 - **No scary permissions for core features.** Launching uses `NSWorkspace`.

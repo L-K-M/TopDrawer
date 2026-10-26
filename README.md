@@ -235,3 +235,20 @@ Optional features ask only when you choose to use them:
 - **Clipboard history** reads copied text while a Clipboard tab exists. On macOS
   15.4+, the system may ask for clipboard access. Its per-app clipboard setting
   controls background recording; this feature needs no Accessibility permission.
+
+## License
+
+Top Drawer's own code is released under the [Unlicense](LICENSE). The builds
+bundle third-party code that keeps its own licenses: the macOS app bundles
+swift-markdown-engine (Apache-2.0); the Linux `.deb` statically links the Swift
+runtime, Foundation with ICU, and the SwiftPM packages pinned in
+`linux/Package.resolved` (SwiftNIO, swift-crypto with BoringSSL, dbus and others),
+and ships a private copy of gtk4-layer-shell (MIT). Their notices ship inside each
+artifact:
+
+- macOS: `Top Drawer.app/Contents/Resources/Third-Party-Notices.txt`, also linked
+  from the About tab in Settings
+- Linux package: `/usr/share/doc/topdrawer/Third-Party-Notices.txt` and the DEP-5
+  `/usr/share/doc/topdrawer/copyright`
+- The EditorWeb bundle in `EditorWeb/dist/` (no longer part of the app):
+  `EditorWeb/dist/Third-Party-Notices.txt`
