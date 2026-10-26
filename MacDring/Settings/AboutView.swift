@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// About pane: name, version, and a nod to DragThing.
+/// About pane: name, version, a nod to DragThing, and the bundled third-party notices.
 struct AboutView: View {
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -21,6 +21,12 @@ struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 380)
                 .padding(.top, 4)
+            // Bundled packages keep their own licenses; the "Bundle license notices"
+            // build phase writes their texts into the app's Resources.
+            if let notices = Bundle.main.url(forResource: "Third-Party-Notices", withExtension: "txt") {
+                Button("Third-Party Notices") { NSWorkspace.shared.open(notices) }
+                    .buttonStyle(.link)
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

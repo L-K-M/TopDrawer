@@ -1,0 +1,19 @@
+{
+  "comment": "Overrides for scripts/swiftpm-notices.py (macOS app). Keys under packages are SwiftPM identities from MacDring.xcodeproj's Package.resolved. Every entry needs a reason.",
+  "preamble": [
+    "Top Drawer's own code is released under the Unlicense (see LICENSE in the",
+    "source repository). The components below are compiled into Top Drawer.app",
+    "and keep their own licenses. The Swift runtime and system frameworks ship",
+    "with macOS."
+  ],
+  "packages": {
+    "highlighterswift": {
+      "exclude": true,
+      "reason": "Resolved only for swift-markdown-engine's opt-in MarkdownEngineCodeBlocks product. The app links only the MarkdownEngine product (packageProductDependencies in MacDring.xcodeproj), whose target has no dependencies in swift-markdown-engine 0.14.0's Package.swift."
+    },
+    "swiftmath": {
+      "exclude": true,
+      "reason": "Resolved only for swift-markdown-engine's opt-in MarkdownEngineLatex product. The app links only the MarkdownEngine product (packageProductDependencies in MacDring.xcodeproj), whose target has no dependencies in swift-markdown-engine 0.14.0's Package.swift."
+    }
+  }
+}

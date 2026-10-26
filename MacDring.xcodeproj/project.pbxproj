@@ -79,6 +79,7 @@
 				AA000000000000000000000A /* Sources */,
 				AA000000000000000000000B /* Frameworks */,
 				AA000000000000000000000C /* Resources */,
+				4A0F5F5A063179CD39707EC1 /* Bundle license notices */,
 			);
 			buildRules = (
 			);
@@ -175,6 +176,34 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		4A0F5F5A063179CD39707EC1 /* Bundle license notices */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/bundle-notices.sh",
+				"$(SRCROOT)/scripts/swiftpm-notices.py",
+				"$(SRCROOT)/scripts/third-party-notices.json",
+				"$(SRCROOT)/MacDring.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+			);
+			name = "Bundle license notices";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Third-Party-Notices.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"$SRCROOT/scripts/bundle-notices.sh\"";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA000000000000000000000A /* Sources */ = {
@@ -326,11 +355,12 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Top Drawer";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense). Bundled components keep their own licenses.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				MARKETING_VERSION = 2.5.0;
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;
@@ -352,11 +382,12 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Top Drawer";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense). Bundled components keep their own licenses.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				MARKETING_VERSION = 2.5.0;
 				CODE_SIGN_ENTITLEMENTS = MacDring/MacDring.entitlements;

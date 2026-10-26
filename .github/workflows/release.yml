@@ -100,6 +100,11 @@ jobs:
         run: |
           APP=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release" -maxdepth 1 -name "$APP_NAME.app" -print -quit)
           [ -n "$APP" ] || { echo "::error::built $APP_NAME.app not found"; exit 1; }
+          # The bundled packages' notices (the "Bundle license notices" build phase)
+          # must ship in the app the updater offers; fail before anything is published.
+          notices="$APP/Contents/Resources/Third-Party-Notices.txt"
+          test -s "$notices" || { echo "::error::Third-Party-Notices.txt missing from $APP_NAME.app"; exit 1; }
+          grep -q '^swift-markdown-engine ' "$notices"
           # Ad-hoc sign (identity "-"): no certificate, keychain, or API key required,
           # but it IS required for the app to launch on Apple Silicon. This is not a
           # Developer ID signature and the app is not notarized — Gatekeeper still warns.
@@ -123,6 +128,8 @@ jobs:
             --app-drop-link 390 185 \
             "$DMG" "$APP_PATH" || true
           [ -f "$DMG" ] || { echo "::error::DMG was not created"; exit 1; }
+          # What users download must carry the notices too.
+          unzip -p "$ZIP" "$APP_NAME.app/Contents/Resources/Third-Party-Notices.txt" | grep -q '^swift-markdown-engine '
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
           echo "DMG=$DMG" >> "$GITHUB_ENV"
 

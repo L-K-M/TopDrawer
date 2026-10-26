@@ -71,9 +71,18 @@ jobs:
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             clean test 2>&1 | tee /tmp/xcodebuild.log | xcbeautify
+
+      # The test host is the real app, built by the same "Bundle license notices"
+      # phase as a release: the bundled packages' notices must be inside it.
+      - name: Check the app's license notices
+        run: |
+          notices="$RUNNER_TEMP/DerivedData/Build/Products/Debug/Top Drawer.app/Contents/Resources/Third-Party-Notices.txt"
+          test -s "$notices" || { echo "::error::Third-Party-Notices.txt missing from Top Drawer.app"; exit 1; }
+          grep -q '^swift-markdown-engine ' "$notices"
 
       # The summarized output can hide which file failed to compile (it reports the
       # message, not always the location), so the raw log is what makes a red build
