@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Shared Markdown editor bundle for Top Drawer notes (Milkdown rich mode + CodeMirror source mode). Spike: see docs/markdown-editor-improvement-plan.md.",
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && node scripts/third-party-notices.mjs --esbuild-meta dist/meta.json --title \"Top Drawer EditorWeb\" --out dist/Third-Party-Notices.txt",
     "test": "vitest run",
     "smoke": "node tests/smoke.mjs",
     "check": "tsc --noEmit"
