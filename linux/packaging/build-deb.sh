@@ -319,7 +319,13 @@ if [ "$run_lintian" = 1 ]; then
     # Fail on errors only; warnings/info are printed for the log. Expected, accepted
     # findings are suppressed by name with the reason recorded here:
     #   no-manual-page — the executables have --help; man pages are a follow-up.
-    lintian --fail-on error --suppress-tags no-manual-page --info "$output" || exit 1
+    #   copyright-file-contains-full-apache-2-license and
+    #   copyright-not-using-common-license-for-apache2: the copyright file quotes the
+    #   Swift toolchain's LICENSE.txt verbatim. That is Apache-2.0 plus the Runtime
+    #   Library Exception, which /usr/share/common-licenses/Apache-2.0 lacks.
+    lintian --fail-on error \
+      --suppress-tags no-manual-page,copyright-file-contains-full-apache-2-license,copyright-not-using-common-license-for-apache2 \
+      --info "$output" || exit 1
   else
     echo "note: lintian not installed — skipping (apt-get install lintian)" >&2
   fi
