@@ -50,9 +50,10 @@ jobs:
       # in both build configurations.
       - name: Check license statements
         run: |
-          grep -q '^## License$' README.md
-          grep -q 'Third-Party-Notices.txt' README.md
-          test "$(grep -c 'INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense)\.' MacDring.xcodeproj/project.pbxproj)" -eq 2
+          grep -q '^## License$' README.md || { echo "::error::README.md lacks its '## License' section"; exit 1; }
+          grep -q 'Third-Party-Notices.txt' README.md || { echo "::error::README.md no longer says where Third-Party-Notices.txt ships"; exit 1; }
+          test "$(grep -c 'INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense)\.' MacDring.xcodeproj/project.pbxproj)" -eq 2 \
+            || { echo "::error::NSHumanReadableCopyright must start with 'Public domain (Unlicense).' in both build configurations"; exit 1; }
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
@@ -82,7 +83,7 @@ jobs:
         run: |
           notices="$RUNNER_TEMP/DerivedData/Build/Products/Debug/Top Drawer.app/Contents/Resources/Third-Party-Notices.txt"
           test -s "$notices" || { echo "::error::Third-Party-Notices.txt missing from Top Drawer.app"; exit 1; }
-          grep -q '^swift-markdown-engine ' "$notices"
+          grep -q '^swift-markdown-engine ' "$notices" || { echo "::error::Third-Party-Notices.txt lacks swift-markdown-engine"; exit 1; }
 
       # The summarized output can hide which file failed to compile (it reports the
       # message, not always the location), so the raw log is what makes a red build
