@@ -21,11 +21,20 @@ public final class RecentsStore: ObservableObject {
 
     private let defaults: UserDefaults
     private static let key = "recentItems"
+    private var canSave = true
 
     /// A custom `UserDefaults` can be injected for tests.
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        items = RecentsStore.load(from: defaults)
+        items = []
+        do {
+            items = try RecentsStore.load(from: defaults)
+        } catch {
+            // Keep recoverable bytes until Clear explicitly replaces the archive.
+            canSave = false
+            NSLog("Top Drawer: couldn't restore recent items; keeping session history until Clear: %@",
+                  error.localizedDescription)
+        }
     }
 
     /// Records a freshly-opened target: moves it to the front, de-duplicating by URL,
@@ -37,6 +46,7 @@ public final class RecentsStore: ObservableObject {
 
     public func clear() {
         items = []
+        canSave = true
         save()
     }
 
@@ -59,6 +69,7 @@ public final class RecentsStore: ObservableObject {
     // MARK: Persistence
 
     private func save() {
+        guard canSave else { return }
         do {
             defaults.set(try JSONEncoder().encode(items), forKey: RecentsStore.key)
         } catch {
@@ -66,12 +77,12 @@ public final class RecentsStore: ObservableObject {
         }
     }
 
-    private static func load(from defaults: UserDefaults) -> [RecentItem] {
+    private static func load(from defaults: UserDefaults) throws -> [RecentItem] {
         guard let data = defaults.data(forKey: key) else { return [] }
         // Decode each record failably: one unreadable element must not nil the whole
         // history — the next `record()` would persist the wipe. Mirrors the launcher
         // document's `FailableTab` / `FailableDrawerItem` lenient-decode policy.
-        guard let wrapped = try? JSONDecoder().decode([FailableRecentItem].self, from: data) else { return [] }
+        let wrapped = try JSONDecoder().decode([FailableRecentItem].self, from: data)
         return wrapped.compactMap(\.item)
     }
 }
