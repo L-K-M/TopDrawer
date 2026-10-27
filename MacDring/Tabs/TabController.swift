@@ -407,7 +407,7 @@ final class TabController {
     private func makeWindow(for tab: Tab) -> TabWindowController {
         let wc = TabWindowController(tab: tab, preferences: preferences)
         let id = tab.id
-        wc.onTap = { [weak self] in self?.toggleDrawer(id) }
+        wc.onTap = { [weak self] in self?.toggleDrawer(id, reason: .click) }
         wc.onHoverChanged = { [weak self] inside in self?.handleHover(id, inside: inside) }
         wc.onDropURLs = { [weak self] urls in self?.handleTabPillDrop(urls, toTab: id) }
         wc.model.onDragHover = { [weak self] targeted in self?.handleDragHover(id, targeted: targeted) }
@@ -432,7 +432,7 @@ final class TabController {
         let available = Set(visibleTabs.map(\.id))
         guard let next = TabCycling.adjacentID(to: id, direction: direction,
                                              in: visibleTabs, availableIDs: available) else { return }
-        openDrawer(next)
+        openDrawer(next, reason: .hotkey)   // keyboard-driven, like the hotkey itself
     }
 
     /// Re-anchors a tab to a different edge (pill context menu), keeping its display
@@ -453,14 +453,14 @@ final class TabController {
     /// Toggles a tab's drawer from outside its pill — the status-item menu's tab
     /// list. The same path a pill click takes.
     func toggle(tabID: UUID) {
-        toggleDrawer(tabID)
+        toggleDrawer(tabID, reason: .click)
     }
 
-    private func toggleDrawer(_ id: UUID) {
-        if openTabID == id { closeDrawer() } else { openDrawer(id) }
+    private func toggleDrawer(_ id: UUID, reason: DrawerOpenReason) {
+        if openTabID == id { closeDrawer() } else { openDrawer(id, reason: reason) }
     }
 
-    private func openDrawer(_ id: UUID) {
+    private func openDrawer(_ id: UUID, reason: DrawerOpenReason) {
         guard let wc = tabWindows[id],
               let tab = store.tab(id: id),
               // Resolve the tab's screen *live* rather than trusting a possibly-stale
@@ -490,7 +490,8 @@ final class TabController {
         // The drawer slides out flush against the screen edge (centered on the
         // tab's resting position); the tab slides onto the drawer's inner face.
         if tab.kind == .clipboard { clipboardMonitor.captureChanges() }
-        drawer.show(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen, duration: duration)
+        drawer.show(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen,
+                    duration: duration, reason: reason)
         let openedTab = EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                   restingTabFrame: wc.restingFrame,
                                                   drawerFrame: drawer.openFrame)
@@ -565,7 +566,7 @@ final class TabController {
             // type-to-find filter, reloading a notes editor, and restarting the
             // open animation from alpha 0. (handleDragHover has the same guard.)
             guard openTabID != id else { return }
-            openDrawer(id)
+            openDrawer(id, reason: .hover)
         } else {
             scheduleHoverClose()
         }
@@ -940,12 +941,12 @@ final class TabController {
         case .folder:
             guard let directory = FolderLister.resolveFolder(tab) else { return }
             moveFilesWithUndo(fileURLs, into: directory)
-            if openTabID == id { refreshOpenDrawer() } else { openDrawer(id) }
+            if openTabID == id { refreshOpenDrawer() } else { openDrawer(id, reason: .drop) }
         case .items:
             let dropped = urls.map { DrawerItem.fromDroppedURL($0) }   // files & links, in drop order
             // Add, dedup, and optionally place the whole drop in one store mutation.
             store.addItems(dropped, toTab: id, startingAt: placementSlot)
-            if openTabID != id { openDrawer(id) }   // a store change already refreshed an open drawer
+            if openTabID != id { openDrawer(id, reason: .drop) }   // a store change already refreshed an open drawer
         }
     }
 
@@ -965,7 +966,7 @@ final class TabController {
                 // A soft tick as the spring finally releases — the sibling of the
                 // drag-snap alignment haptic, marking "the drawer is opening under you".
                 NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-                self?.openDrawer(id)
+                self?.openDrawer(id, reason: .springLoad)
             }
             pendingSpringOpen = work
             pendingSpringOpenTabID = id
@@ -1032,7 +1033,7 @@ final class TabController {
             hotkeyRegistrar.unregister(stale)
             hotkeys[id] = nil
         }
-        if let token = hotkeyRegistrar.register(spec, onPressed: { [weak self] in self?.toggleDrawer(id) }) {
+        if let token = hotkeyRegistrar.register(spec, onPressed: { [weak self] in self?.toggleDrawer(id, reason: .hotkey) }) {
             hotkeys[id] = (token, spec)
             failedHotkeySpecs[id] = nil
         } else {
@@ -1423,7 +1424,7 @@ final class TabController {
                 guard self.drawerInteractionGeneration == expectedDrawerGeneration,
                       self.openTabID == nil,
                       self.store.tab(id: id) != nil else { return }
-                self.openDrawer(id)
+                self.openDrawer(id, reason: .click)
             }
         )
     }
