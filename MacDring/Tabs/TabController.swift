@@ -1441,10 +1441,17 @@ final class TabController {
     /// Ejects a disk item's volume and refreshes the open Disks/Network drawer so the
     /// volume drops out of the listing at once (the unmount notification is a
     /// belt-and-suspenders refresh if the eject completes asynchronously).
+    /// `unmountAndEjectDevice` blocks — a spun-down disk or hung share can take many
+    /// seconds — so it runs off the main thread with the same spinner Eject All shows.
     private func ejectDisk(_ item: DrawerItem) {
-        DiskEjector.eject(item)
-        if openTabReflectsVolumes {
-            refreshOpenDrawer()
+        drawer.model.ejectingItemIDs.insert(item.id)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            DiskEjector.eject(item)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.drawer.model.ejectingItemIDs.remove(item.id)
+                if self.openTabReflectsVolumes { self.refreshOpenDrawer() }
+            }
         }
     }
 
