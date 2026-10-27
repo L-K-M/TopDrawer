@@ -118,6 +118,27 @@ final class DrawerGroupingTests: XCTestCase {
         XCTAssertEqual(result[0].children.map(\.id), [a.id, c.id])
     }
 
+    func testDissolvingAGroupPromotesItsChildrenAtTheGroupSlot() {
+        let a = app("A", slot: 0), b = app("B", slot: 1), c = app("C", slot: 2)
+        let group = DrawerItem(kind: .group, displayName: "G", slot: 3, children: [a, b, c])
+        let d = app("D", slot: 0)
+
+        let result = DrawerGrouping.dissolvingGroup([group, d], id: group.id)
+
+        XCTAssertFalse(result.contains { $0.kind == .group })
+        XCTAssertEqual(result.map(\.id), [a.id, b.id, c.id, d.id],
+                       "children land at the group's position, in order")
+        XCTAssertEqual(result[0].slot, 3, "the first child inherits the group's slot")
+        XCTAssertTrue(result.allSatisfy { $0.slot >= 0 })
+        XCTAssertEqual(Set(result.map(\.slot)).count, result.count, "slots stay distinct")
+    }
+
+    func testDissolvingGroupIgnoresNonGroupsAndUnknownIDs() {
+        let a = app("A", slot: 0)
+        XCTAssertEqual(DrawerGrouping.dissolvingGroup([a], id: a.id), [a])
+        XCTAssertEqual(DrawerGrouping.dissolvingGroup([a], id: UUID()), [a])
+    }
+
     func testUpdatingItemFindsAChildInAnyGroup() {
         let a = app("A"), b = app("B"), c = app("C"), d = app("D")
         let first = DrawerItem(kind: .group, displayName: "First", children: [a, b])
