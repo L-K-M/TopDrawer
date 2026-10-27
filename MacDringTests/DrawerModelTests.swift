@@ -67,6 +67,32 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertNil(model.clipboardError)
     }
 
+    // MARK: Search
+
+    func testActiveSearchStaysEditableWhenLiveListingShrinks() {
+        let model = DrawerModel()
+        model.kind = .folder
+        XCTAssertFalse(model.isSearchable)
+        model.items = (0..<DrawerSearch.minItemsToShow).map {
+            DrawerItem(kind: .file, displayName: "Match \($0)", slot: $0)
+        }
+        XCTAssertTrue(model.isSearchable)
+        model.searchQuery = "match"
+
+        model.items.removeLast()
+        XCTAssertTrue(model.isSearching)
+        XCTAssertTrue(model.isSearchable, "An active filter must keep its field visible")
+        XCTAssertEqual(model.searchResults.count, model.items.count)
+
+        model.items = []
+        XCTAssertTrue(model.isSearchable, "No matches must still allow editing the filter")
+        XCTAssertEqual(model.searchQuery, "match")
+
+        model.clearSearch()
+        XCTAssertFalse(model.isSearching)
+        XCTAssertFalse(model.isSearchable)
+    }
+
     func testItemAtSlotFindsByGridSlotIncludingGaps() {
         let model = DrawerModel()
         let a = DrawerItem(kind: .file, displayName: "A", slot: 0)
