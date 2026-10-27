@@ -52,6 +52,7 @@ final class TabController {
     private var globalClickMonitor: Any?
     private var localKeyMonitor: Any?
     private var pendingHoverClose: DispatchWorkItem?
+    private var pendingHoverOpen: DispatchWorkItem?
     private var pendingSpringOpen: DispatchWorkItem?
     private var pendingSpringOpenTabID: UUID?
     private var undoToastClearItem: DispatchWorkItem?
@@ -460,7 +461,7 @@ final class TabController {
         if openTabID == id { closeDrawer() } else { openDrawer(id) }
     }
 
-    private func openDrawer(_ id: UUID) {
+    private func openDrawer(_ id: UUID, takeKeyFocus: Bool = true) {
         guard let wc = tabWindows[id],
               let tab = store.tab(id: id),
               // Resolve the tab's screen *live* rather than trusting a possibly-stale
@@ -477,6 +478,7 @@ final class TabController {
             tabWindows[prev]?.restoreResting()
         }
         cancelHoverClose()
+        cancelHoverOpen()
         cancelReConceal(id)
         cancelSpringOpen()
         openTabID = id
@@ -490,7 +492,8 @@ final class TabController {
         // The drawer slides out flush against the screen edge (centered on the
         // tab's resting position); the tab slides onto the drawer's inner face.
         if tab.kind == .clipboard { clipboardMonitor.captureChanges() }
-        drawer.show(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen, duration: duration)
+        drawer.show(tab: tab, tabFrame: wc.restingFrame, edge: tab.anchor.edge, on: screen,
+                    duration: duration, takeKeyFocus: takeKeyFocus)
         let openedTab = EdgeLayout.openedTabFrame(edge: tab.anchor.edge,
                                                   restingTabFrame: wc.restingFrame,
                                                   drawerFrame: drawer.openFrame)
@@ -502,6 +505,7 @@ final class TabController {
 
     private func closeDrawer() {
         cancelSpringOpen()
+        cancelHoverOpen()
         previewController.close()
         previewIsOpen = false
         folderBrowser.close()
@@ -564,11 +568,24 @@ final class TabController {
             // openDrawer would replay the whole show — wiping an active
             // type-to-find filter, reloading a notes editor, and restarting the
             // open animation from alpha 0. (handleDragHover has the same guard.)
-            guard openTabID != id else { return }
-            openDrawer(id)
+            guard openTabID != id, pendingHoverOpen == nil else { return }
+            // A short dwell before opening: brushing the pill on the way to
+            // something else shouldn't pop a drawer (or steal keyboard focus).
+            let work = DispatchWorkItem { [weak self] in
+                self?.pendingHoverOpen = nil
+                self?.openDrawer(id, takeKeyFocus: false)
+            }
+            pendingHoverOpen = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         } else {
+            cancelHoverOpen()
             scheduleHoverClose()
         }
+    }
+
+    private func cancelHoverOpen() {
+        pendingHoverOpen?.cancel()
+        pendingHoverOpen = nil
     }
 
     private func scheduleHoverClose() {
