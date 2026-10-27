@@ -919,13 +919,29 @@ final class TabController {
             return
         }
         if let target, target.kind == .trash {
-            if trashService.trash(urls) {   // drop onto Trash → move the files to the Trash
-                // The classic "poof" where the files vanished into the Trash.
-                NSAnimationEffect.poof.show(centeredAt: NSEvent.mouseLocation,
-                                            size: NSSize(width: 32, height: 32), completionHandler: {})
+            // Trashing can block (slow/network volumes), so it runs off the main
+            // thread; the poof plays when the files actually vanished.
+            let poofAt = NSEvent.mouseLocation
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let trashed = self?.trashService.trash(urls) ?? false
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if trashed {
+                        // The classic "poof" where the files vanished into the Trash.
+                        NSAnimationEffect.poof.show(centeredAt: poofAt,
+                                                    size: NSSize(width: 32, height: 32), completionHandler: {})
+                    } else {
+                        // A single Bool can't say *which* files failed, so the
+                        // message claims nothing about partial success.
+                        self.drawer.model.actionError = "Couldn't move items to the Trash."
+                    }
+                    // Refreshed even on failure: a partially-failed batch still moves
+                    // the files that did succeed, so the Trash icon and folder listing
+                    // may have changed.
+                    self.drawer.model.iconNonce += 1   // re-resolve the Trash icon
+                    if tab.kind == .folder { self.refreshOpenDrawer() }
+                }
             }
-            drawer.model.iconNonce += 1   // the Trash now has something — re-resolve its icon to "full"
-            if tab.kind == .folder { refreshOpenDrawer() }
             return
         }
         if let target, target.kind == .folder, let directory = BookmarkResolver.url(for: target) {
@@ -1466,16 +1482,31 @@ final class TabController {
     }
 
     /// Moves dropped files into `directory`, then shows an Undo toast in the drawer
-    /// header that can move them back. A no-op (no toast) if nothing actually moved.
+    /// header that can move them back. The batch runs off the main thread — a
+    /// cross-volume `moveItem` is a full copy and must not stall the UI — and any
+    /// source that couldn't move is named in the drawer instead of silently staying
+    /// put. A no-op (no toast) if nothing actually moved.
     private func moveFilesWithUndo(_ urls: [URL], into directory: URL) {
-        let result = FileMover.movingFiles(urls, into: directory)
-        guard !result.moves.isEmpty else { return }
-        let moves = result.moves
-        let n = moves.count
         let name = directory.lastPathComponent
-        showUndoToast("Moved \(n) item\(n == 1 ? "" : "s") to \(name)") { [weak self] in
-            FileMover.undo(moves)
-            self?.refreshOpenDrawer()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = FileMover.movingFiles(urls, into: directory)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if !result.moves.isEmpty {
+                    let moves = result.moves
+                    let n = moves.count
+                    self.showUndoToast("Moved \(n) item\(n == 1 ? "" : "s") to \(name)") { [weak self] in
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            FileMover.undo(moves)
+                            DispatchQueue.main.async { self?.refreshOpenDrawer() }
+                        }
+                    }
+                }
+                if !result.failed.isEmpty {
+                    let names = result.failed.map(\.lastPathComponent).joined(separator: ", ")
+                    self.drawer.model.actionError = "Couldn't move \(names)."
+                }
+            }
         }
     }
 
