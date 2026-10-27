@@ -1810,15 +1810,23 @@ final class TabController {
             return event
         }
         guard !model.isEditingGroupName else { return event }
-        if model.kind != .notes, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
+        // Match the physical bracket keys, not the characters they produce: on layouts
+        // where [ and ] need Option (German, French…), a character match makes ⌘[
+        // unreachable because .option then shows up in the modifier mask. ⇧⌘[ / ⇧⌘]
+        // also cycle — browsers use them for previous/next tab. Caps Lock is noise.
+        let cyclingModifiers = event.modifierFlags
+            .intersection(.deviceIndependentFlagsMask).subtracting(.capsLock)
+        if model.kind != .notes, cyclingModifiers == .command || cyclingModifiers == [.command, .shift],
            let id = openTabID {
-            if event.charactersIgnoringModifiers == "[" {
+            switch event.keyCode {
+            case UInt16(kVK_LeftBracket):
                 cycleTab(from: id, direction: .previous)
                 return nil
-            }
-            if event.charactersIgnoringModifiers == "]" {
+            case UInt16(kVK_RightBracket):
                 cycleTab(from: id, direction: .next)
                 return nil
+            default:
+                break
             }
         }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
