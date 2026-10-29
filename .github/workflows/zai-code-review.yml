@@ -57,9 +57,9 @@ jobs:
         # of #89 still fits.
         timeout-minutes: 170
         # Pin privileged third-party actions to an immutable commit.
-        # 13a9ddb = v0.0.15. Verify before bumping:
-        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.15*'
-        uses: L-K-M/zai-code-review@13a9ddba4ff2e2086dbd91af184f74dee6587c17
+        # b44215f = v0.0.16. Verify before bumping:
+        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.16*'
+        uses: L-K-M/zai-code-review@b44215f6c1b4fb7eeacad0756449d45b66f3c4ff
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
           # Xiaomi MiMo reviews the chunks Z.ai still fails on (rate limits,
@@ -67,6 +67,13 @@ jobs:
           FALLBACK_API_KEY: ${{ secrets.MIMO_API_KEY }}
           FALLBACK_API_URL: https://token-plan-sgp.xiaomimimo.com/v1/chat/completions
           FALLBACK_MODEL: mimo-v2.6-pro
+          # StepFun step-5-preview reviews the low-risk chunks the classifier routes
+          # to the fast tier and deputizes for rate-limited deep chunks; GLM keeps
+          # deep routing and escalation. An empty STEPFUN_API_KEY secret keeps the
+          # fast tier on Z.ai.
+          FAST_API_KEY: ${{ secrets.STEPFUN_API_KEY }}
+          FAST_API_URL: https://api.stepfun.ai/step_plan/v1/chat/completions
+          FAST_MODEL: step-5-preview
           ZAI_MODEL: glm-5.3
           ZAI_MODEL_FAST: glm-5.3-flash
           ZAI_REASONING_EFFORT: high
