@@ -44,7 +44,7 @@ struct NotesEditorNativeView: NSViewRepresentable {
         private weak var textView: NSTextView?
         private var changeObserver: NSObjectProtocol?
         private var eventMonitor: Any?
-        private var linkInteraction = NotesEditorLinkInteraction()
+        private let linkInteraction = NotesEditorLinkInteraction()
         private let notificationPrefix = "TopDrawer.notes.\(UUID().uuidString)"
 
         fileprivate init(_ parent: NotesEditorNativeView) {
@@ -222,12 +222,22 @@ struct NotesEditorNativeView: NSViewRepresentable {
             let insertion = textView.characterIndexForInsertion(at: point)
             let activation: NotesEditorLinkInteraction.Activation =
                 modifiers.intersection([.command, .control]).isEmpty ? .edit : .open
-            if let url = linkInteraction.activate(at: insertion, in: storage, as: activation) {
+            switch linkInteraction.activate(at: insertion, in: storage, as: activation,
+                                            clickCount: event.clickCount) {
+            case .open(let url):
                 parent.onOpenLink(url)
                 return nil
+            case .placeCaret:
+                // A plain click on a link parks the caret for editing; swallowing the
+                // event keeps the engine's open-on-click fallback from firing while
+                // leaving the .link attribute (and its styling) intact.
+                textView.window?.makeFirstResponder(textView)
+                textView.setSelectedRange(NSRange(location: insertion, length: 0))
+                return nil
+            case .passthrough:
+                // Keep the original gesture for native drag, word and Shift selection.
+                return event
             }
-            // Keep the original gesture for native drag, word and Shift selection.
-            return event
         }
 
         private static func findTextView(in view: NSView) -> NSTextView? {
