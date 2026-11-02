@@ -74,6 +74,22 @@ final class NotesEditorNativeViewTests: XCTestCase {
         XCTAssertEqual(textView.string, "Hello,! world")
     }
 
+    func testOutsideChangeToTheSameNoteReachesTheEditor() throws {
+        let record = Record(markdown: "First")
+        let (window, host) = makeEditor(record)
+        defer { window.close() }
+        let textView = try XCTUnwrap(findTextView(in: host))
+
+        // The drawer reloads the open note's text, e.g. after a change from elsewhere.
+        record.markdown = "Second"
+        host.rootView = content(record)
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(findTextView(in: host) === textView, "Same note, same editor")
+        XCTAssertEqual(textView.string, "Second")
+        XCTAssertTrue(record.edits.isEmpty, "Showing outside text must not save it back")
+    }
+
     func testSwitchKeepsPendingEditsWithTheirOriginalDocument() throws {
         let record = Record(markdown: "First note")
         let firstID = record.documentID
