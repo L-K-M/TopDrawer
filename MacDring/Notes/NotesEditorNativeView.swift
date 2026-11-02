@@ -38,6 +38,13 @@ struct NotesEditorNativeView: NSViewRepresentable {
 
         private var parent: NotesEditorNativeView
         private var markdown: String
+        /// The text the engine last wrote through its Binding. It trails `markdown`
+        /// for one main-queue turn after a keystroke: the engine writes the Binding
+        /// asynchronously, `markdown` changes at once. The Binding returns this value,
+        /// because handing the engine `markdown` in that window reads as an outside
+        /// replacement, and the rebuild moves the caret to the end. Example: after
+        /// typing "," behind "Hello" in "Hello world", the next key landed after "world".
+        private var engineMarkdown: String
         private var hasEdits = false
         private var isTornDown = false
         private weak var host: NotesEditorNativeHostingView?
@@ -50,6 +57,7 @@ struct NotesEditorNativeView: NSViewRepresentable {
         fileprivate init(_ parent: NotesEditorNativeView) {
             self.parent = parent
             markdown = parent.markdown
+            engineMarkdown = parent.markdown
         }
 
         fileprivate func makeView() -> NSView {
@@ -67,6 +75,7 @@ struct NotesEditorNativeView: NSViewRepresentable {
             self.parent = parent
             if markdown != parent.markdown {
                 markdown = parent.markdown
+                engineMarkdown = parent.markdown
                 hasEdits = false
             }
             host?.rootView = content
@@ -90,9 +99,13 @@ struct NotesEditorNativeView: NSViewRepresentable {
                 extensions: [StrikethroughExtension()]
             )
             let binding = Binding(
-                get: { [self] in markdown },
+                get: { [self] in engineMarkdown },
                 set: { [weak self] value in
-                    guard let self, !isTornDown, value != markdown, let textView,
+                    guard let self, !isTornDown else { return }
+                    // Mirror every write, stale ones included: each is the value the
+                    // engine now holds for this Binding.
+                    engineMarkdown = value
+                    guard value != markdown, let textView,
                           !textView.hasMarkedText(), value == storageText(in: textView) else { return }
                     accept(value)
                 }
