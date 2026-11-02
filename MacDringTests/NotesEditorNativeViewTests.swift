@@ -54,6 +54,42 @@ final class NotesEditorNativeViewTests: XCTestCase {
         XCTAssertTrue(record.edits.isEmpty)
     }
 
+    func testRenderingAnEditBeforeTheEngineSyncsKeepsTheCaret() throws {
+        let record = Record(markdown: "Hello world")
+        let (window, host) = makeEditor(record)
+        defer { window.close() }
+        let textView = try XCTUnwrap(findTextView(in: host))
+        textView.setSelectedRange(NSRange(location: 5, length: 0))
+
+        textView.insertText(",", replacementRange: textView.selectedRange())
+        XCTAssertEqual(record.markdown, "Hello, world", "The edit reaches the host synchronously")
+        // The drawer re-renders on that edit while the engine's asynchronous
+        // Binding write is still queued. No run-loop turn in between.
+        host.rootView = content(record)
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 6, length: 0),
+                       "The caret must stay after the typed character, not jump to the end")
+        textView.insertText("!", replacementRange: textView.selectedRange())
+        XCTAssertEqual(textView.string, "Hello,! world")
+    }
+
+    func testOutsideChangeToTheSameNoteReachesTheEditor() throws {
+        let record = Record(markdown: "First")
+        let (window, host) = makeEditor(record)
+        defer { window.close() }
+        let textView = try XCTUnwrap(findTextView(in: host))
+
+        // The drawer reloads the open note's text, e.g. after a change from elsewhere.
+        record.markdown = "Second"
+        host.rootView = content(record)
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(findTextView(in: host) === textView, "Same note, same editor")
+        XCTAssertEqual(textView.string, "Second")
+        XCTAssertTrue(record.edits.isEmpty, "Showing outside text must not save it back")
+    }
+
     func testSwitchKeepsPendingEditsWithTheirOriginalDocument() throws {
         let record = Record(markdown: "First note")
         let firstID = record.documentID
