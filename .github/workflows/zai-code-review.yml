@@ -59,7 +59,7 @@ jobs:
         # Pin privileged third-party actions to an immutable commit.
         # b44215f = v0.0.16. Verify before bumping:
         #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.16*'
-        uses: L-K-M/zai-code-review@b44215f6c1b4fb7eeacad0756449d45b66f3c4ff
+        uses: L-K-M/zai-code-review@7e2222dd5ea9f0c36f9c3683118752ab424d2b35
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
           # Xiaomi MiMo reviews the chunks Z.ai still fails on (rate limits,
