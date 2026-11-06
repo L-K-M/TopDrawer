@@ -185,6 +185,11 @@ final class TabController {
         clipboardHistory.$persistenceError
             .sink { [weak self] error in self?.drawer.model.clipboardPersistenceError = error }
             .store(in: &cancellables)
+        // Layout-save health reaches the same header as the clipboard's — a failing
+        // save must be visible where the edits happen, not only in Settings.
+        store.$persistenceError
+            .sink { [weak self] error in self?.drawer.model.persistenceError = error }
+            .store(in: &cancellables)
         // Apply the value synchronously so disabling retention immediately deletes it,
         // even if quit arrives before the general preference reconcile is delivered.
         preferences.$persistClipboardHistory.removeDuplicates()

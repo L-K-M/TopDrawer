@@ -17,9 +17,20 @@ final class TabStore: ObservableObject {
     /// Called after every mutation (on the main thread).
     var onChange: (() -> Void)?
 
+    /// The reason persistence is currently failing (a failed write, or a document
+    /// this build must not rewrite), `nil` while saves are healthy. Mirrors
+    /// `ClipboardHistoryStore.persistenceError` so both stores surface trouble the
+    /// same way — a save that can't reach disk is a data-loss risk the user must see,
+    /// not a log line. Cleared by the next successful save.
+    @Published private(set) var persistenceError: String?
+
     /// Whether a document was loaded from disk (vs. a fresh first run). Used to
     /// decide whether to seed a starter tab.
     let loadedFromDisk: Bool
+
+    /// The user-facing reason a future-schema document can't be saved.
+    private static let newerVersionMessage =
+        "This layout was saved by a newer version of Top Drawer. Changes are kept for this session only, so the newer document isn't damaged."
 
     private let storeURL: URL
     private let bakURL: URL
@@ -88,6 +99,11 @@ final class TabStore: ObservableObject {
                 self.document = .empty
                 self.loadedFromDisk = false
             }
+        }
+        // Surface a future-schema document at load, not at the first save attempt:
+        // a session that can never persist must say so before the first edit.
+        if document.version > LauncherDocument.currentVersion {
+            persistenceError = TabStore.newerVersionMessage
         }
     }
 
@@ -779,6 +795,9 @@ final class TabStore: ObservableObject {
     /// copy exactly when writes are failing (e.g. disk full), leaving the
     /// document nowhere but memory.
     func saveNow() {
+        // Every caller (quit flush, debounced autosave, tests) is main-bound, and
+        // the outcome publishes `@Published` state — fail loudly if that drifts.
+        dispatchPrecondition(condition: .onQueue(.main))
         saveWorkItem?.cancel()
         saveWorkItem = nil
         // A document written by a newer Top Drawer (schema version above ours)
@@ -787,6 +806,7 @@ final class TabStore: ObservableObject {
         // works; only persistence is disabled.
         guard document.version <= LauncherDocument.currentVersion else {
             NSLog("Top Drawer: launcher document is version \(document.version), newer than this build's \(LauncherDocument.currentVersion) — not saving, so the newer document isn't damaged")
+            persistenceError = Self.newerVersionMessage
             return
         }
         do {
@@ -800,8 +820,10 @@ final class TabStore: ObservableObject {
             if let previous {
                 try? previous.write(to: bakURL, options: .atomic)
             }
+            persistenceError = nil
         } catch {
             NSLog("Top Drawer: failed to save launcher document: \(error.localizedDescription)")
+            persistenceError = "Couldn't save your layout. Check free space and Application Support permissions."
         }
     }
 }
