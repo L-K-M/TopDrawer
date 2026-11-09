@@ -62,18 +62,19 @@ jobs:
         uses: L-K-M/zai-code-review@b44215f6c1b4fb7eeacad0756449d45b66f3c4ff
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
-          # Xiaomi MiMo reviews the chunks Z.ai still fails on (rate limits,
-          # outages). An empty MIMO_API_KEY secret disables the fallback.
-          FALLBACK_API_KEY: ${{ secrets.MIMO_API_KEY }}
-          FALLBACK_API_URL: https://token-plan-sgp.xiaomimimo.com/v1/chat/completions
-          FALLBACK_MODEL: mimo-v2.6-pro
-          # StepFun step-5-preview reviews the low-risk chunks the classifier routes
+          # Xiaomi MiMo v2.6 Pro reviews the low-risk chunks the classifier routes
           # to the fast tier and deputizes for rate-limited deep chunks; GLM keeps
-          # deep routing and escalation. An empty STEPFUN_API_KEY secret keeps the
-          # fast tier on Z.ai.
-          FAST_API_KEY: ${{ secrets.STEPFUN_API_KEY }}
-          FAST_API_URL: https://api.stepfun.ai/step_plan/v1/chat/completions
-          FAST_MODEL: step-5-preview
+          # deep routing and escalation, and glm-5.3-flash backs MiMo up. An empty
+          # MIMO_API_KEY secret keeps the fast tier on Z.ai.
+          FAST_API_KEY: ${{ secrets.MIMO_API_KEY }}
+          FAST_API_URL: https://token-plan-sgp.xiaomimimo.com/v1/chat/completions
+          FAST_MODEL: mimo-v2.6-pro
+          # StepFun step-5-preview is the last resort: it reviews only the chunks
+          # the providers above fail on (rate limits, outages, output limits). An
+          # empty STEPFUN_API_KEY secret disables the fallback.
+          FALLBACK_API_KEY: ${{ secrets.STEPFUN_API_KEY }}
+          FALLBACK_API_URL: https://api.stepfun.ai/step_plan/v1/chat/completions
+          FALLBACK_MODEL: step-5-preview
           ZAI_MODEL: glm-5.3
           ZAI_MODEL_FAST: glm-5.3-flash
           ZAI_REASONING_EFFORT: high
