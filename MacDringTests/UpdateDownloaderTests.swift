@@ -74,6 +74,14 @@ final class UpdateDownloaderTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: tempURL.path))
     }
 
+    func testDefaultSessionBoundsStalledTransfers() {
+        // A pinned `isDownloading` for the default seven-day resource timeout is the
+        // failure this guards: the downloader must use its own bounded session.
+        let configuration = UpdateDownloader.defaultSession.configuration
+        XCTAssertLessThanOrEqual(configuration.timeoutIntervalForRequest, 60)
+        XCTAssertLessThanOrEqual(configuration.timeoutIntervalForResource, 5 * 60)
+    }
+
     func testUniqueDestinationAvoidsCollisions() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("UpdateDownloaderTests-\(UUID().uuidString)")
