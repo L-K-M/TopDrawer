@@ -230,6 +230,31 @@ final class DrawerListingControllerTests: XCTestCase {
         }
     }
 
+    func testAFullCacheDropsOnlyTheListingStoredLongestAgo() throws {
+        let tabs = (0...DrawerWindowController.lastListingLimit).map {
+            folderTab(url: URL(fileURLWithPath: "/folder\($0)"))
+        }
+        let items = Dictionary(uniqueKeysWithValues: tabs.enumerated().map { index, tab in
+            (tab.id, DrawerItem(kind: .file, displayName: "Folder \(index)", slot: 0))
+        })
+        let drawer = try makeDrawer { tab in
+            DrawerListing(items: items[tab.id].map { [$0] } ?? [], truncated: false, folderURL: tab.folderURL)
+        }
+        for tab in tabs {
+            try show(tab, in: drawer)
+            spin { drawer.model.items == [items[tab.id]!] && !drawer.model.isLoadingListing }
+            XCTAssertEqual(drawer.model.items, [items[tab.id]!])
+            drawer.hide(duration: 0)
+        }
+
+        try show(tabs[1], in: drawer)
+        XCTAssertEqual(drawer.model.items, [items[tabs[1].id]!],
+                       "Storing one listing past the limit keeps the others")
+        drawer.hide(duration: 0)
+        try show(tabs[0], in: drawer)
+        XCTAssertTrue(drawer.model.items.isEmpty, "The listing stored longest ago is the one dropped")
+    }
+
     func testDirectScanFreshShowsLoadingUntilItsFirstReply() throws {
         let drawer = try makeDrawer(configure: { $0.freshDirectScan = true }) { _ in
             XCTFail("Fresh is gathered by TabController")
@@ -306,6 +331,15 @@ final class DrawerListingControllerTests: XCTestCase {
     private func show(_ tab: Tab, in drawer: DrawerWindowController) throws {
         guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
         drawer.show(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen, duration: 0)
+    }
+
+    /// Runs the main run loop until `condition` holds (or five seconds pass), for
+    /// loops too long for `XCTNSPredicateExpectation`'s coarse polling.
+    private func spin(until condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
     }
 
     private func waitForItems(_ items: [DrawerItem], in drawer: DrawerWindowController) {

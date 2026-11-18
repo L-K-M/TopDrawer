@@ -125,10 +125,12 @@ final class DrawerWindowController {
     /// appears at its real size with its last-known contents while the background
     /// read revalidates them. Without it every Folder/Disks/Network/Cloud drawer
     /// opened empty and jumped to its real size once the read landed.
-    private var lastListings: [UUID: (key: ListingKey, listing: DrawerListing)] = [:]
-    /// Bounds `lastListings` (a few hundred items per entry). Past it the cache
-    /// starts over; reopening a tab after that just reads it again.
-    private static let lastListingLimit = 32
+    private var lastListings: [UUID: RememberedListing] = [:]
+    /// Orders `lastListings` entries by when they were stored.
+    private var lastListingStamp = 0
+    /// Bounds `lastListings` (a few hundred items per entry). Past it the entry
+    /// stored longest ago is dropped; reopening that tab just reads it again.
+    static let lastListingLimit = 32
     private let panel: NSPanel
     private let hostingView: DrawerHostingView
     private let resizeView: NotesDrawerResizeView
@@ -363,11 +365,19 @@ final class DrawerWindowController {
         }
     }
 
+    private struct RememberedListing {
+        let key: ListingKey
+        let listing: DrawerListing
+        let stamp: Int
+    }
+
     private func rememberListing(_ result: DrawerListing, for tab: Tab) {
-        if lastListings[tab.id] == nil, lastListings.count >= Self.lastListingLimit {
-            lastListings.removeAll()
+        if lastListings[tab.id] == nil, lastListings.count >= Self.lastListingLimit,
+           let oldest = lastListings.min(by: { $0.value.stamp < $1.value.stamp })?.key {
+            lastListings[oldest] = nil
         }
-        lastListings[tab.id] = (ListingKey(tab), result)
+        lastListingStamp &+= 1
+        lastListings[tab.id] = RememberedListing(key: ListingKey(tab), listing: result, stamp: lastListingStamp)
     }
 
     private func rememberedListing(for tab: Tab) -> DrawerListing? {
