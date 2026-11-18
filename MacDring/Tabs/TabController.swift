@@ -1335,9 +1335,9 @@ final class TabController {
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
 
-        NSApp.activate(ignoringOtherApps: true)   // a text prompt needs key focus
         floatAboveDrawer(alert.window)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // A text prompt needs key focus; the user's app gets it back afterwards.
+        guard ModalActivation.run({ alert.runModal() }) == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         var updated = item
@@ -1356,9 +1356,8 @@ final class TabController {
         panel.allowedContentTypes = [.image]
         panel.message = "Choose an image to use as this item's icon"
 
-        NSApp.activate(ignoringOtherApps: true)
         floatAboveDrawer(panel)
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard ModalActivation.run({ panel.runModal() }) == .OK, let url = panel.url else { return }
         store.setCustomIconBookmark(BookmarkResolver.makeBookmark(for: url),
                                     forItem: item.id, inTab: id)
     }
@@ -1377,9 +1376,8 @@ final class TabController {
         alert.informativeText = "This permanently erases \(what) in the Trash. You can’t undo this."
         alert.addButton(withTitle: "Empty Trash")
         alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)   // a modal alert needs key focus
         floatAboveDrawer(alert.window)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard ModalActivation.run({ alert.runModal() }) == .alertFirstButtonReturn else { return }
         if trashService.emptyTrash() {
             drawer.model.iconNonce += 1   // re-resolve the Trash icon in place (full → empty)
         }
