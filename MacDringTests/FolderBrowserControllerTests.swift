@@ -5,10 +5,18 @@ import XCTest
 
 final class FolderBrowserControllerTests: XCTestCase {
     func testPreferredPopoverEdgeOpensInwardFromTheDrawerEdge() {
-        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .left), .maxX)
-        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .right), .minX)
-        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .top), .minY)
-        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .bottom), .maxY)
+        // Non-flipped positioning view (bottom-left origin).
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .left, isFlippedView: false), .maxX)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .right, isFlippedView: false), .minX)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .top, isFlippedView: false), .minY)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .bottom, isFlippedView: false), .maxY)
+        // Flipped positioning view (top-left origin) swaps the vertical edges.
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .left, isFlippedView: true), .maxX)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .right, isFlippedView: true), .minX)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .top, isFlippedView: true), .maxY)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .bottom, isFlippedView: true), .minY)
+        // This locks the mapping as a contract; actual inward-opening behavior still
+        // needs a manual check per dock edge.
     }
 
     func testReplacementAndRepeatedCloseNotifyOnlyForTheDismissedSession() throws {

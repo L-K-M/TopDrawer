@@ -29,13 +29,17 @@ final class FolderBrowserController: NSObject, NSPopoverDelegate {
     /// drawer grows rightward, so its popovers open on the item's right; a right-edge
     /// drawer grows leftward, so they open on the left; top/bottom drawers open
     /// below/above. Pointing outward (the old fixed `.maxX`) pushed right-edge
-    /// popovers off the drawer and let top/bottom ones detach.
-    static func preferredPopoverEdge(for edge: Edge) -> NSRectEdge {
+    /// popovers off the drawer and let top/bottom ones detach. AppKit may still
+    /// choose a different edge when the preferred side has no room.
+    ///
+    /// `NSRectEdge` is expressed in the positioning view's coordinate system, so the
+    /// vertical edges swap when that view is flipped (top-left origin).
+    static func preferredPopoverEdge(for edge: Edge, isFlippedView: Bool) -> NSRectEdge {
         switch edge {
         case .left:   return .maxX
         case .right:  return .minX
-        case .top:    return .minY
-        case .bottom: return .maxY
+        case .top:    return isFlippedView ? .maxY : .minY
+        case .bottom: return isFlippedView ? .minY : .maxY
         }
     }
 
