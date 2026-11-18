@@ -50,9 +50,13 @@ final class ClipboardHistoryStore: ObservableObject {
         guard Self.isValid(text) else { return }
 
         // Keep identity when a repeated copy moves an older entry to the front.
-        let id = entries.first { $0.text == text }?.id ?? UUID()
+        // Identity is the exact UTF-8 byte sequence: Swift string equality is
+        // Unicode *canonical*, so precomposed and decomposed forms of the same
+        // text would otherwise collapse into one entry and lose a copy.
+        let identity = Self.identity(of: text)
+        let id = entries.first { Self.identity(of: $0.text) == identity }?.id ?? UUID()
         let entry = ClipboardEntry(id: id, text: text, date: date)
-        entries = [entry] + entries.filter { $0.text != text }.prefix(Self.limit - 1)
+        entries = [entry] + entries.filter { Self.identity(of: $0.text) != identity }.prefix(Self.limit - 1)
         scheduleSave()
     }
 
@@ -80,6 +84,11 @@ final class ClipboardHistoryStore: ObservableObject {
         text.utf8.count <= maximumTextBytes
             && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// Exact UTF-8 identity for a clip's text. Used for de-duplication so that
+    /// canonically equivalent but byte-distinct copies (precomposed `é` vs `e` +
+    /// combining acute) remain separate history entries.
+    private static func identity(of text: String) -> Data { Data(text.utf8) }
 
     private func scheduleSave() {
         guard retention == .acrossRestarts else { return }
@@ -146,13 +155,14 @@ final class ClipboardHistoryStore: ObservableObject {
             if decoded.isEmpty, !elements.isEmpty {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            var texts = Set<String>()
+            var texts = Set<Data>()
             var ids = Set<UUID>()
             var restored: [ClipboardEntry] = []
             for entry in decoded {
                 guard restored.count < Self.limit else { break }
-                guard Self.isValid(entry.text), !texts.contains(entry.text), !ids.contains(entry.id) else { continue }
-                texts.insert(entry.text)
+                let identity = Self.identity(of: entry.text)
+                guard Self.isValid(entry.text), !texts.contains(identity), !ids.contains(entry.id) else { continue }
+                texts.insert(identity)
                 ids.insert(entry.id)
                 restored.append(entry)
             }
