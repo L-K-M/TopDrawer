@@ -79,7 +79,14 @@ final class UpdateDownloaderTests: XCTestCase {
         // failure this guards: the downloader must use its own bounded session.
         let configuration = UpdateDownloader.defaultSession.configuration
         XCTAssertLessThanOrEqual(configuration.timeoutIntervalForRequest, 60)
-        XCTAssertLessThanOrEqual(configuration.timeoutIntervalForResource, 5 * 60)
+        XCTAssertLessThanOrEqual(configuration.timeoutIntervalForResource, 15 * 60)
+    }
+
+    func testDownloaderDefaultsToBoundedSession() {
+        // Pins the wiring itself: reverting `session` to `URLSession.shared` fails here.
+        let session = UpdateDownloader().session as? URLSession
+        XCTAssertTrue(session === UpdateDownloader.defaultSession,
+                      "UpdateDownloader must default to its bounded session, not URLSession.shared")
     }
 
     func testUniqueDestinationAvoidsCollisions() throws {

@@ -29,12 +29,14 @@ struct UpdateDownloader {
     /// A bounded session for update downloads. `URLSession.shared` carries the
     /// default seven-day `timeoutIntervalForResource`, so a stalled transfer would
     /// leave the caller’s `isDownloading` flag set (and its controls disabled) for a
-    /// week. A dedicated configuration caps both the per-request and whole-transfer
-    /// waits; tests assert the bounds.
+    /// week. A dedicated, ephemeral configuration caps both the per-request and
+    /// whole-transfer waits — the resource ceiling is sized for the largest release
+    /// asset on a slow link — and keeps update traffic out of the shared cookie and
+    /// cache store. Tests assert the bounds and the wiring.
     static let defaultSession: URLSession = {
-        let configuration = URLSessionConfiguration.default
+        let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 5 * 60
+        configuration.timeoutIntervalForResource = 15 * 60
         return URLSession(configuration: configuration)
     }()
 
