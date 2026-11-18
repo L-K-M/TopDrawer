@@ -15,7 +15,9 @@ The implementation branches below are open for merge. Revisit the underlying fin
 - The earlier drawer interaction review covers keyboard selection after Backspace and clipboard excerpts that show matching text. [Keyboard selection PR](https://github.com/L-K-M/TopDrawer/pull/184) [clipboard excerpt PR](https://github.com/L-K-M/TopDrawer/pull/185)
 - An earlier review tracks silent launcher-save failures in separate implementation work.
 
-The folder read and filter regressions also extend the refresh coverage in BACKLOG U1.
+Independent implementations also cover the filter and linked-folder regressions in BACKLOG U1. Choose one implementation per behavior. [Active filter](https://github.com/L-K-M/TopDrawer/pull/181), [folder availability](https://github.com/L-K-M/TopDrawer/pull/190).
+
+Two additional PRs preserve byte-distinct clipboard text across restarts and keep compact drawer headers visible. A hosted macOS rendering with one column and 32-point icons reproduced an 88-point folder drawer that clipped the title, gear and empty-state text. The 220-point treatment showed all three. [Clipboard text identity](https://github.com/L-K-M/TopDrawer/pull/189), [compact drawer headers](https://github.com/L-K-M/TopDrawer/pull/188).
 
 ## Reliability and data safety
 
@@ -265,7 +267,7 @@ Profile first open, steady capture, and quit with a full archive. Move read and 
 
 ### Make a long live listing feel bounded while it is opening
 
-**Performance hypothesis.** The 300-item cap in `FolderLister` is applied after enumerating, fetching sort properties and sorting all entries. `DrawerView.searchResultsList` constructs an eager stack of matches and each row reports external-drop geometry. Benchmark local and remote folders at 300, 10,000 and 50,000 entries, and a broad query across a large items drawer. Consider bounded top-K selection with the exact existing sort order, and a lazy result stack whose hit-testing still works after scrolling. Report p50/p95 latency to first results and result-scroll hitch rate.
+**Performance hypothesis.** The 300-item cap in `FolderLister` is applied after enumerating, fetching sort properties and sorting all entries. `DrawerView.searchResultsList` constructs an eager stack of matches and each row reports external-drop geometry. Benchmark local and remote folders at 300, 10,000 and 50,000 entries, and a broad query across a large items drawer. Consider bounded top-K selection with the exact existing sort order, and a lazy result stack whose hit-testing still works after scrolling. Report p50/p95 latency to first results and result-scroll hitch rate. Count icon requests for a one-letter query, repeat with rapid edits, arrow to the final result and drop onto a row revealed by scrolling. Keep query ranking separate from row creation in the measurements.
 
 ## Interface and workflow
 
@@ -559,6 +561,8 @@ Deepen the tint toward the drawer's inner edge (a subtle gradient from the tab c
 
 SymbolPickerView shows its selected glyph with an accent fill. Its symbol buttons and the icon-only add/remove/import/export buttons in TabsView rely on images and help text. Inspect their actual accessible names and selection traits with VoiceOver, including the same picker in IconEditorView. Supply explicit action names where synthesized names fail, expose the selected glyph in speech and shape, and verify the disabled removal hint for a protected tab. Do this alongside the existing pill activation work, which covers different controls.
 
+At the 180-point sidebar minimum, compare the four borderless footer buttons with a labeled layout menu beside add and remove. Test whether a first-time user can distinguish import (which replaces the layout) from export, including by keyboard. Check the emoji palette and remove-symbol action for meaningful names.
+
 ### Make reduced motion coherent across drawer interactions
 
 **Visual design and accessibility.** Opening and closing, tab movement, selection scrolling, undo banners, and Fresh sparkles use several animation paths. Introduce one policy for spatial movement and decorative motion that honors the system Reduce Motion setting and the app's speed control. Preserve immediate target highlights and selection visibility. Compare stock settings and Reduce Motion across all four edges, preview opening, tab cycling and a drop. Measure time to first actionable frame, rather than just animation duration. Apply this policy before considering extra hover lift or arrival pulses.
@@ -572,6 +576,24 @@ SymbolPickerView shows its selected glyph with an accent fill. Its symbol button
 **Aesthetics and maintenance.** The README screenshot still shows MacDring branding and the earlier notes presentation. Replace it after checking the native app. Capture: a compact vertical Items tab, a horizontal Notes drawer with native formatting, and a list on a light background. Use clean sample names and content, and capture the real open state and the location of the tab relative to the drawer. Also keep a sign-off checklist for Dark/Light, color extremes, long text, 1×/2× displays and small panels. The visual target is one legible rim and a restrained material treatment, with a clear selected item and sufficient contrast for the small header controls.
 
 ## Feature prototypes
+
+### Undo for removed launcher entries
+
+`TabController` removes an item from its drawer immediately. Extend the existing file-move Undo toast to restore a removed launcher's identity, customization, original group and slot. Show the item's name. Exercise a newly occupied slot, group dissolution, locked entries and switching drawers during the Undo window. Estimated effort is two to three hours.
+
+### Locate a tab from its Settings row
+
+`TabsView` identifies rows by color, title and edge. Two same-name tabs on the
+same edge of different displays can look identical. Try a **Locate Tab** action
+that outlines the corresponding pill while Settings retains focus. Keep the
+drawer, saved anchor and pill size stable. Use a static outline with Reduce
+Motion. Give parked tabs a display name or a stable disconnected-display label.
+
+Evaluate recognition with duplicate names, hidden labels, light and dark
+backgrounds, and two displays. For dozens of tabs, test filtering rows by title,
+kind, edge and display. Preserve selection by tab ID. Disable reordering while
+filtered unless the move maps unambiguously to the full list. Verify that
+VoiceOver distinguishes the rows.
 
 ### Explain the pending drop before releasing it (SOL-28)
 
@@ -639,7 +661,7 @@ Allow `onDrag` providers for group children in the preview tiles. Effort: one da
 
 ### Make clipboard results legible at narrow drawer widths
 
-ClipboardHistoryView gives a leading icon to every row and a secondary relative date below each two-line snippet. On a narrow drawer the repeated icon costs space and identical first lines make clips hard to distinguish. Prototype one shared clipboard glyph in the header and a reserved trailing selection mark for keyboard navigation. Compare one-column and wide drawers using prose, paths, emoji and code. Retain explicit focus and one spoken action per row. Pick a treatment after checking contrast and scan time with real content. Listen to search excerpts with VoiceOver punctuation verbosity enabled. If truncation markers interrupt speech, omit only the markers generated by the app and preserve punctuation from the clip itself. Try match highlighting only if people still struggle to locate the hit.
+ClipboardHistoryView gives a leading icon to every row and a secondary relative date below each two-line snippet. On a narrow drawer the repeated icon costs space and identical first lines make clips hard to distinguish. Prototype one shared clipboard glyph in the header and a reserved trailing selection mark for keyboard navigation. Compare one-column and wide drawers using prose, paths, emoji and code. Retain explicit focus and one spoken action per row. Pick a treatment after checking contrast and scan time with real content. Listen to search excerpts with VoiceOver punctuation verbosity enabled. If truncation markers interrupt speech, omit only the markers generated by the app and preserve punctuation from the clip itself. Compare time to select the correct clip from two long logs with the same header. Try match highlighting only if people still struggle to locate the hit.
 
 ### Explain where a matching launcher lives
 
