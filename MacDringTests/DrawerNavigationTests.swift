@@ -65,17 +65,20 @@ final class DrawerNavigationTests: XCTestCase {
         XCTAssertEqual(launched, [prefix.id, substring.id])
     }
 
-    func testPreviewOnlyReceivesTheVisibleSelection() {
+    func testPreviewFallsBackToTheVisibleSelection() {
         let model = DrawerModel()
         model.items = items
         var previews: [UUID] = []
         model.onPreviewItem = { previews.append($0.id) }
+        // No selection yet: Space previews the top visible item, matching Return.
         model.previewSelection()
         model.moveSelection(.down)
         model.previewSelection()
+        // Removing the selected item clears the selection; a stale id is never
+        // previewed — the preview falls back to the new top visible item.
         model.items.removeFirst()
         model.previewSelection()
-        XCTAssertEqual(previews, [items[0].id])
+        XCTAssertEqual(previews, [items[0].id, items[0].id, items[1].id])
     }
 
     func testRemovalControlsDoNotOfferToDissolveALockedSibling() {
