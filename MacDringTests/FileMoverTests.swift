@@ -80,6 +80,25 @@ final class FileMoverTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: file.path))
     }
 
+    func testRenamesOnSymlinkLoopCollision() throws {
+        let fm = FileManager.default
+        // A loop: stat fails with ELOOP, so fileExists is false, but the name is
+        // still taken by two links that must survive.
+        let first = dst.appendingPathComponent("note.txt")
+        let second = dst.appendingPathComponent("loop-target")
+        try fm.createSymbolicLink(at: first, withDestinationURL: second)
+        try fm.createSymbolicLink(at: second, withDestinationURL: first)
+        let file = src.appendingPathComponent("note.txt")
+        try Data("b".utf8).write(to: file)
+
+        XCTAssertTrue(FileMover.move([file], into: dst))
+
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: first.path), second.path)
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: second.path), first.path)
+        XCTAssertTrue(fm.fileExists(atPath: dst.appendingPathComponent("note 2.txt").path))
+        XCTAssertFalse(fm.fileExists(atPath: file.path))
+    }
+
     func testMovingFilesReportsMovesAndUndoRestoresThem() throws {
         let fm = FileManager.default
         let a = src.appendingPathComponent("a.txt")
