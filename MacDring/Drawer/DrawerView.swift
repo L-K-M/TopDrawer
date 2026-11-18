@@ -58,6 +58,7 @@ struct DrawerView: View {
     /// Only `.items` tabs support internal reorder / remove (and groups only ever live
     /// in an `.items` tab).
     private var editable: Bool { model.kind == .items }
+    private var isHighContrast: Bool { model.appearance.preset == .highContrast }
 
     var body: some View {
         // The two corners touching the screen edge stay sharp; the inward corners
@@ -182,6 +183,7 @@ struct DrawerView: View {
                                     .fill(Color.primary.opacity(model.fileDropTarget == target ? 0.12 : 0)))
                                 .background(RoundedRectangle(cornerRadius: 8)
                                     .fill(item.id == model.selectedItemID ? Color.accentColor.opacity(0.30) : .clear))
+                                .hoverHighlight(cornerRadius: 8, highContrast: isHighContrast)
                                 .overlay {
                                     if model.fileDropTarget == target,
                                        item.kind == .folder || item.kind == .application {
@@ -390,6 +392,7 @@ struct DrawerView: View {
                 .fill(Color.primary.opacity(fileDropHere ? 0.12 : 0)))
             .background(RoundedRectangle(cornerRadius: 8)
                 .fill(model.selectedItemID == item.id ? Color.accentColor.opacity(0.30) : .clear))
+            .hoverHighlight(cornerRadius: 8, isEnabled: dragging == nil, highContrast: isHighContrast)
             .overlay {
                 if intoTarget {
                     RoundedRectangle(cornerRadius: 8)
@@ -427,6 +430,8 @@ struct DrawerView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: cellHeight)
+        // Occupied cells only, and not while an item is being dragged around the grid.
+        .hoverHighlight(cornerRadius: 10, isEnabled: item != nil && dragging == nil, highContrast: isHighContrast)
         .overlay {
             if intoTarget {
                 RoundedRectangle(cornerRadius: 10)

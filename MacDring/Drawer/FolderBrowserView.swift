@@ -32,6 +32,8 @@ struct FolderBrowserView: View {
                                      onLaunch: { onLaunch(item) }, onReveal: { onReveal(item) },
                                      onPreview: item.kind == .file || item.kind == .folder ? { onPreview(item) } : nil)
                                 .padding(.vertical, 3)
+                                .padding(.horizontal, 4)
+                                .hoverHighlight(cornerRadius: 6)
                         }
                     }
                 }
