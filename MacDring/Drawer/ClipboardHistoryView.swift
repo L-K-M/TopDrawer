@@ -44,7 +44,10 @@ struct ClipboardHistoryView: View {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "doc.on.clipboard").foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(verbatim: entry.preview)
+                    let excerpt = entry.excerpt(matching: model.searchQuery)
+                    (Text(verbatim: excerpt.leading)
+                     + Text(verbatim: excerpt.matched).bold().foregroundColor(Color.accentColor)
+                     + Text(verbatim: excerpt.trailing))
                         .font(.callout).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(entry.date, style: .relative)
@@ -58,7 +61,7 @@ struct ClipboardHistoryView: View {
                 .fill(model.selectedItemID == entry.id ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06)))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Copy \(entry.preview)")
+        .accessibilityLabel("Copy \(entry.excerpt(matching: model.searchQuery).text)")
         .help("Copy to clipboard")
         .contextMenu {
             Button("Copy") { model.onCopyClipboardEntry?(entry.id) }
