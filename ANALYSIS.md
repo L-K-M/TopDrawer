@@ -29,11 +29,11 @@ A further pass opened focused fixes: folder popovers opening inward from the dra
 
 The Opus 5.5 pass opened twelve PRs. Each has a regression test where one was practical. The ones that change visible behavior were checked on this Mac. If one closes without landing, its line below is the finding:
 
-- Folder, Disks, Network and Cloud drawers opened at the empty size, then snapped larger once the listing landed after the open animation. A drawer now reopens with its tab's last listing (up to 32 remembered; when full, the oldest is dropped) and revalidates in the background. The first open of a tab still sizes late. [#198](https://github.com/L-K-M/TopDrawer/pull/198)
+- Folder, Disks, Network and Cloud drawers opened at the empty size, then snapped larger once the listing landed after the open animation. A drawer now reopens with its tab's last listing (up to 32 remembered; when full, the oldest is dropped) and revalidates in the background. The first open of a tab still sizes late. Review left a test nit: the cache tests' `spin()` helper returns quietly on timeout and should fail the test instead. [#198](https://github.com/L-K-M/TopDrawer/pull/198)
 - Type-to-find was dead below five items. That includes the first-run Apps tab, whose Welcome note asks the user to "just start typing". A printable key now opens the filter field, and Delete edits a query whose field lost focus. [#199](https://github.com/L-K-M/TopDrawer/pull/199)
-- Rename, Change Icon and Empty Trash activated Top Drawer for their dialog and never handed focus back. A click in the folder pop-up or a preview also left the app active after the drawer closed. `ModalActivation` returns activation to the previous app, but only while Top Drawer still holds it. [#200](https://github.com/L-K-M/TopDrawer/pull/200)
+- Rename, Change Icon and Empty Trash activated Top Drawer for their dialog and never handed focus back. A click in the folder pop-up or a preview also left the app active after the drawer closed. Closing the drawer now returns activation to the app that was frontmost when it opened, but only while Top Drawer still holds it. Until then the drawer keeps the keyboard. [#200](https://github.com/L-K-M/TopDrawer/pull/200)
 - A subfolder clicked in the Browse Folder pop-up opened Finder and closed the drawer. The pop-up now walks into subfolders with a Back button, and Back shows the enclosing listing at once. [#201](https://github.com/L-K-M/TopDrawer/pull/201)
-- Pointing at a drawer item changed nothing. Grid cells, list rows, search results and pop-up rows now show a subtle hover plate, cleared when a drag disables the cell. [#202](https://github.com/L-K-M/TopDrawer/pull/202)
+- Pointing at a drawer item changed nothing. Grid cells, list rows, search results and pop-up rows now show a subtle hover plate, cleared when a drag disables the cell. A pointer that stays still after a drop leaves the cell unlit until it moves, because no hover event arrives; document it or re-test the hover when the drag ends. [#202](https://github.com/L-K-M/TopDrawer/pull/202)
 - Tab colors came from a bare color well. A row of fixed swatches (the dark-mode system hues of macOS 11 to 15) now sits beside a Custom well in New Tab, the tab editor, the icon editor and the default-color preference. [#203](https://github.com/L-K-M/TopDrawer/pull/203)
 - The pill's tooltip never appeared: the non-activating tab panel lacked `allowsToolTipsWhenApplicationIsInactive`. The tooltip now also names the tab's live hotkey ("Apps (⌃⌥A)"), and Move to Edge marks the current edge. [#204](https://github.com/L-K-M/TopDrawer/pull/204)
 - Settings "+" ignored the New tab grid defaults. [#213](https://github.com/L-K-M/TopDrawer/pull/213)
@@ -218,13 +218,13 @@ Derive the raw-tab count from the lenient decode itself, or drop the sentinel ch
 
 bug hypothesis — reproduce with a real Spotlight hit before changing identity
 
-`SpotlightQuery` constructs URLs from indexed paths, and `FreshLister.merge` already deduplicates standardized file URLs. A symlink or alternate mount spelling may still leave two rows for one file. Reproduce using a temporary landing zone and a symlink in direct scan and Spotlight together. Decide whether aliases should remain separate launch targets. If they should converge, compare resource identities in the listing phase with a path fallback. Avoid extra synchronous probes on the main actor; keep ordinary different paths distinct. Addressed in [#192](https://github.com/L-K-M/TopDrawer/pull/192): Spotlight hits are standardized at construction, while the display-name fallback keeps the reported (unstandardized) path so resolving a symlink cannot rename the row.
+`SpotlightQuery` constructs URLs from indexed paths, and `FreshLister.merge` already deduplicates standardized file URLs. A symlink or alternate mount spelling may still leave two rows for one file. Reproduce using a temporary landing zone and a symlink in direct scan and Spotlight together. Decide whether aliases should remain separate launch targets. If they should converge, compare resource identities in the listing phase with a path fallback. Avoid extra synchronous probes on the main actor; keep ordinary different paths distinct. Open [#192](https://github.com/L-K-M/TopDrawer/pull/192) standardizes Spotlight hits at construction, while the display-name fallback keeps the reported (unstandardized) path so resolving a symlink cannot rename the row. Standardizing removes `.` and `..` components and redundant slashes but does not resolve symlinks (`resolvingSymlinksInPath()` does), so this hypothesis stays open after #192.
 
 ### Recents may retain multiple spellings of a local file
 
 bug hypothesis — validate on case-sensitive and case-insensitive volumes
 
-`RecentsStore` deduplicates by URL equality. Case variants may be aliases of one file on one volume and distinct files on another. Use a verified local file identity or a volume-aware path comparison once there is a reproducible alias. Keep case-sensitive paths and web URLs distinct, and retain the newest entry. Addressed in [#192](https://github.com/L-K-M/TopDrawer/pull/192): file targets fold to a lowercased standardized path, web URLs stay exact, and the newest entry is retained.
+`RecentsStore` deduplicates by URL equality. Case variants may be aliases of one file on one volume and distinct files on another. Use a verified local file identity or a volume-aware path comparison once there is a reproducible alias. Keep case-sensitive paths and web URLs distinct, and retain the newest entry. Open [#192](https://github.com/L-K-M/TopDrawer/pull/192) is described as folding file targets to a lowercased standardized path, keeping web URLs exact and retaining the newest entry. Main still compares exact URLs (`RecentsStore.swift:44-48`). A blanket lowercase fold would merge distinct files such as `Report.txt` and `report.txt` on a case-sensitive volume, so check #192 against the volume-aware requirement above before merging it.
 
 ### Treat unsupported Trash entry counts as unknown
 
@@ -262,7 +262,7 @@ reliability / icon precedence — nice-to-have
 
 visual / forward compatibility — nice-to-have
 
-`TabStripView.glyphView` draws `Image(systemName: name)` with no fallback. A document written by a newer build (or hand-edited) can carry a symbol this OS does not know, leaving an empty glyph on an otherwise colored pill. `IconName` only maps names for Linux; macOS renders the stored name unchanged. Fall back to `TabGlyph.default` when the symbol cannot be resolved, and cover it at the name-resolution layer. Effort: small.
+`TabStripView.glyphView` draws `Image(systemName: name)` with no fallback. A document written by a newer build (or hand-edited) can carry a symbol this OS does not know, leaving an empty glyph on an otherwise colored pill. `IconName` only maps names for Linux; macOS renders the stored name unchanged. Fall back to `TabGlyph.default` when the symbol cannot be resolved. On macOS `IconName.resolved(for: .macOS)` passes the name through, so a test there cannot catch the bug: put the check where the image is built (a helper that tries `NSImage(systemSymbolName:accessibilityDescription:)` and returns the default when it is nil) and unit-test that helper. Effort: small.
 
 ### A store or display change mid-drag teleports the dragged pill
 
@@ -744,7 +744,7 @@ Choose metadata columns from measured available row width after clamping. Verify
 
 aesthetics and theming — nice-to-have
 
-`Color.readableForeground` (`MacDring/Model/Color+ReadableForeground.swift` since PR #220; formerly `ColorHex.swift:62-65`) chooses foreground from tint luminance, while `MacDring/Tabs/TabStripView.swift:96-111` renders idle fill at 62% opacity. A middle-dark tint selects white text, but bright underlying content can reduce contrast. This is a source-derived visual risk, not a measured current-screen contrast failure.
+`Color.readableForeground` (`MacDring/Model/Color+ReadableForeground.swift` since PR #220; formerly `ColorHex.swift:62-65`) chooses foreground from tint luminance, while `MacDring/Tabs/TabStripView.swift:96-111` renders idle fill at 62% opacity. A middle-dark tint selects white text, but bright underlying content can reduce contrast. This is a source-derived visual risk, not a measured current-screen contrast failure. The luma check also ignores the stored color's own alpha, so a translucent stored color is judged as if it were opaque, and a color that fails to convert to sRGB silently gets white text.
 
 Use a sufficiently opaque label backing or a tested composited palette. Check light, dark, and busy wallpapers. Effort: half a day.
 
@@ -1127,6 +1127,17 @@ prototype — small to medium
 ### Build new tabs in one place
 
 `TabsView.addTab`, `NewTabWindowController` and the first-run tab in `AppDelegate` each build a `Tab` from the preferences by hand, and #213 fixed one that had drifted. A small factory taking title, glyph and kind would keep new-tab defaults in one place.
+
+### Tidy what the shared-package adoption left behind
+
+Review rounds on the Opus 5.5 PRs also read the code #220 brought to main and raised these. Each was checked against main at `a891074`. None is a defect in behavior; each is a few lines.
+
+- `AGENTS.md:67` lists `Color+ReadableForeground` among type names, but it is the file holding the `Color.readableForeground` extension. Write it as `Color+ReadableForeground.swift`, like `PreferenceEnums.swift`.
+- `AGENTS.md:120` and `:124` say Livery and Keycap are pinned "up to the next minor (`0.1.0`)", which reads as if 0.1.0 were the ceiling. The project pins `upToNextMinorVersion` from a minimum of 0.1.0, so say "from 0.1.0, below 0.2.0". Updraft has the same pin.
+- `README.md:242` opens "The builds bundle third-party code that keeps its own licenses" and then lists the first-party PictKit, Livery, Keycap and Updraft under the Unlicense. Name the first-party packages separately. `ci.yml` checks this section, so run that check after the edit.
+- The CHANGELOG says downloads are "SHA-256-verified when the release provides a digest". Updraft accepts a digest-less asset after the size check and Gatekeeper quarantine, so state that. Requiring a digest would be an Updraft policy change. In the same release's notes, "the recorder captures chords that are menu key equivalents" can be read either way; say that such chords are now recorded instead of triggering the menu.
+- `HotkeyRecorderView.swift:41` shows Clear while the recorder is recording; the pre-#220 view hid it (`hotkey != nil && !recording`). Clicking it clears the binding and nothing restores the old combo, so this is cosmetic. Restore the gate only if Keycap's `ShortcutRecorder` exposes its recording state.
+- The dangling-symlink and loop tests in `FileMoverTests.swift` assert that `note 2.txt` exists but not what it contains, and so does the older collision test. Assert `Data(contentsOf:)` equals the moved file's bytes.
 
 ## Notes for future passes
 
