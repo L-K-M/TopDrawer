@@ -114,7 +114,10 @@ final class DrawerModel: ObservableObject {
     /// drawer's filter field, which is auto-focused on open; changing it re-selects the
     /// top result so Return launches a sensible default.
     @Published var searchQuery = "" {
-        didSet { if searchQuery != oldValue { selectedItemID = searchResultIDs.first } }
+        didSet {
+            guard searchQuery != oldValue else { return }
+            selectedItemID = isSearching ? searchResultIDs.first : nil
+        }
     }
     /// The keyboard-selected result while searching (Up/Down/Return nav).
     @Published var selectedItemID: UUID?
