@@ -119,11 +119,19 @@ enum FileMover {
         let ext = url.pathExtension
         var candidate = directory.appendingPathComponent(url.lastPathComponent)
         var counter = 2
-        while fileManager.fileExists(atPath: candidate.path) {
+        while occupies(candidate, fileManager: fileManager) {
             let name = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
             candidate = directory.appendingPathComponent(name)
             counter += 1
         }
         return candidate
+    }
+
+    /// Whether `path` is taken. A dangling symlink doesn't exist from
+    /// `fileExists(atPath:)`'s point of view, but moving onto it would replace the link
+    /// (or fail); `destinationOfSymbolicLink` detects the link itself.
+    private static func occupies(_ path: URL, fileManager: FileManager) -> Bool {
+        if fileManager.fileExists(atPath: path.path) { return true }
+        return (try? fileManager.destinationOfSymbolicLink(atPath: path.path)) != nil
     }
 }

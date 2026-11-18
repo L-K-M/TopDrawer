@@ -62,6 +62,24 @@ final class FileMoverTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: dst.appendingPathComponent("note 2.txt").path))
     }
 
+    func testRenamesOnDanglingSymlinkCollision() throws {
+        let fm = FileManager.default
+        // A symlink whose target is gone: fileExists(atPath:) is false, so a naive
+        // collision check would move the file onto the link and replace it.
+        let link = dst.appendingPathComponent("note.txt")
+        try fm.createSymbolicLink(at: link, withDestinationURL: dst.appendingPathComponent("missing.txt"))
+        let file = src.appendingPathComponent("note.txt")
+        try Data("b".utf8).write(to: file)
+
+        XCTAssertTrue(FileMover.move([file], into: dst))
+
+        // The link is intact and the file lands under a fresh name.
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: link.path),
+                       dst.appendingPathComponent("missing.txt").path)
+        XCTAssertTrue(fm.fileExists(atPath: dst.appendingPathComponent("note 2.txt").path))
+        XCTAssertFalse(fm.fileExists(atPath: file.path))
+    }
+
     func testMovingFilesReportsMovesAndUndoRestoresThem() throws {
         let fm = FileManager.default
         let a = src.appendingPathComponent("a.txt")
