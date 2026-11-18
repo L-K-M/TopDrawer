@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Clear button next to a tab's shortcut recorder hides while the recorder
+  is listening; press ⌫ to clear from the keyboard.
 - A hotkey press that arrives just as its shortcut is changed or turned off no
   longer fires the old action (Keycap 0.1.1).
 - When GitHub's rate limit stops a Check for Updates, the alert says when to
