@@ -1865,6 +1865,16 @@ final class TabController {
                 return nil
             }
         }
+        // A keystroke outside the filter field — a drawer too small to show one, or a
+        // click took focus from it — starts or continues type-to-find instead of beeping.
+        if model.kind != .notes, !(NSApp.keyWindow?.firstResponder is NSText),
+           let text = DrawerSearch.typeToFindText(
+               event.characters,
+               hasShortcutModifier: !event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+               isSearching: model.isSearching),
+           model.continueTypeToFind(text) {
+            return nil
+        }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
         // The filter field (a focused text field) handles character input and Delete
         // itself; the monitor only swallows the keys that drive result navigation so

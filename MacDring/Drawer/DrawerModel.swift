@@ -157,6 +157,22 @@ final class DrawerModel: ObservableObject {
         kind == .clipboard ? clipboardSearchResults.map(\.id) : searchResults.map(\.id)
     }
 
+    /// Bumped to ask the drawer to focus its filter field — when type-to-find starts
+    /// from a keystroke that arrived while the field was hidden or unfocused.
+    @Published private(set) var searchFocusRequest = 0
+
+    /// Type-to-find for a keystroke the filter field did not receive: the field is
+    /// hidden in drawers below `DrawerSearch.minItemsToShow`, or lost focus to a
+    /// click. Appends `text` to the query and asks the view to show and focus the
+    /// field, so the rest of the word lands there. Returns whether it was taken.
+    @discardableResult
+    func continueTypeToFind(_ text: String) -> Bool {
+        guard kind != .notes, !text.isEmpty else { return false }
+        searchQuery += text
+        searchFocusRequest &+= 1
+        return true
+    }
+
     /// Clears the query and selection (the search bar's ✕, or Esc while searching).
     func clearSearch() {
         searchQuery = ""

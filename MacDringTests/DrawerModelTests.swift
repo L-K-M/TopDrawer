@@ -3,6 +3,31 @@ import XCTest
 
 final class DrawerModelTests: XCTestCase {
 
+    // MARK: Type-to-find outside the filter field
+
+    func testTypingInASmallDrawerStartsASearch() {
+        let model = DrawerModel()
+        model.kind = .items
+        model.items = [DrawerItem(kind: .application, displayName: "Finder", slot: 0),
+                       DrawerItem(kind: .application, displayName: "Safari", slot: 1)]
+        XCTAssertFalse(model.isSearchable, "Two items are below the always-visible threshold")
+
+        XCTAssertTrue(model.continueTypeToFind("s"))
+        XCTAssertTrue(model.continueTypeToFind("a"))
+        XCTAssertEqual(model.searchQuery, "sa")
+        XCTAssertEqual(model.searchResults.map(\.displayName), ["Safari"])
+        XCTAssertEqual(model.selectedItemID, model.items[1].id, "Return opens the top match")
+        XCTAssertEqual(model.searchFocusRequest, 2, "Each keystroke asks the view to focus the field")
+    }
+
+    func testNotesDrawersNeverTypeToFind() {
+        let model = DrawerModel()
+        model.kind = .notes
+        XCTAssertFalse(model.continueTypeToFind("a"))
+        XCTAssertEqual(model.searchQuery, "")
+        XCTAssertEqual(model.searchFocusRequest, 0)
+    }
+
     // MARK: Clipboard
 
     func testClipboardSearchMatchesFullTextAndPreservesRecency() {

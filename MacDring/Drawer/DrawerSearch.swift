@@ -44,6 +44,23 @@ enum DrawerSearch {
         return text.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
     }
 
+    /// The text a keystroke that reached the drawer *outside* the filter field adds to
+    /// type-to-find, or `nil` when the key should keep its usual meaning. Shortcuts
+    /// (⌘/⌃/⌥), control keys, and AppKit's function-key characters (arrows, Home,
+    /// F-keys — private-use scalars, not control characters) never type, and a
+    /// leading space never starts a query because Space is Quick Look.
+    static func typeToFindText(_ characters: String?, hasShortcutModifier: Bool,
+                               isSearching: Bool) -> String? {
+        guard !hasShortcutModifier, let characters, isFilterText(characters),
+              !characters.unicodeScalars.contains(where: { functionKeyCharacters.contains($0.value) })
+        else { return nil }
+        if !isSearching, characters.first?.isWhitespace == true { return nil }
+        return characters
+    }
+
+    /// `NSUpArrowFunctionKey` through the end of AppKit's function-key range.
+    private static let functionKeyCharacters: ClosedRange<UInt32> = 0xF700...0xF8FF
+
     private static func fold(_ s: String) -> String {
         s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }

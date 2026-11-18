@@ -50,4 +50,23 @@ final class DrawerSearchTests: XCTestCase {
         XCTAssertFalse(DrawerSearch.isFilterText("\t"))    // control keys don't build the query
         XCTAssertFalse(DrawerSearch.isFilterText("\u{1B}")) // Esc
     }
+
+    // MARK: typeToFindText
+
+    func testTypeToFindTakesPlainTextOnly() {
+        func text(_ characters: String?, shortcut: Bool = false, searching: Bool = false) -> String? {
+            DrawerSearch.typeToFindText(characters, hasShortcutModifier: shortcut, isSearching: searching)
+        }
+        XCTAssertEqual(text("s"), "s")
+        XCTAssertEqual(text("S"), "S")                  // Shift types capitals
+        XCTAssertEqual(text("é"), "é")
+        XCTAssertNil(text("q", shortcut: true))          // ⌘Q and friends keep their meaning
+        XCTAssertNil(text(nil))
+        XCTAssertNil(text("\r"))                         // Return launches
+        XCTAssertNil(text("\u{7F}"))                     // Delete
+        XCTAssertNil(text("\u{F700}"))                   // ↑ (an AppKit function-key character)
+        XCTAssertNil(text("\u{F704}"))                   // F1
+        XCTAssertNil(text(" "))                          // Space is Quick Look before a query
+        XCTAssertEqual(text(" ", searching: true), " ")  // …and a word break inside one
+    }
 }
