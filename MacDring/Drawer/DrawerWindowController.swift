@@ -328,6 +328,7 @@ final class DrawerWindowController {
             guard let self, self.isVisible else { return }
             self.model.itemsTruncated = result.truncated
             self.model.folderURL = result.folderURL
+            self.model.folderReadError = result.folderReadError
             self.updateLiveItems(result.items.applyingIconStyles(from: tab.iconStyles))
         }
     }
@@ -408,6 +409,7 @@ final class DrawerWindowController {
         if !preservesListing {
             model.itemsTruncated = false
             model.folderURL = nil
+            model.folderReadError = nil
         }
         model.sparklingItemIDs = []
         if !preserveLiveNotes {

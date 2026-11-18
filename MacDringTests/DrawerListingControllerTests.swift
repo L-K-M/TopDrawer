@@ -32,6 +32,38 @@ final class DrawerListingControllerTests: XCTestCase {
         XCTAssertEqual(drawer.model.folderURL, directory)
     }
 
+    func testLinkedFolderShowsReadErrorUntilItBecomesAvailable() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let drawer = try makeDrawer(read: DrawerListing.read)
+        let tab = folderTab(url: directory)
+
+        try show(tab, in: drawer)
+        waitForItems([], in: drawer)
+        XCTAssertNotNil(drawer.model.folderReadError)
+        XCTAssertEqual(drawer.model.folderURL, directory)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        drawer.refresh(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen)
+        waitForItems([], in: drawer)
+        XCTAssertNil(drawer.model.folderReadError)
+        XCTAssertEqual(drawer.model.folderURL, directory)
+
+        try FileManager.default.removeItem(at: directory)
+        drawer.refresh(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen)
+        waitForItems([], in: drawer)
+        XCTAssertNotNil(drawer.model.folderReadError)
+
+        var unconfigured = tab
+        unconfigured.id = UUID()
+        unconfigured.folderURL = nil
+        try show(unconfigured, in: drawer)
+        waitForItems([], in: drawer)
+        XCTAssertNil(drawer.model.folderReadError)
+        XCTAssertNil(drawer.model.folderURL)
+    }
+
     func testRefreshKeepsListingAndPreservesStateWrittenDuringRead() throws {
         guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
         let entered = expectation(description: "refresh started")

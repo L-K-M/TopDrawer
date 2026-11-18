@@ -73,6 +73,7 @@ final class DrawerModel: ObservableObject {
     @Published var documentID: UUID?
     /// The linked directory (for `.folder` tabs), used by "Open in Finder".
     @Published var folderURL: URL?
+    @Published var folderReadError: String?
     /// Whether the open `.recents` drawer has Top Drawer-owned history that the header
     /// clear button can actually remove. System Spotlight recents are read-only.
     @Published var canClearRecents = false
