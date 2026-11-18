@@ -113,7 +113,13 @@ enum TabPlacementPolicy {
             TabStackKey(displayUUID: tabs[$0].anchor.displayUUID, edge: tabs[$0].anchor.edge)
         })
         guard !movedKeys.isEmpty else { return result }
-        result.move(fromOffsets: offsets, toOffset: destination)
+        // `move(fromOffsets:toOffset:)` is a Darwin-only stdlib extension, so do the
+        // removal/insertion directly with the same semantics (the destination is in the
+        // original array’s coordinate space, so subtract the removed indices before it).
+        let moved = offsets.sorted().map { tabs[$0] }
+        for index in offsets.sorted(by: >) { result.remove(at: index) }
+        let insertion = max(0, min(destination - offsets.filter { $0 < destination }.count, result.count))
+        result.insert(contentsOf: moved, at: insertion)
         var nextOrder: [TabStackKey: Int] = [:]
         for index in result.indices {
             let key = TabStackKey(displayUUID: result[index].anchor.displayUUID, edge: result[index].anchor.edge)
