@@ -49,16 +49,17 @@ final class TabController {
     /// requests flow through those paths, so a snapshot detects intervening drawer
     /// activity even when the drawer ends up closed again.
     private var drawerInteractionGeneration: UInt = 0
-    /// The app that was frontmost when the current drawer session began, so closing
-    /// the drawer can return the keyboard to it if a prompt or pop-up activated Top
-    /// Drawer.
-    private var appFrontmostBeforeDrawer: NSRunningApplication?
+    /// The app the user was last in during the current drawer session, so closing the
+    /// drawer can return the keyboard to it if a prompt or pop-up activated Top Drawer:
+    /// the frontmost app when the session began, then any other app activated while
+    /// the drawer stayed open (see `startMonitoring`).
+    private var handBackApp: NSRunningApplication?
 
     /// Who gets the keyboard once a drawer closes.
     private enum FocusAfterClose {
-        /// The app that was frontmost when the drawer opened, if Top Drawer has since
-        /// become active (a prompt over the drawer, or a click in the folder pop-up or
-        /// a preview, activates it).
+        /// The app the user was last in while the drawer was open, if Top Drawer has
+        /// since become active (a prompt over the drawer, or a click in the folder
+        /// pop-up or a preview, activates it).
         case previousApp
         /// Leave activation alone: a click in another app or a launch is already
         /// moving focus, or one of our own windows is about to take it.
@@ -67,6 +68,7 @@ final class TabController {
 
     private var globalClickMonitor: Any?
     private var localKeyMonitor: Any?
+    private var appActivationObserver: NSObjectProtocol?
     private var pendingHoverClose: DispatchWorkItem?
     private var pendingSpringOpen: DispatchWorkItem?
     private var pendingSpringOpenTabID: UUID?
@@ -488,7 +490,7 @@ final class TabController {
         previewIsOpen = false
         folderBrowser.close()
         drawerInteractionGeneration &+= 1
-        if openTabID == nil { appFrontmostBeforeDrawer = NSWorkspace.shared.frontmostApplication }
+        if openTabID == nil { handBackApp = NSWorkspace.shared.frontmostApplication }
         if let prev = openTabID, prev != id {
             tabWindows[prev]?.setOpen(false)
             tabWindows[prev]?.restoreResting()
@@ -538,8 +540,8 @@ final class TabController {
         stopFolderWatch()
         stopSpotlightWatch()
         refreshConcealment(animated: true)   // drawer closed → resume auto-hide/fade
-        let previousApp = appFrontmostBeforeDrawer
-        appFrontmostBeforeDrawer = nil
+        let previousApp = handBackApp
+        handBackApp = nil
         if focus == .previousApp { ModalActivation.handBackIfIdle(to: previousApp) }
     }
 
@@ -1813,6 +1815,17 @@ final class TabController {
             if let key = NSApp.keyWindow, key.styleMask.contains(.titled) { return event }
             return self.handleDrawerKey(event)
         }
+        // A drawer stays open across an app switch (⌘-Tab is no click), so follow the
+        // user to the app they activate: that is where the keyboard belongs once the
+        // drawer closes. Top Drawer's own activation (a prompt, a pop-up) is skipped.
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, self.openTabID != nil,
+                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            self.handBackApp = app
+        }
     }
 
     /// Routes a key for the open drawer: Esc closes (or clears an active filter first);
@@ -1883,6 +1896,10 @@ final class TabController {
     private func stopMonitoring() {
         if let m = globalClickMonitor { NSEvent.removeMonitor(m); globalClickMonitor = nil }
         if let m = localKeyMonitor { NSEvent.removeMonitor(m); localKeyMonitor = nil }
+        if let o = appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(o)
+            appActivationObserver = nil
+        }
     }
 
     // MARK: Lifecycle
