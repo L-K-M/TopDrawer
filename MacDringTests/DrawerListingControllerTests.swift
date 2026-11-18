@@ -64,6 +64,18 @@ final class DrawerListingControllerTests: XCTestCase {
         XCTAssertNil(drawer.model.folderURL)
     }
 
+    func testUnreadableBookmarkWithoutFallbackIsAReadError() {
+        var tab = folderTab(url: URL(fileURLWithPath: "/unused"))
+        tab.folderURL = nil
+        tab.folderBookmark = Data([0xde, 0xad])
+
+        let result = DrawerListing.read(tab)
+
+        XCTAssertNotNil(result.folderReadError)
+        XCTAssertNil(result.folderURL)
+        XCTAssertTrue(result.items.isEmpty)
+    }
+
     func testRefreshKeepsListingAndPreservesStateWrittenDuringRead() throws {
         guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
         let entered = expectation(description: "refresh started")

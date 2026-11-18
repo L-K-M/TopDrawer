@@ -72,7 +72,7 @@ struct DrawerView: View {
             if let error = model.actionError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
-            if model.isSearchable && model.folderReadError == nil { searchBar }
+            if model.isSearchable { searchBar }
             bodyContent
         }
         .padding(14)
@@ -120,9 +120,10 @@ struct DrawerView: View {
             ClipboardHistoryView(model: model)
         case .items, .folder, .disks, .network, .cloud, .recents, .fresh:
             if let error = model.folderReadError, !model.isLoadingListing {
-                emptyState(message: "Couldn't read this folder. Use the gear to choose another.",
-                           icon: "exclamationmark.triangle")
-                    .help(error)
+                ScrollView {
+                    emptyState(message: "Couldn't read this folder.", icon: "exclamationmark.triangle",
+                               detail: error)
+                }
             } else if model.isLoadingListing && model.items.isEmpty {
                 ProgressView("Loading…")
                     .controlSize(.small)
@@ -617,7 +618,7 @@ struct DrawerView: View {
 
     // MARK: Empty state
 
-    private func emptyState(message: String, icon: String) -> some View {
+    private func emptyState(message: String, icon: String, detail: String? = nil) -> some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 26))
@@ -626,6 +627,12 @@ struct DrawerView: View {
                 .foregroundStyle(.secondary)
                 .font(.callout)
                 .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
