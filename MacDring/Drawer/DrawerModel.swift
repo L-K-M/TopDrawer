@@ -173,6 +173,17 @@ final class DrawerModel: ObservableObject {
         return true
     }
 
+    /// Delete for a query whose field lost focus: removes the last character, as
+    /// the field would have, and asks for the field back so editing continues there.
+    /// Returns whether it was taken (there was a query to shorten).
+    @discardableResult
+    func deleteBackwardInTypeToFind() -> Bool {
+        guard kind != .notes, !searchQuery.isEmpty else { return false }
+        searchQuery.removeLast()
+        searchFocusRequest &+= 1
+        return true
+    }
+
     /// Clears the query and selection (the search bar's ✕, or Esc while searching).
     func clearSearch() {
         searchQuery = ""

@@ -1867,13 +1867,18 @@ final class TabController {
         }
         // A keystroke outside the filter field — a drawer too small to show one, or a
         // click took focus from it — starts or continues type-to-find instead of beeping.
-        if model.kind != .notes, !(NSApp.keyWindow?.firstResponder is NSText),
-           let text = DrawerSearch.typeToFindText(
-               event.characters,
-               hasShortcutModifier: !event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
-               isSearching: model.isSearching),
-           model.continueTypeToFind(text) {
-            return nil
+        // `isSearching` is read before the keystroke is appended: a leading Space stays
+        // Quick Look, while a Space after typing has begun is part of the query.
+        if model.kind != .notes, !(NSApp.keyWindow?.firstResponder is NSText) {
+            let hasShortcutModifier = !event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+            if event.keyCode == UInt16(kVK_Delete), !hasShortcutModifier, model.deleteBackwardInTypeToFind() {
+                return nil
+            }
+            if let text = DrawerSearch.typeToFindText(event.characters, hasShortcutModifier: hasShortcutModifier,
+                                                      isSearching: model.isSearching),
+               model.continueTypeToFind(text) {
+                return nil
+            }
         }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
         // The filter field (a focused text field) handles character input and Delete

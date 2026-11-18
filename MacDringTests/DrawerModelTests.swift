@@ -20,10 +20,23 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertEqual(model.searchFocusRequest, 2, "Each keystroke asks the view to focus the field")
     }
 
+    func testDeleteShortensAQueryWhoseFieldLostFocus() {
+        let model = DrawerModel()
+        model.kind = .items
+        model.items = [DrawerItem(kind: .application, displayName: "Safari", slot: 0)]
+        XCTAssertFalse(model.deleteBackwardInTypeToFind(), "Nothing to delete: Delete passes on")
+
+        model.continueTypeToFind("saf")
+        XCTAssertTrue(model.deleteBackwardInTypeToFind())
+        XCTAssertEqual(model.searchQuery, "sa")
+        XCTAssertEqual(model.searchFocusRequest, 2, "and hands editing back to the field")
+    }
+
     func testNotesDrawersNeverTypeToFind() {
         let model = DrawerModel()
         model.kind = .notes
         XCTAssertFalse(model.continueTypeToFind("a"))
+        XCTAssertFalse(model.deleteBackwardInTypeToFind())
         XCTAssertEqual(model.searchQuery, "")
         XCTAssertEqual(model.searchFocusRequest, 0)
     }
