@@ -21,6 +21,8 @@ Two additional PRs preserve byte-distinct clipboard text across restarts and kee
 
 A later drawer-and-clipboard pass opened independent implementations of the byte-distinct clipboard identity ([#191](https://github.com/L-K-M/TopDrawer/pull/191), alongside #189) and the match excerpt ([#195](https://github.com/L-K-M/TopDrawer/pull/195), alongside #185), plus two small fixes: keep shared Pict icons ahead of fetched favicons ([#193](https://github.com/L-K-M/TopDrawer/pull/193)) and preview the first result on Space ([#205](https://github.com/L-K-M/TopDrawer/pull/205)). Choose one implementation per behavior.
 
+A reliability pass opened four more implementations: a batch of small correctness fixes — update-timer re-entry, a stale Carbon hotkey press, case-folded recents identity, standardized Spotlight hit paths, `*.app` file classification, and conservative unknown-Trash counts ([#192](https://github.com/L-K-M/TopDrawer/pull/192)); asynchronous Settings item icons ([#194](https://github.com/L-K-M/TopDrawer/pull/194)); per-edge stack renumbering on a Settings move ([#196](https://github.com/L-K-M/TopDrawer/pull/196)); and a “Locate Tab” pill outline ([#206](https://github.com/L-K-M/TopDrawer/pull/206)).
+
 ## Reliability and data safety
 
 ### Duplicate layout identities make entries ambiguous (SOL-02)
@@ -77,7 +79,7 @@ bugs — nice-to-have
 
 `MacDring/Updates/UpdateChecker.swift:91` lacks the `timer == nil` guard that `ClipboardMonitor.start()` has. A second call installs a second daily timer and doubles update checks.
 
-Add `guard timer == nil else { return }`. Effort: trivial.
+Add `guard timer == nil else { return }`. Effort: trivial. Implemented in [#192](https://github.com/L-K-M/TopDrawer/pull/192).
 
 ### A cleared note can never reconcile in the host session
 
@@ -133,7 +135,7 @@ general issues — nice-to-have
 
 `MacDring/Hotkeys/CarbonHotkey.swift:59`: `DispatchQueue.main.async { me.onPressed?() }` captures `me` strongly, so a queued press fires after `unregister()` — a stale hotkey acts on a dead registration.
 
-Capture weakly or check `hotKeyRef != nil` inside the block. Effort: trivial.
+Capture weakly or check `hotKeyRef != nil` inside the block. Effort: trivial. Implemented in [#192](https://github.com/L-K-M/TopDrawer/pull/192), which captures the exact `EventHotKeyRef` and compares it on the main queue so a re-register on the same instance cannot let a queued press through.
 
 ### A transient bus restart permanently kills the daemon
 
@@ -165,7 +167,7 @@ bugs — nice-to-have
 
 `MacDring/Model/DrawerItem.swift:218-224` classifies any path ending in `.app` as `.application` without checking it is a bundle directory, so a plain file named `notes.app` is routed through app-launch paths and fails instead of opening as a file.
 
-Require `isDirectory` for `.application` and fall through to the file classification otherwise. Effort: ten minutes plus a test.
+Require `isDirectory` for `.application` and fall through to the file classification otherwise. Effort: ten minutes plus a test. Implemented in [#192](https://github.com/L-K-M/TopDrawer/pull/192).
 
 ### Quarantine failure leaves a corrupt store in place
 
@@ -187,19 +189,19 @@ Derive the raw-tab count from the lenient decode itself, or drop the sentinel ch
 
 bug hypothesis — reproduce with a real Spotlight hit before changing identity
 
-`SpotlightQuery` constructs URLs from indexed paths, and `FreshLister.merge` already deduplicates standardized file URLs. A symlink or alternate mount spelling may still leave two rows for one file. Reproduce using a temporary landing zone and a symlink in direct scan and Spotlight together. Decide whether aliases should remain separate launch targets. If they should converge, compare resource identities in the listing phase with a path fallback. Avoid extra synchronous probes on the main actor; keep ordinary different paths distinct.
+`SpotlightQuery` constructs URLs from indexed paths, and `FreshLister.merge` already deduplicates standardized file URLs. A symlink or alternate mount spelling may still leave two rows for one file. Reproduce using a temporary landing zone and a symlink in direct scan and Spotlight together. Decide whether aliases should remain separate launch targets. If they should converge, compare resource identities in the listing phase with a path fallback. Avoid extra synchronous probes on the main actor; keep ordinary different paths distinct. Addressed in [#192](https://github.com/L-K-M/TopDrawer/pull/192): Spotlight hits are standardized at construction, while the display-name fallback keeps the reported (unstandardized) path so resolving a symlink cannot rename the row.
 
 ### Recents may retain multiple spellings of a local file
 
 bug hypothesis — validate on case-sensitive and case-insensitive volumes
 
-`RecentsStore` deduplicates by URL equality. Case variants may be aliases of one file on one volume and distinct files on another. Use a verified local file identity or a volume-aware path comparison once there is a reproducible alias. Keep case-sensitive paths and web URLs distinct, and retain the newest entry.
+`RecentsStore` deduplicates by URL equality. Case variants may be aliases of one file on one volume and distinct files on another. Use a verified local file identity or a volume-aware path comparison once there is a reproducible alias. Keep case-sensitive paths and web URLs distinct, and retain the newest entry. Addressed in [#192](https://github.com/L-K-M/TopDrawer/pull/192): file targets fold to a lowercased standardized path, web URLs stay exact, and the newest entry is retained.
 
 ### Treat unsupported Trash entry counts as unknown
 
 bug — verify on a filesystem without ATTR_DIR_ENTRYCOUNT
 
-`TrashInspector.isEmpty` falls back to directory link count, which cannot detect loose files. This can display the empty icon and disable Empty Trash even when files are present. Model the unsupported result conservatively and keep Empty Trash available when emptiness cannot be established. Preserve the metadata-only path so opening a menu never triggers a Trash access prompt. Add a test for an unsupported attribute with a low link count.
+`TrashInspector.isEmpty` falls back to directory link count, which cannot detect loose files. This can display the empty icon and disable Empty Trash even when files are present. Model the unsupported result conservatively and keep Empty Trash available when emptiness cannot be established. Preserve the metadata-only path so opening a menu never triggers a Trash access prompt. Add a test for an unsupported attribute with a low link count. Implemented in [#192](https://github.com/L-K-M/TopDrawer/pull/192): an unavailable entry count is treated as non-empty, so Empty Trash stays available, and the metadata-only path is unchanged.
 
 ### Scan the intended prerelease history
 
@@ -243,7 +245,7 @@ performance problems, stuttering, and jank — important
 
 `MacDring/Settings/TabsView.swift:304-307` calls icon resolution during each body evaluation. `MacDring/Drawer/ItemView.swift:213-228,495-574` shows that this work resolves bookmarks and reads icons from disk. Large launchers, stale bookmarks, or remote targets can beachball Settings repeatedly.
 
-Resolve row icons asynchronously, keyed by the item, with a placeholder and cancellation. Reuse the drawer's resolution approach. Profile opening and changing settings for a 100-entry tab. Effort: half a day.
+Resolve row icons asynchronously, keyed by the item, with a placeholder and cancellation. Reuse the drawer's resolution approach. Profile opening and changing settings for a 100-entry tab. Effort: half a day. Implemented in [#194](https://github.com/L-K-M/TopDrawer/pull/194): an `AsyncItemIcon` reuses `ItemView.resolveIcon` off the render path with a cancellation handler.
 
 ### Per-tab thickness re-measures text every layout pass
 
@@ -417,7 +419,11 @@ usability: speed, convenience, and clarity — nice-to-have
 
 `MacDring/Settings/TabsView.swift:159`: `moveTabs` rewrites `anchor.order` for every tab globally, so unrelated edges get renumbered on each move — needless persisted churn.
 
-Only renumber what changed. Effort: small.
+Only renumber what changed. Effort: small. Implemented in [#196](https://github.com/L-K-M/TopDrawer/pull/196): `TabPlacementPolicy.reorderedTabs` renumbers only the moved tabs' own display+edge groups and leaves other edges' persisted order untouched.
+
+### Gate filtered results on the search field being shown
+
+`DrawerModel.displayedItems` switches on `isSearching` alone, while `isSearchable` also decides whether the field is rendered. Today `DrawerWindowController.show` clears the query on every open and `.notes` renders its own pane, so the mismatch is unreachable — but a defensive `isSearching && isSearchable`, or a test pinning the invariant, costs nothing. Effort: trivial.
 
 ### Web launches land in Linux recents as empty rows
 
@@ -643,7 +649,7 @@ Evaluate recognition with duplicate names, hidden labels, light and dark
 backgrounds, and two displays. For dozens of tabs, test filtering rows by title,
 kind, edge and display. Preserve selection by tab ID. Disable reordering while
 filtered unless the move maps unambiguously to the full list. Verify that
-VoiceOver distinguishes the rows.
+VoiceOver distinguishes the rows. Implemented in [#206](https://github.com/L-K-M/TopDrawer/pull/206): a Locate Tab button outlines the pill with a static ring (no drawer, focus or anchor change) and disables itself for parked tabs.
 
 ### Explain the pending drop before releasing it (SOL-28)
 
