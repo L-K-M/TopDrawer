@@ -138,12 +138,9 @@ final class DrawerModel: ObservableObject {
     /// type-to-find reaches inside them (prefix matches first; see `DrawerSearch`).
     var searchResults: [DrawerItem] { DrawerSearch.filter(items.flattenedLaunchable(), query: searchQuery) }
 
-    var clipboardSearchResults: [ClipboardEntry] {
+    var clipboardSearchResults: [ClipboardEntry.SearchResult] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboardEntries }
-        return clipboardEntries.filter {
-            $0.text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive], locale: .current) != nil
-        }
+        return clipboardEntries.compactMap { $0.searchResult(for: query) }
     }
 
     private var searchResultIDs: [UUID] {

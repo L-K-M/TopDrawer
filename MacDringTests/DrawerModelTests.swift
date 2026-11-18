@@ -20,6 +20,30 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertEqual(model.selectedItemID, entries[0].id)
     }
 
+    func testClipboardSearchExcerptShowsLateMatchInOriginalSpelling() throws {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        let intro = String(repeating: "🗂️", count: 200) + "\n\n"
+        let entry = ClipboardEntry(id: UUID(), text: intro + "CAFÉ au lait", date: Date())
+        model.clipboardEntries = [entry]
+        model.searchQuery = " cafe "
+        XCTAssertEqual(try XCTUnwrap(model.clipboardSearchResults.first).preview, "…CAFÉ au lait")
+
+        model.searchQuery = " "
+        XCTAssertEqual(try XCTUnwrap(model.clipboardSearchResults.first).preview, entry.preview)
+        XCTAssertEqual(model.clipboardEntries.first?.text, entry.text)
+    }
+
+    func testLongClipboardMatchKeepsABoundedExcerpt() throws {
+        let model = DrawerModel()
+        model.kind = .clipboard
+        let query = String(repeating: "💡", count: 180)
+        model.clipboardEntries = [ClipboardEntry(id: UUID(), text: "Old intro\n" + query, date: Date())]
+        model.searchQuery = query
+        let preview = try XCTUnwrap(model.clipboardSearchResults.first).preview
+        XCTAssertEqual(preview, "…" + String(query.prefix(160)) + "…")
+    }
+
     func testClipboardKeyboardSelectionCopiesWithoutLaunching() {
         let model = DrawerModel()
         model.kind = .clipboard
