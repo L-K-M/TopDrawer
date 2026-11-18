@@ -289,6 +289,8 @@ final class DrawerModelTests: XCTestCase {
         let items = (0..<5).map { DrawerItem(kind: .file, displayName: "File \($0)", slot: $0) }
         model.items = items
         model.searchQuery = "file 3"
+        // Pin the filter result first so a failure points at filtering vs. the fallback.
+        XCTAssertEqual(model.displayedItems.map(\.id), [items[3].id])
 
         var previewed: DrawerItem?
         model.onPreviewItem = { previewed = $0 }
@@ -307,5 +309,29 @@ final class DrawerModelTests: XCTestCase {
         model.onPreviewItem = { previewed = $0 }
         model.previewSelection()
         XCTAssertEqual(previewed?.id, items[1].id)
+    }
+
+    func testSpaceDoesNotConsumeWhenTheTopItemIsNotPreviewable() {
+        let model = DrawerModel()
+        let group = DrawerItem(kind: .group, displayName: "Group", slot: 0, children: [
+            DrawerItem(kind: .file, displayName: "Child", slot: 0)
+        ])
+        model.items = [group]
+        var previews = 0
+        model.onPreviewItem = { _ in previews += 1 }
+
+        XCTAssertFalse(model.previewSelection())
+        XCTAssertEqual(previews, 0)
+    }
+
+    func testLaunchFallsBackToTheTopVisibleItemLikePreview() {
+        let model = DrawerModel()
+        let items = (0..<3).map { DrawerItem(kind: .file, displayName: "File \($0)", slot: $0) }
+        model.items = items
+        var launched: [UUID] = []
+        model.onLaunch = { launched.append($0.id) }
+
+        model.launchSelection()
+        XCTAssertEqual(launched, [items[0].id])
     }
 }

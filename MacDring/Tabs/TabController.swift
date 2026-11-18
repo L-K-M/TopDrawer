@@ -1858,8 +1858,9 @@ final class TabController {
             // to the top result when nothing is selected yet.
             guard model.kind != .notes, model.kind != .clipboard,
                   !model.isSearching else { return event }
-            model.previewSelection()
-            return nil
+            // Only consume Space when something actually previewed; a drawer
+            // whose top item has no preview leaves the key to the app.
+            return model.previewSelection() ? nil : event
         default:
             return event
         }
