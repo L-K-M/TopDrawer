@@ -16,8 +16,9 @@ view.
 - **UI:** SwiftUI for the tab pill, drawer, and Settings content; AppKit for
   windowing (`NSPanel`, `NSStatusItem`, `NSVisualEffectView`).
 - **System APIs:** `NSWorkspace` (launching), `CGDisplayCreateUUIDFromDisplayID`
-  (stable display identity), Carbon `RegisterEventHotKey` (optional per-tab
-  hotkeys — no Accessibility needed), `SMAppService` (launch at login).
+  (stable display identity), Carbon `RegisterEventHotKey` through the shared
+  Keycap package (optional per-tab hotkeys — no Accessibility needed),
+  `SMAppService` (launch at login).
 - **Persistence:** a Codable `LauncherDocument` as JSON in
   `~/Library/Application Support/MacDring/launcher.json`; app-wide settings in
   `UserDefaults`.
@@ -63,7 +64,8 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 
 - `Model/` — Codable model (`Tab`, `DrawerItem`, `ScreenAnchor`, `Edge`,
   `TabGlyph`, `TabBehavior`, `HotkeySpec`, `IconStyle`, `LauncherDocument`),
-  `ColorHex`, `Preferences`, and the small UI enums in `PreferenceEnums.swift`.
+  `Color+ReadableForeground`, `Preferences`, and the small UI enums in
+  `PreferenceEnums.swift`.
 - `Store/` — `TabStore` (JSON load/save), `RecentsStore` (recent-items history),
   `BookmarkResolver`, and the live transient listers (`FolderLister`, `DisksLister`,
   `NetworkLister`, `CloudLister`, `RecentsLister`, `FreshLister`). `SpotlightQuery`
@@ -77,10 +79,11 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
   `NSDraggingDestination` that handles spring-loaded per-slot file drops),
   `DrawerView`, `DrawerModel`, `ItemView`, and `DrawerSearch` (pure type-to-find
   filter / selection / key-classification helpers).
-- `Launch/` — `ItemLauncher`. `Hotkeys/` — `CarbonHotkey`, `KeyCodes`.
+- `Launch/` — `ItemLauncher`. `Hotkeys/` — `HotkeyRegistrationPolicy` (the pure
+  conflict rules; the Carbon registrar and combo model come from Keycap).
 - `Settings/` — the SwiftUI settings window and panes, plus the small modal
   windows (`NewTabView`/Controller, `IconEditorView`/Controller).
-- `Common/` — `VisualEffectView`; `TabShapes` (`edgeRoundedRect` for the
+- `Common/` — `TabShapes` (`edgeRoundedRect` for the
   inward-rounded/edge-sharp tab pill + drawer, and `ClassicTabShape`);
   `ActivationPolicy` (the shared `.regular`↔`.accessory` revert guard);
   `IconRenderer` (draws an `IconStyle` to an `NSImage`).
@@ -112,6 +115,22 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 package holding the shared icon store and resolution ladder that Zap, Jetty and
 the Pict editor also use. Top Drawer **reads** it and writes nothing — editing
 lives in Pict, which needs no permissions and can be sandboxed.
+
+[`LiveryKit`](https://github.com/L-K-M/Livery) provides the shared hex colour
+grammar and blur/panel views; Top Drawer pins it by tag, up to the next minor
+(`0.1.0`), and keeps its own `Color.readableForeground` luma rule locally.
+
+[`KeycapKit`](https://github.com/L-K-M/Keycap) provides the shared global-hotkey
+registration, combo model and shortcut recorder; Top Drawer pins it by tag, up
+to the next minor (`0.1.0`), and keeps `HotkeySpec` (the persisted
+`{"keyCode","carbonModifiers"}` shape), `HotkeyRegistrationPolicy` and the tab
+reconciliation local.
+
+[`UpdraftKit`](https://github.com/L-K-M/Updraft) provides the shared GitHub
+release update checker, version model and verified downloader; Top Drawer pins
+it by tag, up to the next minor (`0.1.0`), keeps its existing
+`UpdateChecker.L-K-M.MacDring` defaults prefix, and leaves the AppDelegate
+wiring, Settings pane and menu item local.
 
 Notes use the core `MarkdownEngine` product from
 [`swift-markdown-engine`](https://github.com/nodes-app/swift-markdown-engine),

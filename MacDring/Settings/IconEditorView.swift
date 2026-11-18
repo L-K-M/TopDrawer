@@ -1,3 +1,4 @@
+import LiveryKit
 import SwiftUI
 
 /// Editor for an item's **generated** icon — base shape + color + optional SF Symbol

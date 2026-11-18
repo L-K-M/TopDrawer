@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import UniformTypeIdentifiers
 import Carbon.HIToolbox
+import KeycapKit
 
 /// The orchestrator. Reconciles the stored tabs against the live display set
 /// into on-screen tab windows, owns the shared drawer, and routes every
@@ -28,12 +29,12 @@ final class TabController {
     /// Live per-tab hotkey registrations. The token is the registrar's opaque handle to
     /// the underlying Carbon hotkey; the spec is retained for conflict detection.
     private var hotkeys: [UUID: (token: HotkeyToken, spec: HotkeySpec)] = [:]
-    /// The global-hotkey seam (LP-13), injected like `trashService`. Carbon on macOS; owns
-    /// the platform hotkey objects and the id counter that used to live here as
-    /// `hotkeyCounter`.
+    /// The global-hotkey seam (LP-13), injected like `trashService`. Keycap's Carbon
+    /// registrar on macOS; owns the platform hotkey objects and the id counter that used
+    /// to live here as `hotkeyCounter`.
     private let hotkeyRegistrar: GlobalHotkeyRegistering
-    /// Specs Carbon already refused to register this session (a system-reserved combo
-    /// or one another app owns). Cached so a reconcile doesn't re-attempt — and re-log
+    /// Specs Carbon already refused to register this session (typically one another
+    /// app owns; reserved combos are refused before Carbon is asked). Cached so a reconcile doesn't re-attempt — and re-log
     /// — the same external failure on every store mutation. Conflicts with another
     /// Top Drawer tab are detected before calling Carbon and are never cached here.
     private var failedHotkeySpecs: [UUID: HotkeySpec] = [:]
@@ -168,7 +169,7 @@ final class TabController {
 
     init(store: TabStore, preferences: Preferences, registry: DisplayRegistry,
          trashService: TrashServicing = SystemTrashService(),
-         hotkeyRegistrar: GlobalHotkeyRegistering = CarbonHotkeyRegistrar()) {
+         hotkeyRegistrar: GlobalHotkeyRegistering = CarbonHotkeyRegistrar(signature: 0x4D44_5248)) {
         self.store = store
         self.preferences = preferences
         self.clipboardHistory = ClipboardHistoryStore(
@@ -987,7 +988,7 @@ final class TabController {
     @discardableResult
     private func registerHotkeyIfNeeded(for tab: Tab) -> Bool {
         let spec = tab.hotkey
-        let usable = spec.map { KeyCodes.isUsableHotkey(keyCode: $0.keyCode, modifiers: $0.carbonModifiers) } ?? false
+        let usable = spec.map { $0.combo.isUsableGlobalHotkey } ?? false
         // Another *live* Top Drawer registration under the same spec. Excludes this tab,
         // so it's unaffected by releasing this tab's own (stale) registration first.
         let ownedByOther = spec.map { s in hotkeys.contains { $0.key != tab.id && $0.value.spec == s } } ?? false
@@ -995,7 +996,7 @@ final class TabController {
             spec: spec, usable: usable, existing: hotkeys[tab.id]?.spec,
             cachedFailure: failedHotkeySpecs[tab.id], ownedByOtherTab: ownedByOther)
 
-        // The policy chose the branch; the controller performs the Carbon / cache effects.
+        // The policy chose the branch; the controller performs the registrar / cache effects.
         switch decision {
         case .unregister:
             unregisterHotkey(tab.id)
@@ -1022,7 +1023,7 @@ final class TabController {
     /// Asks the registrar to register `spec` for a tab, recording success in `hotkeys` and
     /// an external failure in `failedHotkeySpecs` (so unrelated reconciles don't retry it).
     private func registerHotkey(_ spec: HotkeySpec, for id: UUID) {
-        // Start from a clean slate for `id`: the registrar now retains the CarbonHotkey
+        // Start from a clean slate for `id`: the registrar retains the CarbonHotkey
         // (the old code held it in `hotkeys` alone, so an overwrite self-healed via ARC
         // deinit). Release and drop any stale entry so neither branch below can strand it —
         // a successful register overwrites cleanly, and a failed one leaves no dead token
@@ -1032,7 +1033,7 @@ final class TabController {
             hotkeyRegistrar.unregister(stale)
             hotkeys[id] = nil
         }
-        if let token = hotkeyRegistrar.register(spec, onPressed: { [weak self] in self?.toggleDrawer(id) }) {
+        if let token = hotkeyRegistrar.register(spec.combo, onPressed: { [weak self] in self?.toggleDrawer(id) }) {
             hotkeys[id] = (token, spec)
             failedHotkeySpecs[id] = nil
         } else {

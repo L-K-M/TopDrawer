@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LiveryKit
 
 /// The settings collected by the New Tab dialog before a tab is created.
 struct NewTabConfig {

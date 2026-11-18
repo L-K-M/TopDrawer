@@ -190,16 +190,6 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(Preferences(defaults: defaults).defaultTabColorHex, Preferences.Default.defaultTabColorHex)
     }
 
-    #if canImport(AppKit)
-    // Exercises the AppKit `NSColor(hex:)` parser directly (ColorHex.swift); the Linux
-    // build validates hex strings through `Preferences`'s own pure checker instead
-    // (see `testInvalidStoredColorFallsBackToDefault`).
-    func testColorHexRoundTrip() {
-        XCTAssertEqual(NSColor(hex: "#0A84FF")?.hexString, "#0A84FF")
-        XCTAssertNil(NSColor(hex: "nothex"))
-    }
-    #endif
-
     // MARK: Login item seam (LP-13)
 
     /// A fake `LoginItemManaging` that records `setEnabled` calls and can be told to fail,

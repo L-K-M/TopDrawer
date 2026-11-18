@@ -1,4 +1,5 @@
 import AppKit
+import LiveryKit
 import SwiftUI
 import UniformTypeIdentifiers
 

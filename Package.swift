@@ -18,8 +18,8 @@ import PackageDescription
 // stricter nor looser than the Xcode build. Move both together if the project ever
 // adopts Swift 6 mode.
 
-// The pure-core files that compile on Linux today (all `Model/` except ColorHex
-// and Preferences — both AppKit/SwiftUI — plus the layout/search/update math).
+// The pure-core files that compile on Linux today (all `Model/` except
+// Preferences — AppKit/SwiftUI — plus the layout and search math).
 let macDringSources: [String] = [
     "Model/ClipboardEntry.swift",
     "Model/DrawerGrouping.swift",
@@ -53,8 +53,6 @@ let macDringSources: [String] = [
     "Tabs/DrawerLaunchRequest.swift",
     "Tabs/TabCycling.swift",
     "Common/TimeBucket.swift",
-    "Updates/SemanticVersion.swift",
-    "Updates/GitHubRelease.swift",
     "Store/BookmarkResolver.swift",
     // LP-07: the observable stores/models + prefs. `ObservationCompat` is the Combine
     // stand-in they need on Linux (macOS uses real Combine and skips that file).
@@ -115,10 +113,10 @@ let macDringSources: [String] = [
     // macOS-only and deliberately absent from this list.
     "Notes/NotesEditorBridge.swift",
     "Notes/NotesEditorHostSession.swift",
-    // LP-13 part 3: the global-hotkey seam. The protocol + opaque HotkeyToken compile
-    // here; the macOS CarbonHotkeyRegistrar (and CarbonHotkey it wraps) stay macOS-only
-    // behind #if canImport(Carbon), so Linux registers no hotkey until its backend lands.
-    "Hotkeys/GlobalHotkeyRegistering.swift",
+    // LP-13 part 3: the global-hotkey seam's protocol and the macOS Carbon
+    // registrar now come from KeycapKit, which is macOS-only. The pure
+    // registration policy (listed under LP-11) is the only hotkey file Linux
+    // compiles, so Linux registers no hotkey until its backend lands.
     "Store/VolumeListing.swift",
     "Store/DisksLister.swift",
     "Store/NetworkLister.swift",
@@ -159,8 +157,6 @@ let macDringTestsSources: [String] = [
     "SerialQueueGateTests.swift",
     "NotesEditorBridgeTests.swift",
     "NotesEditorHostSessionTests.swift",
-    "SemanticVersionTests.swift",
-    "GitHubReleaseTests.swift",
     "TabStoreTests.swift",
     "RecentsStoreTests.swift",
     "FolderListerTests.swift",
@@ -203,12 +199,23 @@ let package = Package(
         // Linux-only keeps the Xcode build — which never resolves this manifest —
         // free of the dependency.
         .package(url: "https://github.com/apple/swift-crypto.git", "4.0.0" ..< "5.0.0"),
+        // The shared theming kit. `Preferences` validates stored colours with
+        // `RGBA8`'s hex grammar on Linux (AppKit's `NSColor(hex:)` is absent), so
+        // the pure Core product is linked; LiveryKit is macOS-only.
+        .package(url: "https://github.com/L-K-M/Livery", .upToNextMinor(from: "0.1.0")),
+        // The shared hotkey kit. `HotkeySpec` converts to and from `KeyCombo`
+        // from the pure Core product on Linux; KeycapKit is macOS-only.
+        .package(url: "https://github.com/L-K-M/Keycap", .upToNextMinor(from: "0.1.0")),
     ],
     targets: [
         .target(
             name: "MacDring",
             dependencies: [
                 .product(name: "Crypto", package: "swift-crypto",
+                         condition: .when(platforms: [.linux])),
+                .product(name: "LiveryCore", package: "Livery",
+                         condition: .when(platforms: [.linux])),
+                .product(name: "KeycapCore", package: "Keycap",
                          condition: .when(platforms: [.linux])),
                 // The inotify(7) syscalls for INotifyWatcher (LP-17). Linux-only, so the
                 // macOS build never sees it — and MacDring.xcodeproj never resolves this

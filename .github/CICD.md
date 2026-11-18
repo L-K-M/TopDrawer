@@ -56,7 +56,7 @@ A tag with a **semver pre-release suffix** — `v2.2.0-beta.1` — is published 
 **pre-release**. The in-app updater asks for `releases/latest`, which excludes pre-releases,
 so existing users are not prompted; that is how a Linux test build ships without pushing a
 macOS update to everyone. `MARKETING_VERSION` carries the suffix verbatim (`2.2.0-beta.1`),
-which the app's `SemanticVersion` parses and ranks *below* the final `2.2.0`.
+which Updraft's `SemanticVersion` parses and ranks *below* the final `2.2.0`.
 
 To redo a botched release, delete the tag and the Release on GitHub, then re-tag.
 

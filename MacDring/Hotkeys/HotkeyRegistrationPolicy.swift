@@ -43,7 +43,7 @@ enum HotkeyRegistrationPolicy {
     }
 
     /// Decide what to do with `spec` for a tab, given:
-    /// - `usable`: whether `spec` is a registerable hotkey (`KeyCodes.isUsableHotkey`);
+    /// - `usable`: whether `spec` is a registerable hotkey (`KeyCombo.isUsableGlobalHotkey`);
     /// - `existing`: the spec this tab is currently registered under, if any;
     /// - `cachedFailure`: the spec this tab last failed to register this session, if any;
     /// - `ownedByOtherTab`: whether a *different* live Top Drawer tab holds `spec`.

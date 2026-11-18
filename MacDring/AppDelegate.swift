@@ -1,4 +1,6 @@
 import AppKit
+import LiveryKit
+import UpdraftKit
 
 /// Boots the app: wires the store, display registry, and tab controller, builds
 /// the menu-bar item, and seeds a starter tab on first run.
@@ -10,8 +12,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var controller = TabController(store: store, preferences: preferences, registry: registry)
     private let updateChecker = UpdateChecker(
         // `repo` is the GitHub repository name, not the product name — it stays
-        // "MacDring" until the repository itself is renamed.
-        configuration: .init(owner: "L-K-M", repo: "MacDring", appName: "Top Drawer")
+        // "MacDring" until the repository itself is renamed. The key prefix and
+        // download fallback name are stated explicitly so the persisted
+        // UserDefaults keys and the Downloads filename cannot drift on upgrade.
+        // The "Couldn't compare versions" alert keeps its release-page button.
+        configuration: .init(owner: "L-K-M", repo: "MacDring", appName: "Top Drawer",
+                             defaultsKeyPrefix: "UpdateChecker.L-K-M.MacDring",
+                             downloadFallbackFileName: "download",
+                             offersReleasePageForInvalidVersions: true)
     )
     private lazy var settingsWindow = SettingsWindowController(preferences: preferences, store: store, registry: registry, updateChecker: updateChecker)
     private lazy var newTabWindow = NewTabWindowController(preferences: preferences, store: store, registry: registry)

@@ -6,6 +6,13 @@ import Foundation
 #if canImport(SwiftUI)
 import SwiftUI
 #endif
+// The hex grammar now lives in Livery: `NSColor(hex:)` on macOS, `RGBA8` in the
+// Linux build's pure validation path.
+#if canImport(LiveryKit)
+import LiveryKit
+#else
+import LiveryCore
+#endif
 
 /// App-wide appearance and behavior settings, backed by `UserDefaults`. Per-tab
 /// values (color, items, anchor, behavior) live in the tab model instead; the
@@ -252,24 +259,11 @@ final class Preferences: ObservableObject {
     private static func validColor(_ hex: String?, default fallback: String) -> String {
         #if canImport(AppKit)
         guard let hex, NSColor(hex: hex) != nil else { return fallback }
-        return hex
         #else
-        guard let hex, isValidHexColor(hex) else { return fallback }
-        return hex
+        guard let hex, RGBA8(hex: hex) != nil else { return fallback }
         #endif
+        return hex
     }
-
-    #if !canImport(AppKit)
-    /// A pure `#RRGGBB` / `#RRGGBBAA` check (leading `#` optional), matching what
-    /// `NSColor(hex:)` accepts, for the Linux build where AppKit is absent. Keep in
-    /// lockstep with `ColorHex.swift`'s parser.
-    private static func isValidHexColor(_ hex: String) -> Bool {
-        var string = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if string.hasPrefix("#") { string.removeFirst() }
-        guard string.allSatisfy(\.isHexDigit), UInt64(string, radix: 16) != nil else { return false }
-        return string.count == 6 || string.count == 8
-    }
-    #endif
 
     // MARK: Launch at login
 

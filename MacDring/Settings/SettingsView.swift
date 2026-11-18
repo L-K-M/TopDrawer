@@ -1,4 +1,5 @@
 import SwiftUI
+import UpdraftKit
 
 /// The tabbed settings window: General, Appearance, Tabs, About.
 struct SettingsView: View {

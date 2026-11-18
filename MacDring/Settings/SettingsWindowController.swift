@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UpdraftKit
 
 /// Hosts the SwiftUI `SettingsView` in a standard titled window. Switches the
 /// app to a regular (Dock-visible) app while open so the window can take focus,
