@@ -178,4 +178,26 @@ final class TabPlacementPolicyTests: XCTestCase {
                     tab(b, display: "D1", edge: .right, order: 1)]
         XCTAssertEqual(TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet(), to: 0), tabs)
     }
+
+    func testReorderAcrossTwoGroupsRenumbersBoth() {
+        let a = UUID(), b = UUID(), x = UUID(), y = UUID()
+        let tabs = [
+            tab(a, display: "D1", edge: .right, order: 0),
+            tab(b, display: "D1", edge: .right, order: 1),
+            tab(x, display: "D1", edge: .left, order: 4),
+            tab(y, display: "D1", edge: .left, order: 5),
+        ]
+        // Multi-select the last tab of each stack and drop both at the top: both
+        // groups' relative order changes, so both are renumbered.
+        let result = TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet([1, 3]), to: 0)
+        XCTAssertEqual(result.map(\.id), [b, y, a, x])
+        XCTAssertEqual(result.filter { $0.anchor.edge == .right }.map(\.anchor.order), [0, 1])
+        XCTAssertEqual(result.filter { $0.anchor.edge == .left }.map(\.anchor.order), [0, 1])
+    }
+
+    func testReorderWithStaleIndicesIsANoOp() {
+        let a = UUID()
+        let tabs = [tab(a, display: "D1", edge: .right, order: 0)]
+        XCTAssertEqual(TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet(integer: 4), to: 0), tabs)
+    }
 }

@@ -109,6 +109,10 @@ enum TabPlacementPolicy {
     /// every move.
     static func reorderedTabs(_ tabs: [Tab], moving offsets: IndexSet, to destination: Int) -> [Tab] {
         var result = tabs
+        // A stale index would trap; an invalid move is a no-op. (`ScreenAnchor.order`
+        // clamps itself in its `didSet`, so the sequential values below need no
+        // explicit `clampedOrder`.)
+        guard offsets.allSatisfy({ tabs.indices.contains($0) }) else { return result }
         let movedKeys = Set(offsets.map {
             TabStackKey(displayUUID: tabs[$0].anchor.displayUUID, edge: tabs[$0].anchor.edge)
         })
