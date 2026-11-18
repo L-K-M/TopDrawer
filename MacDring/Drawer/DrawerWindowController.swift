@@ -121,6 +121,14 @@ final class DrawerWindowController {
     private let readListing: (Tab) -> DrawerListing
     private let listing = BackgroundListing<DrawerListing>()
     private var listingTab: Tab?
+    /// The last completed listing per tab, used to seed a reopened drawer so it
+    /// appears at its real size with its last-known contents while the background
+    /// read revalidates them. Without it every Folder/Disks/Network/Cloud drawer
+    /// opened empty and jumped to its real size once the read landed.
+    private var lastListings: [UUID: (key: ListingKey, listing: DrawerListing)] = [:]
+    /// Bounds `lastListings` (a few hundred items per entry). Past it the cache
+    /// starts over; reopening a tab after that just reads it again.
+    private static let lastListingLimit = 32
     private let panel: NSPanel
     private let hostingView: DrawerHostingView
     private let resizeView: NotesDrawerResizeView
@@ -328,11 +336,43 @@ final class DrawerWindowController {
         listing.load({ read(tab) }) { [weak self] result in
             // show marks the panel visible in the same main-thread turn as apply.
             guard let self, self.isVisible else { return }
+            self.rememberListing(result, for: tab)
             self.model.itemsTruncated = result.truncated
             self.model.listingError = result.errorMessage
             self.model.folderURL = result.folderURL
             self.updateLiveItems(result.items.applyingIconStyles(from: tab.iconStyles))
         }
+    }
+
+    /// What decides a filesystem tab's listing. A remembered listing is reused only
+    /// while every input still matches, so a re-pointed folder, a new sort, or a
+    /// hidden-files toggle never shows the old contents.
+    private struct ListingKey: Equatable {
+        let kind: TabKind
+        let folderURL: URL?
+        let folderBookmark: Data?
+        let folderSort: FolderSort
+        let folderShowsHidden: Bool
+
+        init(_ tab: Tab) {
+            kind = tab.kind
+            folderURL = tab.folderURL
+            folderBookmark = tab.folderBookmark
+            folderSort = tab.folderSort
+            folderShowsHidden = tab.folderShowsHidden
+        }
+    }
+
+    private func rememberListing(_ result: DrawerListing, for tab: Tab) {
+        if lastListings[tab.id] == nil, lastListings.count >= Self.lastListingLimit {
+            lastListings.removeAll()
+        }
+        lastListings[tab.id] = (ListingKey(tab), result)
+    }
+
+    private func rememberedListing(for tab: Tab) -> DrawerListing? {
+        guard let remembered = lastListings[tab.id], remembered.key == ListingKey(tab) else { return nil }
+        return remembered.listing
     }
 
     /// Shows or clears the undo toast, inside `withAnimation` so the banner's
@@ -444,7 +484,15 @@ final class DrawerWindowController {
             model.notes = ""
             model.folderURL = nil
         case .folder, .disks, .network, .cloud:
-            if !preservesListing { model.items = [] }
+            if !preservesListing {
+                // Seed from the last completed read of this tab (if its inputs are
+                // unchanged) so the drawer opens at its real size; the read below
+                // replaces it within moments.
+                let remembered = rememberedListing(for: tab)
+                model.items = remembered?.items.applyingIconStyles(from: tab.iconStyles) ?? []
+                model.itemsTruncated = remembered?.truncated ?? false
+                model.folderURL = remembered?.folderURL
+            }
             model.notes = ""
             gatherListing(for: tab)
         case .recents:

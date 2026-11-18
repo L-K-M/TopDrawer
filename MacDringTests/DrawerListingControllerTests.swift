@@ -174,6 +174,62 @@ final class DrawerListingControllerTests: XCTestCase {
         }
     }
 
+    func testReopeningStartsFromTheLastListingThenRevalidates() throws {
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        let folder = URL(fileURLWithPath: "/folder")
+        let first = (0..<12).map { DrawerItem(kind: .file, displayName: "First \($0)", slot: $0) }
+        let second = [DrawerItem(kind: .file, displayName: "Second", slot: 0)]
+        let lock = NSLock()
+        var reads = 0
+        let drawer = try makeDrawer { _ in
+            lock.lock()
+            reads += 1
+            let isFirstRead = reads == 1
+            lock.unlock()
+            return DrawerListing(items: isFirstRead ? first : second, truncated: isFirstRead, folderURL: folder)
+        }
+        let tab = folderTab(url: folder)
+        try show(tab, in: drawer)
+        waitForItems(first, in: drawer)
+        let loadedFrame = drawer.openFrame
+        drawer.hide(duration: 0)
+
+        drawer.show(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen, duration: 0)
+        XCTAssertEqual(drawer.model.items, first, "A reopened drawer starts from its last listing")
+        XCTAssertTrue(drawer.model.itemsTruncated)
+        XCTAssertEqual(drawer.model.folderURL, folder)
+        XCTAssertEqual(drawer.openFrame, loadedFrame, "so it opens at its loaded size instead of growing later")
+        XCTAssertTrue(drawer.model.isLoadingListing, "and still re-reads the folder")
+
+        waitForItems(second, in: drawer)
+        XCTAssertFalse(drawer.model.itemsTruncated)
+    }
+
+    func testChangedListingInputsDoNotReuseTheLastListing() throws {
+        let item = DrawerItem(kind: .file, displayName: "Loaded")
+        let drawer = try makeDrawer { _ in
+            DrawerListing(items: [item], truncated: false, folderURL: URL(fileURLWithPath: "/folder"))
+        }
+        var tab = folderTab(url: URL(fileURLWithPath: "/folder"))
+        let changes: [(inout Tab) -> Void] = [
+            { $0.folderSort = .dateModified },
+            { $0.folderShowsHidden = true },
+            { $0.folderURL = URL(fileURLWithPath: "/elsewhere") },
+            { $0.kind = .disks },
+        ]
+        for change in changes {
+            try show(tab, in: drawer)
+            waitForItems([item], in: drawer)
+            drawer.hide(duration: 0)
+            change(&tab)
+            try show(tab, in: drawer)
+            XCTAssertTrue(drawer.model.items.isEmpty, "A listing for other inputs must not be shown")
+            XCTAssertNil(drawer.model.folderURL)
+            waitForItems([item], in: drawer)
+            drawer.hide(duration: 0)
+        }
+    }
+
     func testDirectScanFreshShowsLoadingUntilItsFirstReply() throws {
         let drawer = try makeDrawer(configure: { $0.freshDirectScan = true }) { _ in
             XCTFail("Fresh is gathered by TabController")
