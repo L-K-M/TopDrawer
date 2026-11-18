@@ -54,9 +54,21 @@ final class ClipboardHistoryStore: ObservableObject {
         // Unicode *canonical*, so precomposed and decomposed forms of the same
         // text would otherwise collapse into one entry and lose a copy.
         let identity = Self.identity(of: text)
-        let id = entries.first { Self.identity(of: $0.text) == identity }?.id ?? UUID()
-        let entry = ClipboardEntry(id: id, text: text, date: date)
-        entries = [entry] + entries.filter { Self.identity(of: $0.text) != identity }.prefix(Self.limit - 1)
+        // One pass: capture the first exact repeat's id and keep the newest
+        // `limit - 1` non-matching entries, so each stored clip's bytes are
+        // hashed once rather than twice.
+        var reusedID: UUID?
+        var kept: [ClipboardEntry] = []
+        kept.reserveCapacity(Self.limit - 1)
+        for existing in entries {
+            if Self.identity(of: existing.text) == identity {
+                reusedID = reusedID ?? existing.id
+            } else if kept.count < Self.limit - 1 {
+                kept.append(existing)
+            }
+        }
+        let entry = ClipboardEntry(id: reusedID ?? UUID(), text: text, date: date)
+        entries = [entry] + kept
         scheduleSave()
     }
 
