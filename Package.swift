@@ -202,10 +202,10 @@ let package = Package(
         // The shared theming kit. `Preferences` validates stored colours with
         // `RGBA8`'s hex grammar on Linux (AppKit's `NSColor(hex:)` is absent), so
         // the pure Core product is linked; LiveryKit is macOS-only.
-        .package(url: "https://github.com/L-K-M/Livery", .upToNextMinor(from: "0.1.0")),
+        .package(url: "https://github.com/L-K-M/Livery", .upToNextMinor(from: "0.2.0")),
         // The shared hotkey kit. `HotkeySpec` converts to and from `KeyCombo`
         // from the pure Core product on Linux; KeycapKit is macOS-only.
-        .package(url: "https://github.com/L-K-M/Keycap", .upToNextMinor(from: "0.1.0")),
+        .package(url: "https://github.com/L-K-M/Keycap", .upToNextMinor(from: "0.1.1")),
     ],
     targets: [
         .target(

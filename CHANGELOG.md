@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A hotkey press that arrives just as its shortcut is changed or turned off no
+  longer fires the old action (Keycap 0.1.1).
+- When GitHub's rate limit stops a Check for Updates, the alert says when to
+  try again instead of showing a bare HTTP 403 (Updraft 0.2.0).
 - Add Quick Look, folder pop-ups, Open With menus, and optional website previews.
 - Add keyboard navigation without a search and optional scroll/swipe tab switching.
 - Add per-item editing locks, lock-all/new-item controls, per-tab label settings,
