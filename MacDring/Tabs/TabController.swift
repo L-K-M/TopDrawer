@@ -49,6 +49,19 @@ final class TabController {
     /// requests flow through those paths, so a snapshot detects intervening drawer
     /// activity even when the drawer ends up closed again.
     private var drawerInteractionGeneration: UInt = 0
+    /// The app that was frontmost when the current drawer session began, so closing
+    /// the drawer can return the keyboard to it if a pop-up activated Top Drawer.
+    private var appFrontmostBeforeDrawer: NSRunningApplication?
+
+    /// Who gets the keyboard once a drawer closes.
+    private enum FocusAfterClose {
+        /// The app that was frontmost when the drawer opened, if Top Drawer has since
+        /// become active (a click in the folder pop-up or a preview activates it).
+        case previousApp
+        /// Leave activation alone: a click in another app or a launch is already
+        /// moving focus, or one of our own windows is about to take it.
+        case unchanged
+    }
 
     private var globalClickMonitor: Any?
     private var localKeyMonitor: Any?
@@ -473,6 +486,7 @@ final class TabController {
         previewIsOpen = false
         folderBrowser.close()
         drawerInteractionGeneration &+= 1
+        if openTabID == nil { appFrontmostBeforeDrawer = NSWorkspace.shared.frontmostApplication }
         if let prev = openTabID, prev != id {
             tabWindows[prev]?.setOpen(false)
             tabWindows[prev]?.restoreResting()
@@ -501,7 +515,7 @@ final class TabController {
         updateSpotlightWatch()   // gather Fresh / system-Recents items via Spotlight
     }
 
-    private func closeDrawer() {
+    private func closeDrawer(focus: FocusAfterClose = .previousApp) {
         cancelSpringOpen()
         previewController.close()
         previewIsOpen = false
@@ -522,6 +536,9 @@ final class TabController {
         stopFolderWatch()
         stopSpotlightWatch()
         refreshConcealment(animated: true)   // drawer closed → resume auto-hide/fade
+        let previousApp = appFrontmostBeforeDrawer
+        appFrontmostBeforeDrawer = nil
+        if focus == .previousApp { ModalActivation.handBackIfIdle(to: previousApp) }
     }
 
     /// The screen a tab should currently appear on: its anchored display if present,
@@ -1130,7 +1147,7 @@ final class TabController {
         }
         drawer.model.onOpenSettings = { [weak self] in
             guard let self, let id = self.openTabID else { return }
-            self.closeDrawer()
+            self.closeDrawer(focus: .unchanged)   // Settings takes the keyboard next
             self.onOpenSettings?(id)
         }
         drawer.model.onToggleLocked = { [weak self] in
@@ -1299,7 +1316,7 @@ final class TabController {
         activeLaunchRequestID = nil
         let tab = store.tab(id: request.tabID)
         if tab?.behavior.keepOpenAfterLaunch != true {
-            closeDrawer()
+            closeDrawer(focus: .unchanged)   // the launched target is taking focus
         } else if tab?.kind == .recents {
             refreshOpenDrawer()
         }
@@ -1402,7 +1419,7 @@ final class TabController {
         let drawerGenerationBeforeEditor = drawerInteractionGeneration
         let expectedDrawerGeneration = drawerGenerationBeforeEditor &+ 1
         iconEditorSessionID = sessionID
-        closeDrawer()   // the one generation change this editor session expects
+        closeDrawer(focus: .unchanged)   // the one generation change this editor session expects
         iconEditor.show(
             itemName: item.displayName,
             initial: item.iconStyle,
@@ -1776,11 +1793,12 @@ final class TabController {
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
+                // The click is already handing focus to the app it landed in.
                 guard let id = self.openTabID, let tab = self.store.tab(id: id) else {
-                    self.closeDrawer()
+                    self.closeDrawer(focus: .unchanged)
                     return
                 }
-                if self.effectiveBehavior(tab).autoHide { self.closeDrawer() }
+                if self.effectiveBehavior(tab).autoHide { self.closeDrawer(focus: .unchanged) }
             }
         }
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in

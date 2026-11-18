@@ -27,6 +27,15 @@ enum ModalActivation {
         return previousPID != ownPID
     }
 
+    /// Re-activates `previous` when Top Drawer is active with no ordinary window of
+    /// its own — the state a click inside a drawer's pop-up or preview leaves behind,
+    /// since those windows activate the app — so closing the drawer returns the
+    /// keyboard to the app the user was in.
+    static func handBackIfIdle(to previous: NSRunningApplication?) {
+        guard NSApp.isActive, !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }
+        handBack(to: previous)
+    }
+
     private static func handBack(to previous: NSRunningApplication?) {
         guard let previous,
               shouldHandBack(toPID: previous.processIdentifier, isTerminated: previous.isTerminated,
