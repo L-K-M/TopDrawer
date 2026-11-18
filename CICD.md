@@ -54,7 +54,7 @@ Or use the helper, which also bumps the committed `MARKETING_VERSION` so local/d
 scripts/release.sh 1.2.3 --push
 ```
 
-The version is derived from the tag with the leading `v` stripped (e.g. `v1.2.3` → `1.2.3`), and the build number is the workflow run number. The job runs on `macos-15` with Xcode 16.2. A tag with a semver pre-release suffix (`v2.2.0-beta.1`) is published as a GitHub **pre-release**: the in-app updater reads `releases/latest`, which excludes pre-releases, so users are not offered it — the vehicle for a Linux test build.
+The version is derived from the tag with the leading `v` stripped (e.g. `v1.2.3` → `1.2.3`), and the build number is the workflow run number. The jobs run on `macos-15` with Xcode 16.2. A tag with a semver pre-release suffix (`v2.2.0-beta.1`) is published as a GitHub **pre-release**: the in-app updater reads `releases/latest`, which excludes pre-releases, so users are not offered it — the vehicle for a Linux test build.
 
 It produces:
 
