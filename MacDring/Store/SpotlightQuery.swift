@@ -86,7 +86,7 @@ final class SpotlightQuery: RecentFilesQuerying {
             let url = URL(fileURLWithPath: path)
             let name = item.value(forAttribute: NSMetadataItemDisplayNameKey) as? String ?? url.lastPathComponent
             let date = item.value(forAttribute: attribute) as? Date ?? .distantPast
-            out.append(Result(url: url, name: name, date: date))
+            out.append(Result(indexedPath: path, name: name, date: date))
         }
         return out
     }

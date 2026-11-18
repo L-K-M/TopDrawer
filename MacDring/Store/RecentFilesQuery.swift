@@ -22,6 +22,15 @@ public struct RecentFileHit: Equatable, Sendable {
         self.name = name
         self.date = date
     }
+
+    /// Builds a hit from a filesystem path an indexer reported (Spotlight’s
+    /// `NSMetadataItemPathKey`). The URL is standardized so a path through an alias
+    /// (`/tmp/x` vs `/private/tmp/x`, a symlinked parent, a `..` component) and its
+    /// canonical form collapse to one identity — matching `FreshLister.merge`’s
+    /// dedupe and keeping `DrawerItem.stableID` stable across listings.
+    public init(indexedPath: String, name: String, date: Date) {
+        self.init(url: URL(fileURLWithPath: indexedPath).standardizedFileURL, name: name, date: date)
+    }
 }
 
 /// What a recents/fresh lookup ranks by: most-recently **used** (Recents) or
