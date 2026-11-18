@@ -56,7 +56,13 @@ final class CarbonHotkey {
                 return OSStatus(eventNotHandledErr)
             }
 
-            DispatchQueue.main.async { me.onPressed?() }
+            // Capture weakly and re-check the registration: a press already queued
+            // when `unregister()` removed the hot key must not fire afterwards (a
+            // stale press would toggle a tab whose hotkey no longer exists).
+            DispatchQueue.main.async { [weak me] in
+                guard let me, me.hotKeyRef != nil else { return }
+                me.onPressed?()
+            }
             return noErr
         }
 
