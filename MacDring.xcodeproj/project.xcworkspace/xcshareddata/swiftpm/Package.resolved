@@ -1,5 +1,5 @@
 {
-  "originHash" : "8bf2e744200f0a2bc011d3a0bec0ba07306e13d3b1e7c02f7da825b245df524e",
+  "originHash" : "6cef0dd4aaba2066f8bac8046285c02103463bcee3d1031f9dc7eae196bc3d28",
   "pins" : [
     {
       "identity" : "highlighterswift",
@@ -53,6 +53,15 @@
       "state" : {
         "revision" : "fa8244ed032f4a1ade4cb0571bf87d2f1a9fd2d7",
         "version" : "1.7.3"
+      }
+    },
+    {
+      "identity" : "updraft",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/L-K-M/Updraft",
+      "state" : {
+        "revision" : "bc0fccf31d9c44b92de0f0fd83aa7c3c5c63f85f",
+        "version" : "0.1.0"
       }
     }
   ],

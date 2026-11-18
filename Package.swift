@@ -19,7 +19,7 @@ import PackageDescription
 // adopts Swift 6 mode.
 
 // The pure-core files that compile on Linux today (all `Model/` except
-// Preferences — AppKit/SwiftUI — plus the layout/search/update math).
+// Preferences — AppKit/SwiftUI — plus the layout and search math).
 let macDringSources: [String] = [
     "Model/ClipboardEntry.swift",
     "Model/DrawerGrouping.swift",
@@ -53,8 +53,6 @@ let macDringSources: [String] = [
     "Tabs/DrawerLaunchRequest.swift",
     "Tabs/TabCycling.swift",
     "Common/TimeBucket.swift",
-    "Updates/SemanticVersion.swift",
-    "Updates/GitHubRelease.swift",
     "Store/BookmarkResolver.swift",
     // LP-07: the observable stores/models + prefs. `ObservationCompat` is the Combine
     // stand-in they need on Linux (macOS uses real Combine and skips that file).
@@ -159,8 +157,6 @@ let macDringTestsSources: [String] = [
     "SerialQueueGateTests.swift",
     "NotesEditorBridgeTests.swift",
     "NotesEditorHostSessionTests.swift",
-    "SemanticVersionTests.swift",
-    "GitHubReleaseTests.swift",
     "TabStoreTests.swift",
     "RecentsStoreTests.swift",
     "FolderListerTests.swift",

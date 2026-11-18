@@ -126,6 +126,12 @@ to the next minor (`0.1.0`), and keeps `HotkeySpec` (the persisted
 `{"keyCode","carbonModifiers"}` shape), `HotkeyRegistrationPolicy` and the tab
 reconciliation local.
 
+[`UpdraftKit`](https://github.com/L-K-M/Updraft) provides the shared GitHub
+release update checker, version model and verified downloader; Top Drawer pins
+it by tag, up to the next minor (`0.1.0`), keeps its existing
+`UpdateChecker.L-K-M.MacDring` defaults prefix, and leaves the AppDelegate
+wiring, Settings pane and menu item local.
+
 Notes use the core `MarkdownEngine` product from
 [`swift-markdown-engine`](https://github.com/nodes-app/swift-markdown-engine),
 pinned to `0.14.0` in the Xcode project. Its optional highlighting and LaTeX

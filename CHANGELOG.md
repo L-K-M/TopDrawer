@@ -18,3 +18,11 @@
   ⇧⌘4 with a beep, and keeps the existing Clear button. A reserved shortcut saved
   by an older version is no longer registered, and the Tabs pane says so under
   the recorder. Key names follow the current keyboard layout.
+- Software updates now use the shared Updraft package: downloaded releases are
+  size-checked, SHA-256-verified when the release provides a digest, and
+  quarantined for Gatekeeper; Linux `.deb` assets on the same release are never
+  offered; skipping a version survives a re-tag; a failed download shows an
+  alert offering the release page instead of opening it silently; and the
+  "Couldn't compare versions" alert now names the string it couldn't read, and
+  its button, now called Open Release Page, only opens a page of Top Drawer's
+  own repository.

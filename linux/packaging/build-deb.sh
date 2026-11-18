@@ -64,7 +64,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$version" ] || { echo "error: a version is required, e.g. $0 2.2.0" >&2; usage >&2; exit 2; }
 # major.minor[.patch][-prerelease]: what the release tags carry, and a shape both Debian
-# (after the `-` → `~` swap below) and the app's SemanticVersion parser accept.
+# (after the `-` → `~` swap below) and Updraft's SemanticVersion parser accept.
 [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,2}(-[0-9A-Za-z][0-9A-Za-z.]*)?$ ]] \
   || { echo "error: version '$version' is not X.Y[.Z][-prerelease]" >&2; exit 2; }
 deb_version="${version//-/\~}"

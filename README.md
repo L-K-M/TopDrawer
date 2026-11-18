@@ -240,11 +240,12 @@ Optional features ask only when you choose to use them:
 
 Top Drawer's own code is released under the [Unlicense](LICENSE). The builds
 bundle third-party code that keeps its own licenses: the macOS app bundles
-swift-markdown-engine (Apache-2.0) and the first-party PictKit, Livery and
-Keycap (Unlicense); the Linux `.deb` statically links the Swift runtime,
+swift-markdown-engine (Apache-2.0) and the first-party PictKit, Livery, Keycap
+and Updraft (Unlicense); the Linux `.deb` statically links the Swift runtime,
 Foundation with ICU, and the SwiftPM packages pinned in `linux/Package.resolved`
 (SwiftNIO, swift-crypto with BoringSSL, dbus, LiveryCore, KeycapCore and
-others), and ships a private copy of gtk4-layer-shell (MIT). Their notices ship inside each artifact:
+others), and ships a private copy of gtk4-layer-shell (MIT). Their notices
+ship inside each artifact:
 
 - macOS: `Top Drawer.app/Contents/Resources/Third-Party-Notices.txt`, also linked
   from the About tab in Settings
