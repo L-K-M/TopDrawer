@@ -189,7 +189,7 @@ private struct TabEditor: View {
                 // holds), so it's shown read-only here — change it by making a new tab.
                 LabeledContent("Type", value: currentTab.kind.displayName)
                 TextField("Name", text: tabBinding(\.title))
-                ColorPicker("Color", selection: colorBinding, supportsOpacity: false)
+                ColorSwatchPicker(title: "Color", hex: tabBinding(\.colorHex))
                 Picker("Glyph", selection: glyphIsSymbolBinding) {
                     Text("SF Symbol").tag(true)
                     Text("Letters / Emoji").tag(false)
@@ -458,13 +458,6 @@ private struct TabEditor: View {
                     }
                 }
             }
-        )
-    }
-
-    private var colorBinding: Binding<Color> {
-        Binding(
-            get: { Color(hexString: currentTab.colorHex) },
-            set: { color in store.updateTab(id: tab.id) { $0.colorHex = color.hexString } }
         )
     }
 

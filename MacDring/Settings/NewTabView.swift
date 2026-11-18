@@ -39,7 +39,7 @@ struct NewTabView: View {
 
             Form {
                 TextField("Name", text: $name, prompt: Text(defaultName))
-                ColorPicker("Color", selection: colorBinding, supportsOpacity: false)
+                ColorSwatchPicker(title: "Color", hex: $colorHex)
                 Picker("Type", selection: $kind) {
                     ForEach(TabKind.allCases) { Text($0.displayName).tag($0) }
                 }
@@ -94,10 +94,6 @@ struct NewTabView: View {
         case .fresh: return "Fresh"
         case .clipboard: return "Clipboard"
         }
-    }
-
-    private var colorBinding: Binding<Color> {
-        Binding(get: { Color(hexString: colorHex) }, set: { colorHex = $0.hexString })
     }
 
     private func create() {
