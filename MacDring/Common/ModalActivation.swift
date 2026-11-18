@@ -14,6 +14,8 @@ enum ModalActivation {
     /// the previously frontmost app (when that was another, still-running app).
     static func run<Result>(_ modal: () -> Result) -> Result {
         let previous = NSWorkspace.shared.frontmostApplication
+        // Deprecated on macOS 14, but cooperative `activate()` may be declined for an
+        // accessory agent, and the prompt must get the keyboard.
         NSApp.activate(ignoringOtherApps: true)
         defer { handBack(to: previous) }
         return modal()
@@ -36,8 +38,10 @@ enum ModalActivation {
         handBack(to: previous)
     }
 
+    /// Only while Top Drawer still holds activation: if the user switched to another
+    /// app meanwhile, that app keeps it.
     private static func handBack(to previous: NSRunningApplication?) {
-        guard let previous,
+        guard NSApp.isActive, let previous,
               shouldHandBack(toPID: previous.processIdentifier, isTerminated: previous.isTerminated,
                              ownPID: ProcessInfo.processInfo.processIdentifier) else { return }
         // Cooperative activation (macOS 14): yield explicitly, then ask it to activate.
