@@ -66,6 +66,7 @@ struct ClipboardHistoryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Copy \(excerpt.text)")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
         .help("Copy to clipboard")
         .contextMenu {
             Button("Copy") { model.onCopyClipboardEntry?(entry.id) }
