@@ -267,4 +267,45 @@ final class DrawerModelTests: XCTestCase {
         XCTAssertEqual(model.openGroupID, group.id)
         XCTAssertNotNil(model.openGroup)
     }
+
+    // MARK: Preview
+
+    func testSpacePreviewsTopResultWithNoSelection() {
+        let model = DrawerModel()
+        model.kind = .folder
+        let items = (0..<3).map { DrawerItem(kind: .file, displayName: "File \($0)", slot: $0) }
+        model.items = items
+        XCTAssertNil(model.selectedItemID)
+
+        var previewed: DrawerItem?
+        model.onPreviewItem = { previewed = $0 }
+        model.previewSelection()
+        XCTAssertEqual(previewed?.id, items[0].id)
+    }
+
+    func testPreviewFallsBackToTopSearchResultWithNoSelection() {
+        let model = DrawerModel()
+        model.kind = .folder
+        let items = (0..<5).map { DrawerItem(kind: .file, displayName: "File \($0)", slot: $0) }
+        model.items = items
+        model.searchQuery = "file 3"
+
+        var previewed: DrawerItem?
+        model.onPreviewItem = { previewed = $0 }
+        model.previewSelection()
+        XCTAssertEqual(previewed?.id, items[3].id)
+    }
+
+    func testSpacePreviewsSelectedItemWhenSelectionExists() {
+        let model = DrawerModel()
+        model.kind = .folder
+        let items = (0..<3).map { DrawerItem(kind: .file, displayName: "File \($0)", slot: $0) }
+        model.items = items
+        model.selectedItemID = items[1].id
+
+        var previewed: DrawerItem?
+        model.onPreviewItem = { previewed = $0 }
+        model.previewSelection()
+        XCTAssertEqual(previewed?.id, items[1].id)
+    }
 }

@@ -191,8 +191,11 @@ final class DrawerModel: ObservableObject {
     }
 
     func previewSelection() {
-        guard kind != .clipboard, let selectedItemID,
-              let item = displayedItems.first(where: { $0.id == selectedItemID }) else { return }
+        guard kind != .clipboard else { return }
+        // Same top-result fallback as Return, so Space is useful before any
+        // arrow-key selection and while a filter is active.
+        let item = selectedItemID.flatMap { id in displayedItems.first { $0.id == id } } ?? displayedItems.first
+        guard let item else { return }
         if item.kind == .url, let url = item.url, ItemPreviewPolicy.isWebsite(url) {
             onPreviewWebsite?(item)
         } else if item.kind == .file || item.kind == .folder {

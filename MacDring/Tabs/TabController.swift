@@ -1853,8 +1853,11 @@ final class TabController {
             model.launchSelection()
             return nil
         case UInt16(kVK_Space):
+            // While a filter is active the search field owns Space (it may be part
+            // of the query); otherwise Space previews the selection, falling back
+            // to the top result when nothing is selected yet.
             guard model.kind != .notes, model.kind != .clipboard,
-                  !model.isSearching, model.selectedItemID != nil else { return event }
+                  !model.isSearching else { return event }
             model.previewSelection()
             return nil
         default:
