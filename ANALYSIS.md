@@ -5,11 +5,7 @@ Consolidated from two review passes of the repository, most recently against
 launcher entries, and occasional large or remote folders. The experimental
 Linux port is included.
 
-All eight focus areas were covered. No blocking finding remains: the one
-established (silent launcher-save failures) is implemented in an open PR.
-Findings implemented in an open PR are omitted. Remaining findings follow
-severity order, grouped by focus area. The tail block merges a third review
-pass (MiMo.md) after deduplication.
+Earlier passes cover eight focus areas, including the MiMo review. Work already covered by an open PR, including silent launcher-save failures, is tracked separately from the remaining proposals.
 
 macOS layout, focus, VoiceOver, multi-display behavior, and Linux compositor
 interactions need on-device verification. The retained EditorWeb harness is not
@@ -191,13 +187,13 @@ bugs — nice-to-have
 
 Add `guard timer == nil else { return }`. Effort: trivial.
 
-### Spotlight hit URLs are not standardized before dedupe
+### Check alias identity when merging Spotlight and direct scan results
 
 bugs — nice-to-have
 
-`MacDring/Store/SpotlightQuery.swift:337` builds hits with `URL(fileURLWithPath:)` unstandardized while `FreshScanner` standardizes, so `FreshLister.merge` can show the same file twice via symlinked/real paths.
+`FreshLister.merge` already standardizes file URLs from both the direct scan and Spotlight. Check whether a symlink and the real path can still appear as two hits for a file in a landing zone.
 
-Standardize the hit URL at construction in `SpotlightQuery.results`. Effort: small.
+Reproduce with a temporary landing zone and a symlink. Define whether aliases should remain separate launch targets before changing deduplication. Effort: small.
 
 ### Recents dedupe is case-sensitive on case-insensitive volumes
 
@@ -205,7 +201,7 @@ bugs — nice-to-have
 
 `MacDring/Store/RecentsStore.swift:45-46` dedupes by `URL` equality, which is path-case-sensitive. The same file opened as `/X` and `/x` leaves duplicate recents.
 
-Compare `standardizedFileURL` or a lowercased path. Effort: small.
+Test case variants on both case-sensitive and case-insensitive volumes. Use volume-aware file identity for file URLs and preserve distinct URL paths for web links. Effort: small.
 
 ### Trash looks empty on filesystems without entry counts
 
@@ -319,30 +315,6 @@ performance problems, stuttering, and jank — nice-to-have
 
 Coalesce fetches (skip if one ran within ~200ms or is in flight). Effort: small.
 
-### Empty-Trash state is statted inside the menu builder
-
-performance problems, stuttering, and jank — nice-to-have
-
-`MacDring/Drawer/ItemView.swift:148`: `TrashInspector.trashIsEmpty()` runs a synchronous per-volume stat sweep when the context menu opens — a spun-down or network volume stalls presentation.
-
-Resolve asynchronously like other item metadata. Effort: small.
-
-### Clipboard history saves on the main thread
-
-performance problems, stuttering, and jank — nice-to-have
-
-`MacDring/Store/ClipboardHistoryStore.swift:113`: `saveNow` JSON-encodes and atomically writes the whole history on the main thread; a worst-case history is a multi-MB write that can hitch the UI.
-
-Encode and write off-main or cap the serialized size tighter. Effort: small.
-
-### Removing a drawer item has no Undo
-
-missing features — nice-to-have
-
-`MacDring/Drawer/ItemView.swift:191`: item removal is permanent; the undo-toast infrastructure exists for file moves but not item removal.
-
-Reuse `DrawerUndo` for a "Removed X — Undo" toast. Effort: medium.
-
 ### Clipboard history captures plain text only
 
 missing features — nice-to-have
@@ -358,14 +330,6 @@ missing features — nice-to-have
 A frequently-needed snippet ages out after 50 copies with no way to keep it.
 
 Add pin/favorite entries that survive clearing. Effort: medium.
-
-### No keyboard path to add a URL item
-
-missing features — nice-to-have
-
-A `.url` item can only be created by dragging a link; there is no paste/⌘V or "Add Link…" path, so a clipboard URL can't be added without a browser drag.
-
-Accept ⌘V on a focused items drawer or add an "Add Link" affordance. Effort: small-medium.
 
 ### Drawer items cannot be dragged out
 
@@ -507,7 +471,7 @@ New item kind with a bounded subprocess runner. Effort: medium-large.
 
 novel, delightful, or quirky ideas worth trying — nice-to-have
 
-⌘V into a focused items drawer turns clipboard text/URL/files into items — rounds out the missing add-URL-by-keyboard gap.
+Settings already offers Add Link. In a focused Items drawer, support ⌘V to add eligible clipboard text, URLs and file references. Preserve native paste when a text field is editing.
 
 Pasteboard handling on the drawer's key path. Effort: small-medium.
 
@@ -541,7 +505,7 @@ bugs — nice-to-have
 
 `MacDring/Updates/GitHubReleaseClient.swift:31-39` takes the max version of `releases?per_page=30`, so a higher-versioned prerelease older than the first 30 entries is missed and the app reports an older prerelease as latest.
 
-Page through releases until the version stops increasing. Effort: small.
+Follow pagination to exhaustion or define an explicit lookback policy. Test a higher semantic version on a later page after several lower versions. Effort: small.
 
 ### Drop dedupe resolves every existing item's bookmark per incoming file
 
@@ -557,7 +521,7 @@ performance problems, stuttering, and jank — nice-to-have
 
 `MacDring/Store/ClipboardHistoryStore.swift:12-14,132-140` reads and decodes up to `maximumArchiveBytes` (~79 MB worst case) during `TabController.init`, and `saveNow` re-encodes the archive on the main queue after each capture.
 
-Load and encode on a background queue, and cap the archive near the realistic payload size. Effort: two to three hours.
+Move archive reading, decoding, encoding and atomic writing off the main queue. Measure launch and capture with a near-limit history and evaluate a tighter byte cap. Clearing history or disabling retention must invalidate any pending write. Effort: two to three hours.
 
 ### Trash emptiness is probed while building an item's context menu
 
@@ -589,7 +553,7 @@ missing features — nice-to-have
 
 `MacDring/Tabs/TabController.swift:1104-1112` poofs a removed item with no way back; one mis-click loses a configured launcher entry (placement, name, icon, lock state) even though the file itself is safe.
 
-Reuse the existing `DrawerUndo` toast: keep the removed item (and its slot) for one toast window and restore on Undo. Effort: two to three hours.
+Use the existing file-move `DrawerUndo` toast to show the removed item's name. Keep its identity, slot and customization for the toast window. Verify restore after another item has occupied the slot. Effort: two to three hours.
 
 ### An update download has no completion feedback
 
@@ -678,3 +642,37 @@ novel, delightful, or quirky ideas worth trying — nice-to-have
 `MacDring/Drawer/ItemView.swift:195-205` renders a mini-preview of group children; dragging a child straight out of the preview (to another app) is the natural next step for the iOS-style grouping interactions.
 
 Allow `onDrag` providers for group children in the preview tiles. Effort: one day.
+
+## Drawer interaction follow-ups
+
+The macOS interaction pass traced drawer presentation, keyboard routing, clipboard history and filesystem refreshes at `c905100`. The implementation PRs cover the hidden selection after Backspace and clipboard excerpts that show matching text. The tasks below build on that pass. [Keyboard selection PR](https://github.com/L-K-M/TopDrawer/pull/184), [clipboard excerpt PR](https://github.com/L-K-M/TopDrawer/pull/185).
+
+Two related refresh regressions deserve explicit coverage alongside BACKLOG U1. With an active query, shrink a watched folder below the five-item threshold and verify the filter can still be edited or cleared. Then remove the linked directory and verify the drawer distinguishes the read failure from a successful empty listing. Both cases were also identified in concurrent local design work.
+
+### Bound the cost of rapid folder refreshes
+
+DrawerWindowController.apply starts a new read for each relevant reconcile. BackgroundListing drops obsolete replies after the disk call completes. A burst can leave several full directory reads running even when only the newest result can be used. Instrument queued, active and delivered reads against a delayed loader. Prototype one active and one replaceable pending refresh per target. Opening a different local drawer must stay responsive while an earlier network read is blocked. Verify newest settings win after a sort change and dismissing cannot revive a panel.
+
+### Test interrupted closes as well as opens
+
+DrawerWindowController.show guards its animation completion with presentationGeneration. The animated hide checks isVisible alone. Exercise close A, reopen B, close B before A finishes. Record whether A's completion can remove B's panel early, clear its rows or reset opacity during the second fade. If reproducible, bind close cleanup to its originating generation. Check zero-duration switches, the riding pill and Reduce Motion.
+
+### Make clipboard results legible at narrow drawer widths
+
+ClipboardHistoryView gives a leading icon to every row and a secondary relative date below each two-line snippet. On a narrow drawer the repeated icon costs space and identical first lines make clips hard to distinguish. Prototype one shared clipboard glyph in the header and a reserved trailing selection mark for keyboard navigation. Compare one-column and wide drawers using prose, paths, emoji and code. Retain explicit focus and one spoken action per row. Pick a treatment after checking contrast and scan time with real content. Listen to search excerpts with VoiceOver punctuation verbosity enabled. If truncation markers interrupt speech, omit only the markers generated by the app and preserve punctuation from the clip itself. Try match highlighting only if people still struggle to locate the hit.
+
+### Explain where a matching launcher lives
+
+DrawerSearch flattens groups. Two launchers named the same thing become indistinguishable, especially for bookmarked files with the same basename. Prototype a secondary group or parent-folder label only for colliding names. Keep ordering and drop routing keyed by the original item ID. Verify that two identical names in different groups can be chosen deliberately by sight and by VoiceOver without revealing unrelated full paths.
+
+### Give clipboard users a reversible way to peek
+
+A two-line clip can be difficult to recognize. Activating the row replaces the system clipboard. Prototype Space on a selected clipboard row as a transient read-only text preview inside the drawer. Escape returns to the same selection and scroll position. Evaluate whether the preview is worthwhile after match excerpts ship. Verify no pasteboard write, history mutation, new permissions or external launch. Include long text, clipped lines and a switch to another tab while peeking.
+
+### Measure and coalesce full-text clipboard searches
+
+A release-optimized Foundation microbenchmark on this Mac took a median 47 ms across 11 scans for an absent word in 50 distinct near-256 KiB ASCII clips. It exercised the same locale-aware, case- and diacritic-insensitive range search as DrawerModel. This is a synthetic worst-case workload and excludes SwiftUI. Profile query changes, selection changes and unrelated view updates with ordinary clips and the upper-bound fixture. Cache results by query and history revision, then consider moving scans off the main thread if typing still misses frames. Verify original ordering, history removal during a search, and stale result rejection.
+
+### Verify the spoken controls for choosing a tab glyph
+
+SymbolPickerView shows its selected glyph with an accent fill. Its symbol buttons and the icon-only add/remove/import/export buttons in TabsView rely on images and help text. Inspect their actual accessible names and selection traits with VoiceOver, including the same picker in IconEditorView. Supply explicit action names where synthesized names fail, expose the selected glyph in speech and shape, and verify the disabled removal hint for a protected tab. Do this alongside the existing pill activation work, which covers different controls.
