@@ -1,3 +1,4 @@
+import LiveryKit
 import SwiftUI
 
 /// Global appearance: drawer material/layout/sizes and tab pill sizing + default

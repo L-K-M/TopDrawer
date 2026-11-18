@@ -1,4 +1,5 @@
 import AppKit
+import LiveryKit
 
 /// Renders an `IconStyle` (a base shape + color + optional SF Symbol) into an
 /// `NSImage`. Shared by `ItemView.resolveIcon` (the drawer/Settings icon) and the

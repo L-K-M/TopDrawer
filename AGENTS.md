@@ -63,7 +63,8 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 
 - `Model/` — Codable model (`Tab`, `DrawerItem`, `ScreenAnchor`, `Edge`,
   `TabGlyph`, `TabBehavior`, `HotkeySpec`, `IconStyle`, `LauncherDocument`),
-  `ColorHex`, `Preferences`, and the small UI enums in `PreferenceEnums.swift`.
+  `Color+ReadableForeground`, `Preferences`, and the small UI enums in
+  `PreferenceEnums.swift`.
 - `Store/` — `TabStore` (JSON load/save), `RecentsStore` (recent-items history),
   `BookmarkResolver`, and the live transient listers (`FolderLister`, `DisksLister`,
   `NetworkLister`, `CloudLister`, `RecentsLister`, `FreshLister`). `SpotlightQuery`
@@ -80,7 +81,7 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 - `Launch/` — `ItemLauncher`. `Hotkeys/` — `CarbonHotkey`, `KeyCodes`.
 - `Settings/` — the SwiftUI settings window and panes, plus the small modal
   windows (`NewTabView`/Controller, `IconEditorView`/Controller).
-- `Common/` — `VisualEffectView`; `TabShapes` (`edgeRoundedRect` for the
+- `Common/` — `TabShapes` (`edgeRoundedRect` for the
   inward-rounded/edge-sharp tab pill + drawer, and `ClassicTabShape`);
   `ActivationPolicy` (the shared `.regular`↔`.accessory` revert guard);
   `IconRenderer` (draws an `IconStyle` to an `NSImage`).
@@ -112,6 +113,10 @@ Mirrors `PLAN.md §11`. Keep modules aligned:
 package holding the shared icon store and resolution ladder that Zap, Jetty and
 the Pict editor also use. Top Drawer **reads** it and writes nothing — editing
 lives in Pict, which needs no permissions and can be sandboxed.
+
+[`LiveryKit`](https://github.com/L-K-M/Livery) provides the shared hex colour
+grammar and blur/panel views; Top Drawer pins it by tag, up to the next minor
+(`0.1.0`), and keeps its own `Color.readableForeground` luma rule locally.
 
 Notes use the core `MarkdownEngine` product from
 [`swift-markdown-engine`](https://github.com/nodes-app/swift-markdown-engine),

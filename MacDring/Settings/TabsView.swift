@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LiveryKit
 import UniformTypeIdentifiers
 
 /// Manage all tabs: a selectable list on the left, a per-tab editor on the

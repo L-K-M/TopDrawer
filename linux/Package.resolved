@@ -10,6 +10,15 @@
       }
     },
     {
+      "identity" : "livery",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/L-K-M/Livery",
+      "state" : {
+        "revision" : "e0e36b6abc10effdd04b9e1da8f3bb39e48113a8",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "swift-algorithms",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-algorithms.git",

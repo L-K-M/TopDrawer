@@ -18,8 +18,8 @@ import PackageDescription
 // stricter nor looser than the Xcode build. Move both together if the project ever
 // adopts Swift 6 mode.
 
-// The pure-core files that compile on Linux today (all `Model/` except ColorHex
-// and Preferences — both AppKit/SwiftUI — plus the layout/search/update math).
+// The pure-core files that compile on Linux today (all `Model/` except
+// Preferences — AppKit/SwiftUI — plus the layout/search/update math).
 let macDringSources: [String] = [
     "Model/ClipboardEntry.swift",
     "Model/DrawerGrouping.swift",
@@ -203,12 +203,18 @@ let package = Package(
         // Linux-only keeps the Xcode build — which never resolves this manifest —
         // free of the dependency.
         .package(url: "https://github.com/apple/swift-crypto.git", "4.0.0" ..< "5.0.0"),
+        // The shared theming kit. `Preferences` validates stored colours with
+        // `RGBA8`'s hex grammar on Linux (AppKit's `NSColor(hex:)` is absent), so
+        // the pure Core product is linked; LiveryKit is macOS-only.
+        .package(url: "https://github.com/L-K-M/Livery", .upToNextMinor(from: "0.1.0")),
     ],
     targets: [
         .target(
             name: "MacDring",
             dependencies: [
                 .product(name: "Crypto", package: "swift-crypto",
+                         condition: .when(platforms: [.linux])),
+                .product(name: "LiveryCore", package: "Livery",
                          condition: .when(platforms: [.linux])),
                 // The inotify(7) syscalls for INotifyWatcher (LP-17). Linux-only, so the
                 // macOS build never sees it — and MacDring.xcodeproj never resolves this

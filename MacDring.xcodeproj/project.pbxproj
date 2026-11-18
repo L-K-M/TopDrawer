@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AA0000000000000000000032 /* PictKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000031 /* PictKit */; };
+		AA0000000000000000000039 /* LiveryKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000038 /* LiveryKit */; };
 		AA0000000000000000000036 /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000035 /* MarkdownEngine */; };
 /* End PBXBuildFile section */
 
@@ -37,6 +38,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000032 /* PictKit in Frameworks */,
+				AA0000000000000000000039 /* LiveryKit in Frameworks */,
 				AA0000000000000000000036 /* MarkdownEngine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -91,6 +93,7 @@
 			name = MacDring;
 			packageProductDependencies = (
 				AA0000000000000000000031 /* PictKit */,
+				AA0000000000000000000038 /* LiveryKit */,
 				AA0000000000000000000035 /* MarkdownEngine */,
 			);
 			productName = MacDring;
@@ -148,6 +151,7 @@
 			mainGroup = AA0000000000000000000002;
 			packageReferences = (
 				AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */,
+				AA0000000000000000000037 /* XCRemoteSwiftPackageReference "Livery" */,
 				AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
 			);
 			productRefGroup = AA0000000000000000000003 /* Products */;
@@ -451,6 +455,14 @@
 				kind = branch;
 			};
 		};
+		AA0000000000000000000037 /* XCRemoteSwiftPackageReference "Livery" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/L-K-M/Livery";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -463,6 +475,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */;
 			productName = PictKit;
+		};
+		AA0000000000000000000038 /* LiveryKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000037 /* XCRemoteSwiftPackageReference "Livery" */;
+			productName = LiveryKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 

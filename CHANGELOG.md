@@ -11,3 +11,5 @@
 - Add an opt-in **Keep history after quitting** setting for Clipboard tabs.
 - Fix the notes caret jumping to the end of the note after each typed
   character.
+- Stored tab and drawer colours accept `#RGB`/`#RGBA` shorthand and keep their
+  alpha when written back.

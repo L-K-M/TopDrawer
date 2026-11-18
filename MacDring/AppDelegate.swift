@@ -1,4 +1,5 @@
 import AppKit
+import LiveryKit
 
 /// Boots the app: wires the store, display registry, and tab controller, builds
 /// the menu-bar item, and seeds a starter tab on first run.
