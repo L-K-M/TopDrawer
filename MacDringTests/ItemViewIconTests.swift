@@ -9,26 +9,30 @@ final class ItemViewIconTests: XCTestCase {
     func testFaviconAppliesOnlyToPlainURLItems() {
         var item = DrawerItem(kind: .url, displayName: "Example",
                               url: URL(string: "https://example.com")!)
-        XCTAssertTrue(ItemView.shouldApplyFavicon(for: item, sharedIcon: nil))
+        XCTAssertTrue(ItemView.shouldApplyFavicon(for: item, hasSharedIcon: false))
 
         item.customIconBookmark = Data()
-        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, sharedIcon: nil))
+        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, hasSharedIcon: false))
         item.customIconBookmark = nil
 
         item.iconStyle = IconStyle(base: .tile, colorHex: "#0A84FF", symbol: "globe")
-        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, sharedIcon: nil))
+        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, hasSharedIcon: false))
         item.iconStyle = nil
 
-        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, sharedIcon: NSImage()))
+        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, hasSharedIcon: true))
+
+        // Any override blocks the favicon, in any combination.
+        item.customIconBookmark = Data()
+        XCTAssertFalse(ItemView.shouldApplyFavicon(for: item, hasSharedIcon: true))
     }
 
     func testFaviconDoesNotApplyToNonURLItems() {
         let file = DrawerItem(kind: .file, displayName: "File",
                               url: URL(fileURLWithPath: "/tmp/file"))
-        XCTAssertFalse(ItemView.shouldApplyFavicon(for: file, sharedIcon: nil))
+        XCTAssertFalse(ItemView.shouldApplyFavicon(for: file, hasSharedIcon: false))
 
         let app = DrawerItem(kind: .application, displayName: "App",
                              url: URL(fileURLWithPath: "/Applications/App.app"))
-        XCTAssertFalse(ItemView.shouldApplyFavicon(for: app, sharedIcon: nil))
+        XCTAssertFalse(ItemView.shouldApplyFavicon(for: app, hasSharedIcon: false))
     }
 }
