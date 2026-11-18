@@ -55,6 +55,11 @@ final class LinuxVolumesTests: XCTestCase {
         XCTAssertEqual(mounts.first?.device, #"//server/Café\共有"#)
     }
 
+    func testUnescapeReassemblesEscapedUTF8Bytes() {
+        XCTAssertEqual(MountInfoParser.unescape(#"/mnt/Caf\303\251"#), "/mnt/Café")
+        XCTAssertEqual(MountInfoParser.unescape(#"/mnt/\343\201\202"#), "/mnt/あ")
+    }
+
     func testUnescapePreservesInvalidOctalEscapes() {
         XCTAssertEqual(MountInfoParser.unescape(#"/a\400b\089c\04"#), #"/a\400b\089c\04"#)
     }

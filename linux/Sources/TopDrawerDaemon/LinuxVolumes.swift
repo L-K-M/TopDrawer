@@ -47,6 +47,8 @@ public enum MountInfoParser {
 
     /// mountinfo escapes space, tab, newline and backslash in the mount point and mount
     /// source as octal `\NNN`. Reverse that so paths compare and display correctly.
+    /// Invalid octal sequences are kept literally. Escapes that decode to malformed
+    /// UTF-8 produce replacement characters.
     public static func unescape(_ field: String) -> String {
         let backslash: UInt8 = 0x5C
         guard field.utf8.contains(backslash) else { return field }
