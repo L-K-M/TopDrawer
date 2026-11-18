@@ -591,10 +591,16 @@ struct AsyncItemIcon: View {
             .resizable()
             .interpolation(.high)
             .frame(width: size, height: size)
+            .accessibilityHidden(true)   // decorative; the adjacent name is the label
             .task(id: item.id) {
-                let resolved = await Task.detached(priority: .utility) { ItemView.resolveIcon(item) }.value
-                guard !Task.isCancelled else { return }
-                icon = resolved
+                let work = Task.detached(priority: .utility) { ItemView.resolveIcon(item) }
+                await withTaskCancellationHandler {
+                    let resolved = await work.value
+                    guard !Task.isCancelled else { return }
+                    icon = resolved
+                } onCancel: {
+                    work.cancel()
+                }
             }
     }
 }
