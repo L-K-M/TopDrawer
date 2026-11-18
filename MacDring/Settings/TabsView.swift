@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import LiveryKit
 import UniformTypeIdentifiers
 
@@ -185,6 +186,10 @@ private struct TabEditor: View {
 
     @State private var showingLinkSheet = false
     @State private var linkText = ""
+    /// Bumped on screen changes so `isParked` recomputes — `NSScreen.screens` isn't
+    /// observable, so unplugging a display with the editor open would otherwise leave
+    /// the Locate button’s disabled state stale.
+    @State private var screenEpoch = 0
 
     var body: some View {
         Form {
@@ -412,6 +417,9 @@ private struct TabEditor: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
+            screenEpoch += 1
+        }
         .sheet(isPresented: $showingLinkSheet) { linkSheet }
     }
 
@@ -514,6 +522,7 @@ private struct TabEditor: View {
     /// Whether the tab has no pill on screen right now: its display is disconnected
     /// and the policy parks it rather than moving it to the main display.
     private var isParked: Bool {
+        _ = screenEpoch   // re-evaluate when the display configuration changes
         if case .park = TabPlacementPolicy.placement(
             anchoredDisplay: registry.screen(for: tab.anchor.displayUUID),
             mainDisplay: DisplayRegistry.primaryScreen,

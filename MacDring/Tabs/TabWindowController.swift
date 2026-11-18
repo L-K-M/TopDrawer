@@ -448,6 +448,8 @@ final class TabWindowController {
     }
 
     func close() {
+        locateWork?.cancel()
+        locateWork = nil
         panel.orderOut(nil)
         panel.contentView = nil
     }
