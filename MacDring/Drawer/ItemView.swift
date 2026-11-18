@@ -77,6 +77,18 @@ struct ItemView: View {
         }
     }
 
+    /// The stored name for tooltips, which may show more than the cell (a hidden
+    /// extension); an unnamed group falls back to its rendered "Group" title.
+    private var fullName: String {
+        item.displayName.isEmpty ? title : item.displayName
+    }
+
+    /// What VoiceOver reads after the label: the dimmed "missing" state the cell
+    /// shows, then any lock.
+    private var accessibilityState: String {
+        [broken ? "Missing" : nil, lockDescription].compactMap { $0 }.joined(separator: ", ")
+    }
+
     private var lockDescription: String? {
         if item.isLocked || (editingLocked && !item.isGroup) { return "Locked" }
         return item.containsLockedItems ? "Contains locked items" : nil
@@ -121,9 +133,9 @@ struct ItemView: View {
                 }
             }
             .onHover { isHovered = $0 }
-            .help(broken ? "Can't find \(item.displayName)" : item.displayName)
-            .accessibilityLabel(item.displayName)
-            .accessibilityValue(lockDescription ?? "")
+            .help(broken ? "Can't find \(fullName)" : fullName)
+            .accessibilityLabel(title)
+            .accessibilityValue(accessibilityState)
             .contextMenu {
                 Button(groupOrKindOpenTitle, action: onLaunch)
                 if let onPreview { Button("Quick Look", action: onPreview).disabled(broken) }
