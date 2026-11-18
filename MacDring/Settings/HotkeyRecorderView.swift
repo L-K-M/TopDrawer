@@ -10,15 +10,25 @@ struct HotkeyRecorderView: View {
 
     @State private var recording = false
     @State private var monitor: Any?
+    /// Why the last rejected keystroke wasn't accepted — shown inline so a silent
+    /// rejection doesn't read as a broken control.
+    @State private var rejectionHint: String?
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button(action: toggle) {
-                Text(label)
-                    .frame(minWidth: 130)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Button(action: toggle) {
+                    Text(label)
+                        .frame(minWidth: 130)
+                }
+                if hotkey != nil && !recording {
+                    Button("Clear") { hotkey = nil }
+                }
             }
-            if hotkey != nil && !recording {
-                Button("Clear") { hotkey = nil }
+            if let rejectionHint {
+                Text(rejectionHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .onDisappear(perform: stop)
@@ -36,6 +46,7 @@ struct HotkeyRecorderView: View {
 
     private func start() {
         recording = true
+        rejectionHint = nil
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             if event.keyCode == 53 {            // Escape cancels
                 stop()
@@ -47,6 +58,8 @@ struct HotkeyRecorderView: View {
             if KeyCodes.isUsableHotkey(keyCode: UInt32(event.keyCode), modifiers: modifiers) {
                 hotkey = HotkeySpec(keyCode: UInt32(event.keyCode), carbonModifiers: modifiers)
                 stop()
+            } else {
+                rejectionHint = "Needs ⌘, ⌃ or ⌥ with a key, or a function key."
             }
             return nil                          // consume keys while recording
         }
@@ -54,6 +67,7 @@ struct HotkeyRecorderView: View {
 
     private func stop() {
         recording = false
+        rejectionHint = nil
         if let monitor {
             NSEvent.removeMonitor(monitor)
             self.monitor = nil
