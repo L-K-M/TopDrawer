@@ -15,7 +15,7 @@ final class ClipboardEntryTests: XCTestCase {
         XCTAssertTrue(excerpt.leading.hasPrefix("…"))
         XCTAssertTrue(excerpt.trailing.hasSuffix("…"))
         XCTAssertTrue(excerpt.text.contains("NEEDLE"))
-        XCTAssertLessThanOrEqual(excerpt.text.count, 162)
+        XCTAssertLessThanOrEqual(excerpt.text.count, ClipboardEntry.previewLength + 2)
     }
 
     func testExcerptAtTheStartHasNoLeadingEllipsis() {
@@ -73,6 +73,14 @@ final class ClipboardEntryTests: XCTestCase {
         let excerpt = entry(text).excerpt(matching: "target")
         XCTAssertEqual(excerpt.matched, "TARGET")
         XCTAssertTrue(excerpt.text.contains("TARGET"))
-        XCTAssertLessThanOrEqual(excerpt.text.count, 162)
+        XCTAssertLessThanOrEqual(excerpt.text.count, ClipboardEntry.previewLength + 2)
+    }
+
+    func testMatchesUsesTheSameFoldingAsTheExcerpt() {
+        let e = entry(String(repeating: "z", count: 200) + "caf\u{00E9}" + String(repeating: "z", count: 50))
+        XCTAssertTrue(e.matches("cafe"))
+        XCTAssertEqual(e.excerpt(matching: "cafe").matched, "caf\u{00E9}")
+        XCTAssertFalse(e.matches("absent"))
+        XCTAssertFalse(e.matches("   "))
     }
 }

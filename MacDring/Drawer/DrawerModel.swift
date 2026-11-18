@@ -141,9 +141,7 @@ final class DrawerModel: ObservableObject {
     var clipboardSearchResults: [ClipboardEntry] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return clipboardEntries }
-        return clipboardEntries.filter {
-            $0.text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive], locale: .current) != nil
-        }
+        return clipboardEntries.filter { $0.matches(query) }
     }
 
     private var searchResultIDs: [UUID] {

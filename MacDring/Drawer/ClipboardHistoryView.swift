@@ -40,13 +40,17 @@ struct ClipboardHistoryView: View {
     }
 
     private func row(_ entry: ClipboardEntry) -> some View {
-        Button { model.onCopyClipboardEntry?(entry.id) } label: {
+        // Computed once per row so the visible text and the accessibility label
+        // share one scan of a potentially large clip.
+        let excerpt = entry.excerpt(matching: model.searchQuery)
+        let selected = model.selectedItemID == entry.id
+        return Button { model.onCopyClipboardEntry?(entry.id) } label: {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "doc.on.clipboard").foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 4) {
-                    let excerpt = entry.excerpt(matching: model.searchQuery)
                     (Text(verbatim: excerpt.leading)
-                     + Text(verbatim: excerpt.matched).bold().foregroundColor(Color.accentColor)
+                     + Text(verbatim: excerpt.matched).bold()
+                         .foregroundStyle(selected ? Color.primary : Color.accentColor)
                      + Text(verbatim: excerpt.trailing))
                         .font(.callout).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -58,10 +62,10 @@ struct ClipboardHistoryView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .background(RoundedRectangle(cornerRadius: 8)
-                .fill(model.selectedItemID == entry.id ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06)))
+                .fill(selected ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06)))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Copy \(entry.excerpt(matching: model.searchQuery).text)")
+        .accessibilityLabel("Copy \(excerpt.text)")
         .help("Copy to clipboard")
         .contextMenu {
             Button("Copy") { model.onCopyClipboardEntry?(entry.id) }

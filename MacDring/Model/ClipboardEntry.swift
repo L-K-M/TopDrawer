@@ -6,7 +6,9 @@ struct ClipboardEntry: Identifiable, Equatable, Codable {
     let text: String
     let date: Date
 
-    private static let previewLength = 160
+    /// Internal (not private) so the tests can assert the window without a
+    /// hard-coded duplicate of the constant.
+    static let previewLength = 160
 
     var preview: String {
         let prefix = text.prefix(Self.previewLength)
@@ -22,16 +24,28 @@ struct ClipboardEntry: Identifiable, Equatable, Codable {
         var text: String { leading + matched + trailing }
     }
 
+    /// Whether `query` matches this clip. Uses the same folding as
+    /// `excerpt(matching:)` so the search filter and the highlight cannot drift.
+    func matches(_ query: String) -> Bool {
+        firstMatchRange(for: query) != nil
+    }
+
+    /// The first occurrence of `query`, matched case- and diacritic-insensitively
+    /// with the current locale — the single matching rule behind both the filter
+    /// and the excerpt.
+    private func firstMatchRange(for query: String) -> Range<String.Index>? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return text.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive],
+                          locale: .current)
+    }
+
     /// A window of up to `previewLength` characters around the first occurrence of
     /// `query`, matched the same way the clipboard search matches (case- and
     /// diacritic-insensitive). Falls back to `preview` for an empty query or no
     /// match, so a row always has something to show.
     func excerpt(matching query: String) -> Excerpt {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let match = text.range(of: trimmed,
-                                    options: [.caseInsensitive, .diacriticInsensitive],
-                                    locale: .current) else {
+        guard let match = firstMatchRange(for: query) else {
             return Excerpt(leading: preview, matched: "", trailing: "")
         }
 
