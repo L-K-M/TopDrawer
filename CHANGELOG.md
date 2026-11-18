@@ -13,3 +13,8 @@
   character.
 - Stored tab and drawer colours accept `#RGB`/`#RGBA` shorthand and keep their
   alpha when written back.
+- Per-tab hotkeys now use the shared Keycap package: the recorder captures chords
+  that are menu key equivalents, refuses system-reserved shortcuts such as ⌘Q and
+  ⇧⌘4 with a beep, and keeps the existing Clear button. A reserved shortcut saved
+  by an older version is no longer registered, and the Tabs pane says so under
+  the recorder. Key names follow the current keyboard layout.

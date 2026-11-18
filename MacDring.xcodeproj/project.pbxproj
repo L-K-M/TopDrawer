@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		AA0000000000000000000032 /* PictKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000031 /* PictKit */; };
 		AA0000000000000000000039 /* LiveryKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000038 /* LiveryKit */; };
+		AA000000000000000000003A /* KeycapKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA000000000000000000003B /* KeycapKit */; };
 		AA0000000000000000000036 /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000035 /* MarkdownEngine */; };
 /* End PBXBuildFile section */
 
@@ -39,6 +40,7 @@
 			files = (
 				AA0000000000000000000032 /* PictKit in Frameworks */,
 				AA0000000000000000000039 /* LiveryKit in Frameworks */,
+				AA000000000000000000003A /* KeycapKit in Frameworks */,
 				AA0000000000000000000036 /* MarkdownEngine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -94,6 +96,7 @@
 			packageProductDependencies = (
 				AA0000000000000000000031 /* PictKit */,
 				AA0000000000000000000038 /* LiveryKit */,
+				AA000000000000000000003B /* KeycapKit */,
 				AA0000000000000000000035 /* MarkdownEngine */,
 			);
 			productName = MacDring;
@@ -152,6 +155,7 @@
 			packageReferences = (
 				AA0000000000000000000030 /* XCRemoteSwiftPackageReference "Pict" */,
 				AA0000000000000000000037 /* XCRemoteSwiftPackageReference "Livery" */,
+				AA000000000000000000003C /* XCRemoteSwiftPackageReference "Keycap" */,
 				AA0000000000000000000034 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
 			);
 			productRefGroup = AA0000000000000000000003 /* Products */;
@@ -463,6 +467,14 @@
 				minimumVersion = 0.1.0;
 			};
 		};
+		AA000000000000000000003C /* XCRemoteSwiftPackageReference "Keycap" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/L-K-M/Keycap";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -480,6 +492,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000000037 /* XCRemoteSwiftPackageReference "Livery" */;
 			productName = LiveryKit;
+		};
+		AA000000000000000000003B /* KeycapKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000000000000000000003C /* XCRemoteSwiftPackageReference "Keycap" */;
+			productName = KeycapKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 

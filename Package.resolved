@@ -1,6 +1,15 @@
 {
   "pins" : [
     {
+      "identity" : "keycap",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/L-K-M/Keycap",
+      "state" : {
+        "revision" : "416486bdc26d9b781db2f37f699b438ac7e6e958",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "livery",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/L-K-M/Livery",
