@@ -121,10 +121,11 @@ final class DrawerModelTests: XCTestCase {
         // Backspace updates the field binding directly.
         model.searchQuery = ""
         XCTAssertNil(model.selectedItemID)
-        model.moveSelection(.right)
-        XCTAssertEqual(model.selectedItemID, group.id)
+        // Return with no selection opens the first visible item.
         model.launchSelection()
         XCTAssertEqual(model.openGroupID, group.id)
+        model.moveSelection(.right)
+        XCTAssertEqual(model.selectedItemID, child.id)
     }
 
     func testExternalDropTargetResolvesFlattenedSearchResult() {
