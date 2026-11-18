@@ -4,6 +4,13 @@ import XCTest
 @testable import MacDring
 
 final class FolderBrowserControllerTests: XCTestCase {
+    func testPreferredPopoverEdgeOpensInwardFromTheDrawerEdge() {
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .left), .maxX)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .right), .minX)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .top), .minY)
+        XCTAssertEqual(FolderBrowserController.preferredPopoverEdge(for: .bottom), .maxY)
+    }
+
     func testReplacementAndRepeatedCloseNotifyOnlyForTheDismissedSession() throws {
         guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

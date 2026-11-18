@@ -208,6 +208,7 @@ final class DrawerWindowController {
         var rect = reported ?? CGRect(x: hostingView.bounds.midX, y: hostingView.bounds.midY, width: 1, height: 1)
         if !hostingView.isFlipped { rect.origin.y = hostingView.bounds.height - rect.maxY }
         browser.show(item, relativeTo: rect, of: hostingView,
+                     preferredEdge: FolderBrowserController.preferredPopoverEdge(for: currentEdge),
                      onLaunch: onLaunch, onReveal: onReveal, onPreview: onPreview)
     }
 
