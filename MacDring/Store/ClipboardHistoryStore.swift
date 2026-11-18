@@ -49,10 +49,13 @@ final class ClipboardHistoryStore: ObservableObject {
     func record(_ text: String, at date: Date = Date()) {
         guard Self.isValid(text) else { return }
 
-        // Keep identity when a repeated copy moves an older entry to the front.
-        let id = entries.first { $0.text == text }?.id ?? UUID()
+        // Swift String equality folds canonically equivalent spellings. A user
+        // pasting either spelling back into a document needs its exact bytes.
+        var previous = entries
+        let duplicate = previous.firstIndex { $0.text.utf8.elementsEqual(text.utf8) }
+        let id = duplicate.map { previous.remove(at: $0).id } ?? UUID()
         let entry = ClipboardEntry(id: id, text: text, date: date)
-        entries = [entry] + entries.filter { $0.text != text }.prefix(Self.limit - 1)
+        entries = [entry] + previous.prefix(Self.limit - 1)
         scheduleSave()
     }
 
@@ -138,13 +141,13 @@ final class ClipboardHistoryStore: ObservableObject {
                 throw CocoaError(.fileReadTooLarge)
             }
             let decoded = try JSONDecoder().decode([ClipboardEntry].self, from: data)
-            var texts = Set<String>()
+            var texts = Set<Data>()
             var ids = Set<UUID>()
             var restored: [ClipboardEntry] = []
             for entry in decoded {
                 guard restored.count < Self.limit else { break }
-                guard Self.isValid(entry.text), !texts.contains(entry.text), !ids.contains(entry.id) else { continue }
-                texts.insert(entry.text)
+                guard Self.isValid(entry.text), !ids.contains(entry.id),
+                      texts.insert(Data(entry.text.utf8)).inserted else { continue }
                 ids.insert(entry.id)
                 restored.append(entry)
             }

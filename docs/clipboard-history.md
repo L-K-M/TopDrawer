@@ -15,10 +15,11 @@ drawer closed. Copies made before recording starts are excluded.
   copy. In the same tab's **Drawer** settings, **Columns** and **Rows** set its size;
   entries scroll in a list.
 
-All Clipboard tabs share the last **50 distinct text copies**. Repeated text moves
-to the front. Each entry is limited to **256 KiB**; larger copies are skipped,
-never truncated. Blank text, images, and files are skipped. Rich text is captured
-only through its plain-text representation.
+All Clipboard tabs share the last **50 distinct text copies**. Copying the same
+UTF-8 bytes again moves that entry to the front. Two spellings of **é**, for
+example, stay separate when their Unicode sequences differ. Each entry is limited
+to **256 KiB**. Larger copies, blank text, images, and files are skipped. Rich
+text is captured only through its plain-text representation.
 
 History stays in memory and clears on quit by default. To retain it, enable
 **Settings → Tabs → Clipboard → Keep history after quitting**. This applies to all

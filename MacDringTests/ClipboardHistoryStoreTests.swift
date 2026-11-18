@@ -42,6 +42,29 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(history.entries.first?.date, later)
     }
 
+    func testByteDistinctSpellingsKeepTheirBytesAndIDsAcrossCopiesAndRestarts() throws {
+        let url = makeStoreURL()
+        let history = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        let composed = "caf\u{00E9}"
+        let decomposed = "cafe\u{0301}"
+
+        history.record(composed)
+        let firstID = try XCTUnwrap(history.entries.first?.id)
+        history.record(decomposed)
+        let secondID = try XCTUnwrap(history.entries.first?.id)
+        XCTAssertNotEqual(firstID, secondID)
+        history.record(composed)
+        let expectedBytes = [Array(composed.utf8), Array(decomposed.utf8)]
+        XCTAssertEqual(history.entries.map { Array($0.text.utf8) }, expectedBytes)
+        XCTAssertEqual(history.entries.map(\.id), [firstID, secondID])
+
+        history.finishSession()
+        let restored = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        XCTAssertEqual(restored.entries.map { Array($0.text.utf8) }, expectedBytes)
+        XCTAssertEqual(restored.entries.map(\.id), [firstID, secondID])
+        XCTAssertNil(restored.persistenceError)
+    }
+
     func testEvictsOldestWhenFull() {
         let history = makeHistory()
         for index in 0...ClipboardHistoryStore.limit { history.record("entry \(index)") }
