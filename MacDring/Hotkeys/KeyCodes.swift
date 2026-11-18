@@ -48,6 +48,10 @@ enum KeyCodes {
         hasCommandingModifier(modifiers) || isFunctionKey(keyCode)
     }
 
+    /// The user-facing rule for a rejected combination, kept beside the predicate
+    /// that decides it so the two cannot drift apart.
+    static let rejectionHint = "Needs ⌘, ⌃ or ⌥ with a key, or a function key."
+
     private static let functionKeys: Set<UInt32> = [
         UInt32(kVK_F1), UInt32(kVK_F2), UInt32(kVK_F3), UInt32(kVK_F4), UInt32(kVK_F5),
         UInt32(kVK_F6), UInt32(kVK_F7), UInt32(kVK_F8), UInt32(kVK_F9), UInt32(kVK_F10),

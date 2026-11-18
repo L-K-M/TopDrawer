@@ -32,6 +32,12 @@ struct HotkeyRecorderView: View {
             }
         }
         .onDisappear(perform: stop)
+        // A local key monitor only sees events delivered to this app. If the user
+        // Cmd-Tabs away mid-recording, no further key event ever arrives and the
+        // control would sit there looking stuck; resigning active is the exit.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            if recording { stop() }
+        }
     }
 
     private var label: String {
@@ -45,6 +51,7 @@ struct HotkeyRecorderView: View {
     }
 
     private func start() {
+        guard monitor == nil else { return }   // never stack two key monitors
         recording = true
         rejectionHint = nil
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
@@ -59,7 +66,7 @@ struct HotkeyRecorderView: View {
                 hotkey = HotkeySpec(keyCode: UInt32(event.keyCode), carbonModifiers: modifiers)
                 stop()
             } else {
-                rejectionHint = "Needs ⌘, ⌃ or ⌥ with a key, or a function key."
+                rejectionHint = KeyCodes.rejectionHint
             }
             return nil                          // consume keys while recording
         }
