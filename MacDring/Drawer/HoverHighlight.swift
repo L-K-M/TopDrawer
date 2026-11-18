@@ -6,6 +6,10 @@ import SwiftUI
 ///
 /// The hover state lives here, per cell: moving the pointer across a large drawer
 /// re-renders only the cells it leaves and enters, never the whole drawer.
+///
+/// `onHover` follows pointer moves only. Content scrolling under a still pointer
+/// leaves the old cell lit until the pointer moves, and a reorder drag delivers no
+/// enter or exit at all, so disabling the highlight for a drag also forgets it.
 struct HoverHighlight: ViewModifier {
     let cornerRadius: CGFloat
     var isEnabled = true
@@ -24,6 +28,11 @@ struct HoverHighlight: ViewModifier {
         content
             .background(RoundedRectangle(cornerRadius: cornerRadius).fill(Color.primary.opacity(opacity)))
             .onHover { isHovered = $0 }
+            // A cell the pointer left mid-drag got no exit event; without this it
+            // would light up again when the drag ends.
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled { isHovered = false }
+            }
     }
 }
 
