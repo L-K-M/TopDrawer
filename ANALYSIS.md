@@ -23,7 +23,7 @@ A later drawer-and-clipboard pass opened independent implementations of the byte
 
 A reliability pass opened four more implementations: a batch of small correctness fixes — update-timer re-entry, a stale Carbon hotkey press, case-folded recents identity, standardized Spotlight hit paths, `*.app` file classification, and conservative unknown-Trash counts ([#192](https://github.com/L-K-M/TopDrawer/pull/192)); asynchronous Settings item icons ([#194](https://github.com/L-K-M/TopDrawer/pull/194)); per-edge stack renumbering on a Settings move ([#196](https://github.com/L-K-M/TopDrawer/pull/196)); and a “Locate Tab” pill outline ([#206](https://github.com/L-K-M/TopDrawer/pull/206)).
 
-A further pass opened four focused fixes: a bounded update-download session so a stalled transfer cannot pin `isDownloading` for the default seven-day resource timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)); pagination for the prerelease release scan under a documented page budget ([#208](https://github.com/L-K-M/TopDrawer/pull/208)); folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211), merged); and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216)). A later small fix explains rejected hotkey combinations inline instead of consuming them silently ([#217](https://github.com/L-K-M/TopDrawer/pull/217)).
+A further pass opened focused fixes: folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211), merged) and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216), merged). Its update-download timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)), prerelease pagination ([#208](https://github.com/L-K-M/TopDrawer/pull/208)) and hotkey-recorder hint ([#217](https://github.com/L-K-M/TopDrawer/pull/217)) were closed as superseded when [#220](https://github.com/L-K-M/TopDrawer/pull/220) adopted the shared Livery, Keycap and Updraft packages; the underlying findings now belong to those packages.
 
 ## Reliability and data safety
 
@@ -143,7 +143,7 @@ Capture weakly or check `hotKeyRef != nil` inside the block. Effort: trivial. Im
 
 usability / safety — nice-to-have
 
-`KeyCodes.isUsableHotkey` accepts any combination with a commanding modifier, including ⌘Q, ⌘W, ⌘H and ⌘M. A recorded combination is registered as a global Carbon hotkey, so it can shadow app-reserved shortcuts in every app while Top Drawer runs. Exclude the reserved ⌘ combos (or warn before accepting them) and cover them in `KeyCodesTests`. Effort: small.
+`KeyCodes.isUsableHotkey` used to accept any combination with a commanding modifier, including ⌘Q, ⌘W, ⌘H and ⌘M, and a recorded combination became a global Carbon hotkey. Addressed by [#220](https://github.com/L-K-M/TopDrawer/pull/220): recording now goes through Keycap’s `ShortcutRecorder`, which refuses reserved combos (⌘Q and friends) and beeps while keeping the recorder open. No app-local work remains.
 
 ### A transient bus restart permanently kills the daemon
 
@@ -215,7 +215,7 @@ bug — verify on a filesystem without ATTR_DIR_ENTRYCOUNT
 
 bug — relevant when prerelease checking is enabled
 
-`GitHubReleaseClient` picks the highest version from the first 30 releases. When publication order differs from version order, a higher-version prerelease can sit on an older page. Define the supported history window or follow pagination with a bounded request policy and a test for out-of-order version tags. In review: [#208](https://github.com/L-K-M/TopDrawer/pull/208) follows 100-entry pages to a 10-page budget, stops on a short page, and picks the maximum non-draft version. A later-page failure still fails the whole check; consider keeping the pages already fetched, and confirm the 10-request budget against GitHub's 60/hour unauthenticated limit.
+`GitHubReleaseClient` picks the highest version from the first 30 releases. When publication order differs from version order, a higher-version prerelease can sit on an older page. Define the supported history window or follow pagination with a bounded request policy and a test for out-of-order version tags. The app-local client was removed by [#220](https://github.com/L-K-M/TopDrawer/pull/220); this now belongs to Updraft’s release client. A later-page failure should keep the pages already fetched, and the request budget should respect GitHub’s 60/hour unauthenticated limit.
 
 ### Keep per-path icon overrides from attaching to unrelated files
 
@@ -243,7 +243,7 @@ visual / forward compatibility — nice-to-have
 
 reliability — small
 
-`FileMover.uniqueDestination` tests the destination with `fileExists(atPath:)`, which is false for a dangling symlink in the destination directory. `moveItem` then fails or replaces the link. Check `fileExists(atPath:isDirectory:)` and link existence, or catch the move failure and step to the next candidate. Add a test with a broken symlink in the destination directory. Effort: small. In review: [#216](https://github.com/L-K-M/TopDrawer/pull/216) treats any symlink as occupying the name via `destinationOfSymbolicLink` and leaves the link intact.
+`FileMover.uniqueDestination` tests the destination with `fileExists(atPath:)`, which is false for a dangling symlink in the destination directory. `moveItem` then fails or replaces the link. Check `fileExists(atPath:isDirectory:)` and link existence, or catch the move failure and step to the next candidate. Add a test with a broken symlink in the destination directory. Merged in [#216](https://github.com/L-K-M/TopDrawer/pull/216): any symlink occupies the name via `destinationOfSymbolicLink`, and tests cover both a dangling link and a loop.
 
 ## Performance and responsiveness
 
@@ -395,7 +395,7 @@ usability: speed, convenience, and clarity — nice-to-have
 
 `MacDring/Settings/HotkeyRecorderView.swift:51`: unusable combos (Shift-only, bare letters) are silently consumed while recording — the user gets no hint why nothing registered.
 
-Show a brief inline hint ("needs ⌘/⌃/⌥ or a function key"). Effort: small. In review: [#217](https://github.com/L-K-M/TopDrawer/pull/217) shows the hint and keeps recording.
+Show a brief inline hint ("needs ⌘/⌃/⌥ or a function key"). Addressed by [#220](https://github.com/L-K-M/TopDrawer/pull/220): Keycap’s `ShortcutRecorder` beeps and keeps recording on a rejected combo, and its label already says Esc cancels.
 
 ### No keyboard path to remove a selected item
 
@@ -469,7 +469,7 @@ Settings already offers an Add Link sheet. Direct paste into an Items drawer cou
 
 usability — make the transfer state visible
 
-`UpdateChecker.downloadAndReveal` tracks a Boolean, then reveals the download in Finder or opens the release page on failure. The user has no explicit progress or cancel action and receives little feedback while waiting. Give the transfer a visible state with completion and failure details. Consider an explicit timeout budget in addition to URLSession defaults. Test a slow server, cancellation before and during transfer, temporary file cleanup, and the browser fallback. The timeout half is in review: [#207](https://github.com/L-K-M/TopDrawer/pull/207) gives the downloader its own session with a 60 s request and 15 min resource timeout; map `URLError.timedOut` to a retry-oriented message, and progress and cancellation remain open.
+`UpdateChecker.downloadAndReveal` tracks a Boolean, then reveals the download in Finder or opens the release page on failure. The user has no explicit progress or cancel action and receives little feedback while waiting. Give the transfer a visible state with completion and failure details. Consider an explicit timeout budget in addition to URLSession defaults. Test a slow server, cancellation before and during transfer, temporary file cleanup, and the browser fallback. The app-local checker and downloader were removed by [#220](https://github.com/L-K-M/TopDrawer/pull/220); this now belongs to Updraft, including a bounded resource timeout and a retry-oriented `URLError.timedOut` message.
 
 ### Offer Quick Look when selection starts in an unfiltered drawer
 
