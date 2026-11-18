@@ -1871,7 +1871,11 @@ final class TabController {
         // Quick Look, while a Space after typing has begun is part of the query.
         if model.kind != .notes, !(NSApp.keyWindow?.firstResponder is NSText) {
             let hasShortcutModifier = !event.modifierFlags.intersection([.command, .option, .control]).isEmpty
-            if event.keyCode == UInt16(kVK_Delete), !hasShortcutModifier, model.deleteBackwardInTypeToFind() {
+            // Only a plain Backspace edits the query: a Delete key event carrying fn means
+            // forward delete, which a query edited from its end has no use for.
+            let isPlainBackspace = event.keyCode == UInt16(kVK_Delete)
+                && event.modifierFlags.intersection([.command, .option, .control, .function]).isEmpty
+            if isPlainBackspace, model.deleteBackwardInTypeToFind() {
                 return nil
             }
             if let text = DrawerSearch.typeToFindText(event.characters, hasShortcutModifier: hasShortcutModifier,
