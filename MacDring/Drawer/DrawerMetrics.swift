@@ -25,10 +25,8 @@ enum DrawerMetrics {
     /// keeps the drawer's configured size and scrolls, fitting more of these compact
     /// rows than the grid's cells.
     static let listRowHeight: CGFloat = 24
-    /// Floor width for the list layout, so a one-column tab still shows the name and a
-    /// date. Above it, the configured columns drive the width (and which metadata
-    /// columns fit — see `ItemView`).
-    static let listMinWidth: CGFloat = 220
+    /// Keeps the shared header actions and list row labels usable in one-column drawers.
+    private static let minimumContentWidth: CGFloat = 220
     static let tabLabelCrossPadding: CGFloat = 4
 
     static func tabThickness(configured: CGFloat, style: TabStyle, labelLineHeight: CGFloat?) -> CGFloat {
@@ -54,14 +52,11 @@ enum DrawerMetrics {
                       height: min(max(height, notesMinimumSize.height), max(0, visibleFrame.height - inset)))
     }
 
-    /// The list layout's width for `columns` configured columns at `iconSize`: the
-    /// configured columns drive it (same footprint as the grid), floored so a
-    /// one-column tab still shows a name + date. Shared by `contentSize` and the row
-    /// view so the rendered columns match the drawer's actual width.
-    static func listWidth(columns: Int, iconSize: CGFloat) -> CGFloat {
+    /// Both layouts follow the configured grid width above the shared header minimum.
+    static func contentWidth(columns: Int, iconSize: CGFloat) -> CGFloat {
         let cols = PersistedLayoutBounds.clampedGridColumns(columns)
         let gridWidth = padding + CGFloat(cols) * (iconSize + 28) + CGFloat(cols - 1) * gridInterColumn
-        return max(gridWidth, listMinWidth)
+        return max(gridWidth, minimumContentWidth)
     }
 
     /// Which metadata columns a list row can fit at `width`: the **date** always, the
@@ -106,14 +101,13 @@ enum DrawerMetrics {
                             in visibleFrame: CGRect) -> CGSize {
         let configuredRows = PersistedLayoutBounds.clampedGridRows(configuredRows)
         let columns = PersistedLayoutBounds.clampedGridColumns(columns)
+        let width = contentWidth(columns: columns, iconSize: iconSize)
         var size: CGSize
         switch layout {
         case .grid:
             let cols = columns
             let rows = gridRowCount(configuredRows: configuredRows, maxSlot: maxSlot, itemCount: itemCount, columns: cols)
-            let cellWidth = iconSize + 28
             let cellHeight = gridCellHeight(iconSize: iconSize, itemFontSize: itemFontSize)
-            let width = padding + CGFloat(cols) * cellWidth + CGFloat(cols - 1) * gridInterColumn
             let height = padding + headerHeight
                 + CGFloat(rows) * cellHeight + CGFloat(max(rows - 1, 0)) * gridSpacing
             size = CGSize(width: width, height: height)
@@ -127,7 +121,7 @@ enum DrawerMetrics {
                 + CGFloat(max(configuredRows - 1, 0)) * gridSpacing
             let rows = max(1, Int((configuredCellsHeight / listRowHeight).rounded()))   // visible rows; scrolls beyond
             let height = padding + headerHeight + CGFloat(rows) * listRowHeight
-            size = CGSize(width: listWidth(columns: columns, iconSize: iconSize), height: height)
+            size = CGSize(width: width, height: height)
         }
         // Reserve room for the filter field when the drawer shows one, so its extra
         // height doesn't push the items under a scroll bar.

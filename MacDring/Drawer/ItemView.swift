@@ -105,7 +105,7 @@ struct ItemView: View {
     /// configured columns *and* the icon size) — so a narrow drawer drops Size/Kind
     /// rather than overflowing.
     private var listMeta: (size: Bool, kind: Bool) {
-        DrawerMetrics.listMetaColumns(forWidth: DrawerMetrics.listWidth(columns: listColumns, iconSize: iconSize))
+        DrawerMetrics.listMetaColumns(forWidth: DrawerMetrics.contentWidth(columns: listColumns, iconSize: iconSize))
     }
 
     var body: some View {

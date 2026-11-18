@@ -205,7 +205,7 @@ the research and plan behind it.
   **Date**, **Size**, and **Kind** columns (the date is Date Added for Fresh, last-used
   for Recents, modified for folders). The drawer's **Columns / Rows** size it just like
   the grid (it scrolls past what fits); a narrower drawer shows fewer of the metadata
-  columns. Handy for a Fresh tab ordered by when files arrived.
+  columns. Both layouts reserve enough width for the drawer’s header controls.
   **Open-on-hover** and **close-when-you-click-elsewhere** follow the global default
   unless you override them here — pick *On* / *Off* for the tab, or *Use global default*
   to follow the global setting again (the clear way to revert).

@@ -213,6 +213,8 @@ struct DrawerView: View {
                 .frame(width: 10, height: 10)
             Text(model.title.isEmpty ? "Drawer" : model.title)
                 .font(.headline)
+                .lineLimit(1)
+                .help(model.title.isEmpty ? "Drawer" : model.title)
             Spacer(minLength: 12)
             if model.kind != .notes {
                 // A trailing "+" when the listing was capped (e.g. a folder with
