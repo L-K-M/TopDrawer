@@ -30,9 +30,9 @@ struct UpdateDownloader {
     /// default seven-day `timeoutIntervalForResource`, so a stalled transfer would
     /// leave the caller’s `isDownloading` flag set (and its controls disabled) for a
     /// week. A dedicated, ephemeral configuration caps both the per-request and
-    /// whole-transfer waits — the resource ceiling is sized for the largest release
-    /// asset on a slow link — and keeps update traffic out of the shared cookie and
-    /// cache store. Tests assert the bounds and the wiring.
+    /// whole-transfer waits — the 15-minute resource ceiling covers a ~150 MB asset
+    /// at ~1 Mbps — and keeps update traffic out of the shared cookie and cache
+    /// store. Tests assert the bounds, the ephemeral choice, and the wiring.
     static let defaultSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60

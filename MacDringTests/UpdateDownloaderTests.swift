@@ -80,6 +80,9 @@ final class UpdateDownloaderTests: XCTestCase {
         let configuration = UpdateDownloader.defaultSession.configuration
         XCTAssertLessThanOrEqual(configuration.timeoutIntervalForRequest, 60)
         XCTAssertLessThanOrEqual(configuration.timeoutIntervalForResource, 15 * 60)
+        // Ephemeral: its own in-memory stores, not the shared cookie/cache singletons.
+        XCTAssertFalse(configuration.httpCookieStorage === HTTPCookieStorage.shared)
+        XCTAssertFalse(configuration.urlCache === URLCache.shared)
     }
 
     func testDownloaderDefaultsToBoundedSession() {
