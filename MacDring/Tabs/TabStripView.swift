@@ -122,6 +122,11 @@ struct TabStripView: View {
                     lineWidth: model.appearance.outlineWidth(for: model.isDropTargeted ? .dropTargeted : (model.isOpen ? .open : .idle))
                 )
             )
+            .overlay {
+                // “Locate Tab”: a bright static ring, drawn outside the pill’s own
+                // outline so it never shifts the pill’s size.
+                if model.isLocating { shape.stroke(Color.accentColor, lineWidth: 3) }
+            }
     }
 
     // MARK: Classic folder tab
@@ -150,6 +155,7 @@ struct TabStripView: View {
             .overlay(shape.stroke(.black.opacity(0.3), lineWidth: 1))          // outline
             .overlay {
                 if model.isDropTargeted { shape.stroke(.white, lineWidth: 2) }
+                if model.isLocating { shape.stroke(Color.accentColor, lineWidth: 3) }
             }
     }
 

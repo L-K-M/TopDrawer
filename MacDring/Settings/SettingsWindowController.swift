@@ -13,6 +13,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let registry: DisplayRegistry
     private let updateChecker: UpdateChecker
     private let router = SettingsRouter()
+    /// Set by the app delegate so the Tabs pane can ask the controller to outline a
+    /// tab’s pill. Held strongly; the controller outlives the window.
+    var onLocateTab: ((UUID) -> Void)?
 
     init(preferences: Preferences, store: TabStore, registry: DisplayRegistry, updateChecker: UpdateChecker) {
         self.preferences = preferences
@@ -28,7 +31,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         if window == nil {
             let hosting = NSHostingController(
-                rootView: SettingsView(preferences: preferences, store: store, registry: registry, router: router, updateChecker: updateChecker)
+                rootView: SettingsView(preferences: preferences, store: store, registry: registry, router: router, updateChecker: updateChecker, onLocateTab: { [weak self] id in self?.onLocateTab?(id) })
             )
             hosting.sizingOptions = [.minSize]
 

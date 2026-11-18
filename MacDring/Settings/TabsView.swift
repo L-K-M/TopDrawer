@@ -10,6 +10,8 @@ struct TabsView: View {
     @ObservedObject var store: TabStore
     let registry: DisplayRegistry
     @ObservedObject var router: SettingsRouter
+    /// Asks the app to briefly outline a tab’s pill (the “Locate Tab” button).
+    let onLocateTab: (UUID) -> Void
 
     @State private var selection: UUID?
 
@@ -20,7 +22,8 @@ struct TabsView: View {
 
             Group {
                 if let id = selection, let tab = store.tab(id: id) {
-                    TabEditor(tab: tab, preferences: preferences, store: store, registry: registry)
+                    TabEditor(tab: tab, preferences: preferences, store: store, registry: registry,
+                               onLocateTab: onLocateTab)
                         .id(id)
                 } else {
                     VStack(spacing: 6) {
@@ -178,6 +181,7 @@ private struct TabEditor: View {
     @ObservedObject var preferences: Preferences
     @ObservedObject var store: TabStore
     let registry: DisplayRegistry
+    let onLocateTab: (UUID) -> Void
 
     @State private var showingLinkSheet = false
     @State private var linkText = ""
@@ -221,7 +225,12 @@ private struct TabEditor: View {
                     Text("Position along edge")
                     Slider(value: tabBinding(\.anchor.position), in: 0...1)
                 }
-                Toggle("Locked (can't be moved)", isOn: tabBinding(\.locked))
+                Toggle("Locked (can’t be moved)", isOn: tabBinding(\.locked))
+                Button("Locate Tab") { onLocateTab(tab.id) }
+                    .disabled(isParked)
+                    .help(isParked
+                           ? "This tab is parked because its display is disconnected."
+                           : "Briefly outline this tab’s pill on screen.")
             }
 
             Section("Drawer") {
@@ -500,6 +509,16 @@ private struct TabEditor: View {
                 store.updateTab(id: tab.id) { $0.glyph = .monogram(String(monogram.prefix(2))) }
             }
         )
+    }
+
+    /// Whether the tab has no pill on screen right now: its display is disconnected
+    /// and the policy parks it rather than moving it to the main display.
+    private var isParked: Bool {
+        if case .park = TabPlacementPolicy.placement(
+            anchoredDisplay: registry.screen(for: tab.anchor.displayUUID),
+            mainDisplay: DisplayRegistry.primaryScreen,
+            disconnectPolicy: preferences.disconnectPolicy) { return true }
+        return false
     }
 
     private var displayChoices: [(uuid: String, name: String)] {
