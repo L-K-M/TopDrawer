@@ -1,15 +1,23 @@
 # Top Drawer: remaining review findings
 
-Consolidated from two review passes of the repository, most recently against
-`origin/main`. Assumed load: one desktop user, dozens of tabs, hundreds of
-launcher entries, and occasional large or remote folders. The experimental
-Linux port is included.
+This backlog consolidates several repository reviews, including the MiMo pass. It covers the macOS app and the experimental Linux port. The working scale is one desktop user, dozens of tabs, hundreds of launchers, and occasional large or remote folders. Start with layout recovery, ambiguous identities, and failures that affect user files. Treat appearance and feature proposals as prototypes with the validation described in each entry.
 
-Earlier passes cover eight focus areas, including the MiMo review. Work already covered by an open PR, including silent launcher-save failures, is tracked separately from the remaining proposals.
+The latest pass reviewed main at `c905100` and inspected the current AppKit and SwiftUI paths, persistence, live listings, shared models, Linux volume parsing, tests, and the supplied screenshot. The combined changes passed 636 macOS tests. The Linux volume fixes passed the focused volume suite in a Swift 6.3 Noble container. Performance claims without results are hypotheses. Live multi-display, Spaces, VoiceOver, compositor, and Instruments checks remain to be run. EditorWeb is a standalone harness; its runtime was outside this pass.
 
-macOS layout, focus, VoiceOver, multi-display behavior, and Linux compositor
-interactions need on-device verification. The retained EditorWeb harness is not
-the shipping notes editor; its runtime was not audited.
+## Implementations in review
+
+The implementation branches below are open for merge. Revisit the underlying findings if a PR closes without landing.
+
+- Distinguish an unreadable linked folder from an empty one. [PR #186](https://github.com/L-K-M/TopDrawer/pull/186)
+- Keep the filter visible when an active query's live listing falls below the threshold. [PR #183](https://github.com/L-K-M/TopDrawer/pull/183)
+- Index standardized targets once during a bulk drop. A Debug fixture with 250 existing file bookmarks and 50 new ones measured 344 ms before the change and 8 ms after for the store operation. [PR #187](https://github.com/L-K-M/TopDrawer/pull/187)
+- Preserve UTF-8 names and paths through Linux mountinfo escape decoding (SOL-05). [PR #182](https://github.com/L-K-M/TopDrawer/pull/182)
+- The earlier drawer interaction review covers keyboard selection after Backspace and clipboard excerpts that show matching text. [Keyboard selection PR](https://github.com/L-K-M/TopDrawer/pull/184) [clipboard excerpt PR](https://github.com/L-K-M/TopDrawer/pull/185)
+- An earlier review tracks silent launcher-save failures in separate implementation work.
+
+The folder read and filter regressions also extend the refresh coverage in BACKLOG U1.
+
+## Reliability and data safety
 
 ### Duplicate layout identities make entries ambiguous (SOL-02)
 
@@ -26,14 +34,6 @@ bugs — important
 `MacDring/Model/LauncherDocument.swift:24-25` and `MacDring/Model/Tab.swift:133-135` drop unreadable records. `MacDring/Store/TabStore.swift:141-145,799-801` accepts a partially recovered document; successive autosaves eventually replace both primary and backup with that reduced document. Reproduce with one valid tab and one invalid anchor, then mutate and save twice.
 
 Retain a recovery original whenever decoding loses records and expose that recovery before accepting destructive rewrites. Preserve working tabs while making omissions visible. Effort: one day.
-
-### Linux mount escaping corrupts non-ASCII names (SOL-05)
-
-bugs — important
-
-`linux/Sources/TopDrawerDaemon/LinuxVolumes.swift:50-67` appends individual UTF-8 bytes as Unicode scalars whenever a field contains an escape. A mount named `Clé\040USB` becomes `ClÃ© USB`; displayed paths and network/cloud unmount targets become invalid. Accented and non-Latin mount names containing escaped characters are affected.
-
-Accumulate decoded bytes, then decode UTF-8 once. Bound octal conversion so malformed escapes cannot trap. Add mixed Unicode/escape fixtures. Effort: about one hour.
 
 ### Group-name drafts disappear on uncommitted exits (SOL-07)
 
@@ -59,62 +59,6 @@ general issues — important
 
 Represent approval-pending explicitly, offer Open Login Items, and unregister pending registrations when disabled. Verify the real ServiceManagement approval flow. Effort: half a day plus macOS verification.
 
-### Settings resolves file icons inside its render path (SOL-14)
-
-performance problems, stuttering, and jank — important
-
-`MacDring/Settings/TabsView.swift:304-307` calls icon resolution during each body evaluation. `MacDring/Drawer/ItemView.swift:213-228,495-574` shows that this work resolves bookmarks and reads icons from disk. Large launchers, stale bookmarks, or remote targets can beachball Settings repeatedly.
-
-Resolve row icons asynchronously, keyed by the item, with a placeholder and cancellation. Reuse the drawer's resolution approach. Profile opening and changing settings for a 100-entry tab. Effort: half a day.
-
-### Portable imports have no display mapping (SOL-16)
-
-missing features — important
-
-`MacDring/Settings/TabsView.swift:108-124` imports foreign display UUIDs unchanged. Under the default policy, `MacDring/Screens/TabPlacementPolicy.swift:31-35` parks every tab whose display is unknown. Users moving layouts between Macs can get an apparently empty launcher, and the enabled status-menu rows cannot open the parked drawers.
-
-Map unknown imported displays to a chosen connected display. Keep same-machine restoration separate from portable import. Verify an export from another display UUID set. Effort: one day.
-
-### Deleting a notes tab has no recovery step (SOL-17)
-
-missing features — important
-
-`MacDring/Settings/TabsView.swift:151-154`, `MacDring/Tabs/TabStripView.swift:59-61`, and `MacDring/Store/TabStore.swift:168-174` remove an unlocked tab immediately. One Remove Tab action destroys all its note text, without confirmation or document Undo.
-
-Confirm deletion of nonempty notes/populated tabs or offer document-level Undo. Preserve the lock rules and verify both deletion surfaces. Effort: half a day for confirmation, longer for shared Undo.
-
-### A maximum-size drawer can push its pill off-screen (SOL-20)
-
-visual issues and layout problems — important
-
-`MacDring/Drawer/DrawerMetrics.swift:135-136` allows an items drawer to consume screen depth minus 16 points. The riding pill is at least 24 points thick, and `MacDring/Screens/EdgeLayout.swift:160-180` adds it and a 22-point animation nudge outside that allowance. Unlike notes at `DrawerWindowController.swift:510-517`, large items drawers can strand the close target or spill onto an adjacent display.
-
-Bound one combined drawer/pill/animation envelope for every edge. Add pure containment cases for small visible frames, then check real display behavior. Effort: half a day plus macOS verification.
-
-### Primary tab surfaces lack explicit accessible activation (SOL-23)
-
-usability: speed, convenience, and clarity — important
-
-`MacDring/Tabs/TabStripView.swift:33-63` provides gestures and a tooltip without explicit accessible button activation, title, or open state. With labels hidden, VoiceOver users lack a reliable way to identify and toggle a tab. `MacDring/Drawer/ItemView.swift:124-126` also omits running/broken state. Exact announcements remain unverified on Linux.
-
-Expose one labeled accessible element per control, button activation, open/selected state, and meaningful item status. Verify with VoiceOver and Accessibility Inspector. Effort: one day including assistive-technology checks.
-
-### Shortcut recording consumes keys after defocus (SOL-24)
-
-usability: speed, convenience, and clarity — important
-
-`MacDring/Settings/HotkeyRecorderView.swift:24,37-52` keeps its app-wide local key monitor armed until capture, cancellation, or disappearance. Click Record Shortcut, then click Name and type: ordinary keys vanish, while a later usable command can unexpectedly become the hotkey.
-
-Scope capture to a focused recorder and cancel on focus/window loss or outside click. Verify text entry, normal shortcuts, and window switching. Effort: half a day plus AppKit verification.
-
-### Folder and Trash drops advertise Copy while removing the source (SOL-25)
-
-usability: speed, convenience, and clarity — important
-
-`MacDring/Drawer/DrawerWindowController.swift:66-77` always returns the Copy drag operation. `MacDring/Tabs/TabController.swift:920-942` can instead move files or trash them. The plus-badge cursor misleads users during file operations.
-
-Derive drag operation from target and source mask. Distinguish add-reference, open-with, move/copy, and Trash, with supported modifier behavior. Verify Finder and cross-volume drops. Effort: one day plus device checks.
-
 ### Web-editor remnants mislead and ship dead code (SOL-11)
 
 general issues — nice-to-have
@@ -123,62 +67,6 @@ general issues — nice-to-have
 
 Delete the unreferenced app-target files and correct the docs; keep `EditorWeb/` and the pure `NotesEditorBridge`/`HostSession` (still tested). Effort: small.
 
-### Broken launchers have no Relink action (SOL-18)
-
-missing features — nice-to-have
-
-`MacDring/Drawer/ItemView.swift:113-192` dims missing targets but provides no Relink action. When both bookmark and fallback fail, users must delete and re-add the item, losing placement, name, and customization.
-
-Offer a file picker that replaces only the target/bookmark after validating its kind, through the existing store/service boundary. Effort: half a day.
-
-### Keyboard navigation does not expose item actions (SOL-19)
-
-missing features — nice-to-have
-
-`MacDring/Tabs/TabController.swift:1814-1847` handles arrows, Return, and Space, but the actions in `MacDring/Drawer/ItemView.swift:127-192` remain mouse-oriented. Keyboard-only users cannot invoke Rename, Lock, Reveal, Open With, or Eject through the current selection.
-
-Add a selected-item actions shortcut and accessible named actions. Effort: one day plus assistive-technology checks.
-
-### Metadata columns use configured rather than visible width (SOL-21)
-
-visual issues and layout problems — nice-to-have
-
-`MacDring/Drawer/ItemView.swift:107-109,362-368` chooses fixed metadata columns from nominal column/icon settings. `MacDring/Drawer/DrawerMetrics.swift:135` can clamp the actual panel much narrower. On narrow displays, Size/Kind can squeeze names or overflow available width.
-
-Choose metadata columns from measured available row width after clamping. Verify large-icon list layout on a narrow screen. Effort: half a day.
-
-### Translucent pill contrast is chosen from the tint alone (SOL-26)
-
-aesthetics and theming — nice-to-have
-
-`MacDring/Model/ColorHex.swift:62-65` chooses foreground from tint luminance, while `MacDring/Tabs/TabStripView.swift:96-111` renders idle fill at 62% opacity. A middle-dark tint selects white text, but bright underlying content can reduce contrast. This is a source-derived visual risk, not a measured current-screen contrast failure.
-
-Use a sufficiently opaque label backing or a tested composited palette. Check light, dark, and busy wallpapers. Effort: half a day.
-
-### Appearance choices lack a live contextual preview (SOL-27)
-
-aesthetics and theming — nice-to-have
-
-`MacDring/Settings/TabAppearanceEditor.swift:7-32` offers presets, hidden labels, and typography without a representative preview. Users must repeatedly open a drawer to judge those choices.
-
-Add a small tab-and-items preview using the existing view styles, bound to the same settings values. Effort: one day.
-
-### Explain the pending drop before releasing it (SOL-28)
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-`MacDring/Drawer/DrawerWindowController.swift:66-77` and `MacDring/Drawer/DrawerView.swift:397-436` show a target ring without explaining the pending action. New users must remember whether a tile opens, files, trashes, or adds a launcher.
-
-After a brief dwell, show target-specific text such as “Move to Downloads” or “Open with Preview,” using the same operation policy as the cursor. Test whether it reduces hesitation without obscuring the target. Effort: half a day after SOL-25.
-
-### Offer non-destructive starter drawer kits (SOL-29)
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-`MacDring/AppDelegate.swift:274-328` supplies Apps/Welcome. Useful Folder/Fresh/Notes combinations still require manual discovery; the import flow at `MacDring/Settings/TabsView.swift:108-124` replaces the entire layout.
-
-Offer a few optional local kits, such as “Downloads desk” with Folder, Fresh, and Notes, added without replacing current tabs and removable in one action. Reuse existing tab types; no automation or permissions are needed. Effort: one to two days.
-
 ### A second update check can double the daily timer
 
 bugs — nice-to-have
@@ -186,30 +74,6 @@ bugs — nice-to-have
 `MacDring/Updates/UpdateChecker.swift:91` lacks the `timer == nil` guard that `ClipboardMonitor.start()` has. A second call installs a second daily timer and doubles update checks.
 
 Add `guard timer == nil else { return }`. Effort: trivial.
-
-### Check alias identity when merging Spotlight and direct scan results
-
-bugs — nice-to-have
-
-`FreshLister.merge` already standardizes file URLs from both the direct scan and Spotlight. Check whether a symlink and the real path can still appear as two hits for a file in a landing zone.
-
-Reproduce with a temporary landing zone and a symlink. Define whether aliases should remain separate launch targets before changing deduplication. Effort: small.
-
-### Recents dedupe is case-sensitive on case-insensitive volumes
-
-bugs — nice-to-have
-
-`MacDring/Store/RecentsStore.swift:45-46` dedupes by `URL` equality, which is path-case-sensitive. The same file opened as `/X` and `/x` leaves duplicate recents.
-
-Test case variants on both case-sensitive and case-insensitive volumes. Use volume-aware file identity for file URLs and preserve distinct URL paths for web links. Effort: small.
-
-### Trash looks empty on filesystems without entry counts
-
-bugs — nice-to-have
-
-`MacDring/Store/TrashInspector.swift:64-70`: without `ATTR_DIR_ENTRYCOUNT` the `linkCount <= 2` fallback only counts subdirectories, so a Trash holding only files reports empty — wrong icon, disabled "Empty Trash" on exotic or remote volumes.
-
-Treat the fallback as non-empty or probe one directory entry. Effort: small.
 
 ### A cleared note can never reconcile in the host session
 
@@ -267,14 +131,6 @@ general issues — nice-to-have
 
 Capture weakly or check `hotKeyRef != nil` inside the block. Effort: trivial.
 
-### Update downloads have no timeout or cancel path
-
-general issues — nice-to-have
-
-`MacDring/Updates/UpdateDownloader.swift:46`: `URLSession.download(from:)` on the shared session sets no request timeout, so a stalled transfer leaves `isDownloading` true forever.
-
-Set a request or session `timeoutInterval`. Effort: trivial.
-
 ### A transient bus restart permanently kills the daemon
 
 general issues — nice-to-have
@@ -299,6 +155,74 @@ general issues — nice-to-have
 
 Restructure the capture or mark the boundary explicitly. Effort: small.
 
+### A plain file named like an app is treated as an application
+
+bugs — nice-to-have
+
+`MacDring/Model/DrawerItem.swift:218-224` classifies any path ending in `.app` as `.application` without checking it is a bundle directory, so a plain file named `notes.app` is routed through app-launch paths and fails instead of opening as a file.
+
+Require `isDirectory` for `.application` and fall through to the file classification otherwise. Effort: ten minutes plus a test.
+
+### Quarantine failure leaves a corrupt store in place
+
+bugs — nice-to-have
+
+`MacDring/Store/TabStore.swift:95-107` only logs when moving a corrupt `launcher.json` aside fails (destination name taken in the same second, read-only directory). The corrupt file stays at the primary path and `saveNow` then rotates those bytes over the `.bak`, straining the preserved-copy contract the comment above it promises.
+
+Make `quarantine` report success and, on failure, skip the normal save rotation (or write to a fresh destination name). Effort: one hour.
+
+### Launcher decode parses the document twice
+
+general issues — nice-to-have
+
+`MacDring/Store/TabStore.swift:133-141` runs `JSONSerialization.jsonObject` over the same bytes `JSONDecoder` just parsed, only to count a `tabs` array — double parse cost and peak memory at launch on large documents.
+
+Derive the raw-tab count from the lenient decode itself, or drop the sentinel check. Effort: one hour.
+
+### Deduplicate Fresh files that have multiple path spellings
+
+bug hypothesis — reproduce with a real Spotlight hit before changing identity
+
+`SpotlightQuery` constructs URLs from indexed paths, and `FreshLister.merge` already deduplicates standardized file URLs. A symlink or alternate mount spelling may still leave two rows for one file. Reproduce using a temporary landing zone and a symlink in direct scan and Spotlight together. Decide whether aliases should remain separate launch targets. If they should converge, compare resource identities in the listing phase with a path fallback. Avoid extra synchronous probes on the main actor; keep ordinary different paths distinct.
+
+### Recents may retain multiple spellings of a local file
+
+bug hypothesis — validate on case-sensitive and case-insensitive volumes
+
+`RecentsStore` deduplicates by URL equality. Case variants may be aliases of one file on one volume and distinct files on another. Use a verified local file identity or a volume-aware path comparison once there is a reproducible alias. Keep case-sensitive paths and web URLs distinct, and retain the newest entry.
+
+### Treat unsupported Trash entry counts as unknown
+
+bug — verify on a filesystem without ATTR_DIR_ENTRYCOUNT
+
+`TrashInspector.isEmpty` falls back to directory link count, which cannot detect loose files. This can display the empty icon and disable Empty Trash even when files are present. Model the unsupported result conservatively and keep Empty Trash available when emptiness cannot be established. Preserve the metadata-only path so opening a menu never triggers a Trash access prompt. Add a test for an unsupported attribute with a low link count.
+
+### Scan the intended prerelease history
+
+bug — relevant when prerelease checking is enabled
+
+`GitHubReleaseClient` picks the highest version from the first 30 releases. When publication order differs from version order, a higher-version prerelease can sit on an older page. Define the supported history window or follow pagination with a bounded request policy and a test for out-of-order version tags.
+
+### Keep per-path icon overrides from attaching to unrelated files
+
+general issue — respect transient listing limits
+
+`TabStore` retains the path-keyed overrides for live rows. A repointed folder can keep irrelevant styles indefinitely; a later file that reuses a path can pick up an old style. Clear or explicitly migrate revision-specific styles on folder replacement. Investigate durable file identity before pruning on refresh: caps, hidden-file filters and a temporarily unavailable volume can all hide a still-valid item. Test a rename, path reuse, folder replacement, and partial listings.
+
+### Separate durable tab identity from immediate availability
+
+**Bug and usability.** AppDelegate's menu suggests it opens tabs even when parked on a disconnected display. `TabController.openDrawer` requires a resolved screen and a live pill. An enabled row then performs no visible action. Build menu rows from the same placement state the controller uses. For parked tabs, show their state and route to placement settings, or offer a separately designed temporary opening that leaves the saved anchor intact. Verify disconnect and reconnect, an already-open drawer, and the move-to-main setting. This complements the backlog's portable import display mapping.
+
+## Performance and responsiveness
+
+### Settings resolves file icons inside its render path (SOL-14)
+
+performance problems, stuttering, and jank — important
+
+`MacDring/Settings/TabsView.swift:304-307` calls icon resolution during each body evaluation. `MacDring/Drawer/ItemView.swift:213-228,495-574` shows that this work resolves bookmarks and reads icons from disk. Large launchers, stale bookmarks, or remote targets can beachball Settings repeatedly.
+
+Resolve row icons asynchronously, keyed by the item, with a placeholder and cancellation. Reuse the drawer's resolution approach. Profile opening and changing settings for a 100-entry tab. Effort: half a day.
+
 ### Per-tab thickness re-measures text every layout pass
 
 performance problems, stuttering, and jank — nice-to-have
@@ -314,6 +238,92 @@ performance problems, stuttering, and jank — nice-to-have
 `linux/Sources/TopDrawerShell/DaemonClient.swift:383-397`: each `DocumentChanged` fires an immediate `fetchTabs` with no debounce, so a burst of saves means one `GetDocument` round-trip per signal.
 
 Coalesce fetches (skip if one ran within ~200ms or is in flight). Effort: small.
+
+### Bound the cost of rapid folder refreshes
+
+DrawerWindowController.apply starts a new read for each relevant reconcile. BackgroundListing drops obsolete replies after the disk call completes. A burst can leave several full directory reads running even when only the newest result can be used. Instrument queued, active and delivered reads against a delayed loader. Prototype one active and one replaceable pending refresh per target. Opening a different local drawer must stay responsive while an earlier network read is blocked. Verify newest settings win after a sort change and dismissing cannot revive a panel.
+
+### Measure and coalesce full-text clipboard searches
+
+A release-optimized Foundation microbenchmark on this Mac took a median 47 ms across 11 scans for an absent word in 50 distinct near-256 KiB ASCII clips. It exercised the same locale-aware, case- and diacritic-insensitive range search as DrawerModel. This is a synthetic worst-case workload and excludes SwiftUI. Profile query changes, selection changes and unrelated view updates with ordinary clips and the upper-bound fixture. Cache results by query and history revision, then consider moving scans off the main thread if typing still misses frames. Verify original ordering, history removal during a search, and stale result rejection.
+
+### Clipboard archive I/O blocks the app thread
+
+performance — measure before redesigning
+
+`ClipboardHistoryStore` synchronously loads the archive during controller construction, then encodes and atomically writes it on the main queue after captures and privacy-sensitive actions. The current limits permit a raw text payload of about 12.5 MiB and a JSON read cap of roughly 75 MiB.
+
+Profile first open, steady capture, and quit with a full archive. Move read and encode/write onto a serialized worker if the measurements warrant it, or lower the realistic payload cap. Preserve entry ordering, private permissions, quit flush, and archive removal when retention is disabled or the last Clipboard tab is deleted. Test an in-flight save followed by Clear or deletion.
+
+### Stop compositing blur beneath opaque surfaces
+
+**Performance hypothesis.** The drawer always creates a behind-window visual effect view, even with the fully opaque Solid backing; the modern pill likewise creates blur behind Flat and High Contrast. Profile multiple visible pills with Core Animation or Instruments, including window movement behind the launcher. If measurable, build blur only for treatments where it contributes to the rendered result. Compare screenshots under Light, Dark and Reduce Transparency, and compare compositor work for 1, 12 and 30 visible tabs.
+
+### Retain last good contents when a watched remote folder becomes unavailable
+
+**Performance and UX follow-up.** Start with explicit read errors. Evaluate whether a same-target refresh failure should retain a marked, read-only snapshot for slow or temporarily disconnected shares. Keep the timestamp and a Retry action, and do not accept a file drop against a stale URL. Changing the target must immediately remove old rows and state. Mock a successful read followed by failure, target replacement and recovery. Profile network stalls before adding a retry timer. Coordinate any retry behavior with the existing refresh coalescing proposal.
+
+### Make a long live listing feel bounded while it is opening
+
+**Performance hypothesis.** The 300-item cap in `FolderLister` is applied after enumerating, fetching sort properties and sorting all entries. `DrawerView.searchResultsList` constructs an eager stack of matches and each row reports external-drop geometry. Benchmark local and remote folders at 300, 10,000 and 50,000 entries, and a broad query across a large items drawer. Consider bounded top-K selection with the exact existing sort order, and a lazy result stack whose hit-testing still works after scrolling. Report p50/p95 latency to first results and result-scroll hitch rate.
+
+## Interface and workflow
+
+### Portable imports have no display mapping (SOL-16)
+
+missing features — important
+
+`MacDring/Settings/TabsView.swift:108-124` imports foreign display UUIDs unchanged. Under the default policy, `MacDring/Screens/TabPlacementPolicy.swift:31-35` parks every tab whose display is unknown. Users moving layouts between Macs can get an apparently empty launcher, and the enabled status-menu rows cannot open the parked drawers.
+
+Map unknown imported displays to a chosen connected display. Keep same-machine restoration separate from portable import. Verify an export from another display UUID set. Effort: one day.
+
+### Deleting a notes tab has no recovery step (SOL-17)
+
+missing features — important
+
+`MacDring/Settings/TabsView.swift:151-154`, `MacDring/Tabs/TabStripView.swift:59-61`, and `MacDring/Store/TabStore.swift:168-174` remove an unlocked tab immediately. One Remove Tab action destroys all its note text, without confirmation or document Undo.
+
+Confirm deletion of nonempty notes/populated tabs or offer document-level Undo. Preserve the lock rules and verify both deletion surfaces. Effort: half a day for confirmation, longer for shared Undo.
+
+### Primary tab surfaces lack explicit accessible activation (SOL-23)
+
+usability: speed, convenience, and clarity — important
+
+`MacDring/Tabs/TabStripView.swift:33-63` provides gestures and a tooltip without explicit accessible button activation, title, or open state. With labels hidden, VoiceOver users lack a reliable way to identify and toggle a tab. `MacDring/Drawer/ItemView.swift:124-126` also omits running/broken state. Exact announcements remain unverified on Linux.
+
+Expose one labeled accessible element per control, button activation, open/selected state, and meaningful item status. Verify with VoiceOver and Accessibility Inspector. Effort: one day including assistive-technology checks.
+
+### Shortcut recording consumes keys after defocus (SOL-24)
+
+usability: speed, convenience, and clarity — important
+
+`MacDring/Settings/HotkeyRecorderView.swift:24,37-52` keeps its app-wide local key monitor armed until capture, cancellation, or disappearance. Click Record Shortcut, then click Name and type: ordinary keys vanish, while a later usable command can unexpectedly become the hotkey.
+
+Scope capture to a focused recorder and cancel on focus/window loss or outside click. Verify text entry, normal shortcuts, and window switching. Effort: half a day plus AppKit verification.
+
+### Folder and Trash drops advertise Copy while removing the source (SOL-25)
+
+usability: speed, convenience, and clarity — important
+
+`MacDring/Drawer/DrawerWindowController.swift:66-77` always returns the Copy drag operation. `MacDring/Tabs/TabController.swift:920-942` can instead move files or trash them. The plus-badge cursor misleads users during file operations.
+
+Derive drag operation from target and source mask. Distinguish add-reference, open-with, move/copy, and Trash, with supported modifier behavior. Verify Finder and cross-volume drops. Effort: one day plus device checks.
+
+### Broken launchers have no Relink action (SOL-18)
+
+missing features — nice-to-have
+
+`MacDring/Drawer/ItemView.swift:113-192` dims missing targets but provides no Relink action. When both bookmark and fallback fail, users must delete and re-add the item, losing placement, name, and customization.
+
+Offer a file picker that replaces only the target/bookmark after validating its kind, through the existing store/service boundary. Effort: half a day.
+
+### Keyboard navigation does not expose item actions (SOL-19)
+
+missing features — nice-to-have
+
+`MacDring/Tabs/TabController.swift:1814-1847` handles arrows, Return, and Space, but the actions in `MacDring/Drawer/ItemView.swift:127-192` remain mouse-oriented. Keyboard-only users cannot invoke Rename, Lock, Reveal, Open With, or Eject through the current selection.
+
+Add a selected-item actions shortcut and accessible named actions. Effort: one day plus assistive-technology checks.
 
 ### Clipboard history captures plain text only
 
@@ -347,30 +357,6 @@ Type-to-find only searches the open drawer; there is no global search across tab
 
 A global filter (hotkey or dedicated Search tab) aggregating every tab's items. Effort: medium-large.
 
-### Folder popover always prefers the right side
-
-visual issues and layout problems — nice-to-have
-
-`MacDring/Drawer/FolderBrowserController.swift:23` always prefers `.maxX` regardless of drawer edge; on right-edge drawers it flips at the screen boundary and on top/bottom drawers may detach entirely.
-
-Pick the preferred edge pointing inward from the drawer's edge. Effort: small.
-
-### Disconnected displays are indistinguishable in the picker
-
-visual issues and layout problems — nice-to-have
-
-`MacDring/Settings/TabsView.swift:512` labels every missing display "Disconnected display"; with several, the user can't tell them apart.
-
-Include a UUID suffix or last-known name in the fallback label. Effort: trivial.
-
-### Fresh-item sparkle replays on every reopen
-
-visual issues and layout problems — nice-to-have
-
-`MacDring/Drawer/DrawerWindowController.swift:306-307`: `sparklingItemIDs` persists until the next apply and the animation runs once per `onAppear`, so a freshly landed item re-sparkles each reopen within its five-minute window.
-
-Clear sparkling ids after the animation completes. Effort: small.
-
 ### Rejected hotkey combos fail silently
 
 usability: speed, convenience, and clarity — nice-to-have
@@ -378,14 +364,6 @@ usability: speed, convenience, and clarity — nice-to-have
 `MacDring/Settings/HotkeyRecorderView.swift:51`: unusable combos (Shift-only, bare letters) are silently consumed while recording — the user gets no hint why nothing registered.
 
 Show a brief inline hint ("needs ⌘/⌃/⌥ or a function key"). Effort: small.
-
-### Space does nothing before a selection exists
-
-usability: speed, convenience, and clarity — nice-to-have
-
-`MacDring/Drawer/DrawerModel.swift:192-200`: Space previews only after the user arrow-keys a selection; `launchSelection` falls back to the top result but preview doesn't, so Space looks dead on a fresh search.
-
-Apply the same top-result fallback as launch. Effort: trivial.
 
 ### No keyboard path to remove a selected item
 
@@ -427,6 +405,108 @@ usability: speed, convenience, and clarity — nice-to-have
 
 Skip non-file kinds or emit the full URL. Effort: small.
 
+### New-tab actions fail silently without a display
+
+usability: speed, convenience, and clarity — nice-to-have
+
+`MacDring/Settings/NewTabWindowController.swift:44-46` and `MacDring/Settings/TabsView.swift:133-139` silently return when `registry.mainScreenUUID()` is nil, so the "+" button or dialog does nothing with no explanation.
+
+Surface a short explanatory alert instead of a silent no-op. Effort: one hour.
+
+### The header truncation badge is a dead end
+
+usability — capped Folder listings
+
+`DrawerView.header` shows a count such as 300+ when `FolderLister` has more entries than its cap. The tooltip explains the cap, and the existing Finder action can reach every file. Give the cap an accessible label and clearly connect it to the Finder action. Test both exactly 300 results and a capped folder on a narrow drawer.
+
+### Test interrupted closes as well as opens
+
+DrawerWindowController.show guards its animation completion with presentationGeneration. The animated hide checks isVisible alone. Exercise close A, reopen B, close B before A finishes. Record whether A's completion can remove B's panel early, clear its rows or reset opacity during the second fade. If reproducible, bind close cleanup to its originating generation. Check zero-duration switches, the riding pill and Reduce Motion.
+
+### Paste into a drawer to create launchers
+
+usability — keyboard workflow
+
+Settings already offers an Add Link sheet. Direct paste into an Items drawer could add a URL or file reference without leaving the drawer. Define how plain non-URL text should be handled before expanding support beyond file URLs and links. Fetch clipboard contents only on the deliberate action. Respect editable text focus, item locks, and the existing drop deduplication policy. Verify that a paste into notes or the filter still edits the focused field.
+
+### Offer update download progress, cancellation, and completion feedback
+
+usability — make the transfer state visible
+
+`UpdateChecker.downloadAndReveal` tracks a Boolean, then reveals the download in Finder or opens the release page on failure. The user has no explicit progress or cancel action and receives little feedback while waiting. Give the transfer a visible state with completion and failure details. Consider an explicit timeout budget in addition to URLSession defaults. Test a slow server, cancellation before and during transfer, temporary file cleanup, and the browser fallback.
+
+### Offer Quick Look when selection starts in an unfiltered drawer
+
+usability — keyboard navigation
+
+Return can use the first visible item before the user moves the selection. Space currently requires a selected item. A reasonable shortcut could preview the first previewable item in an unfiltered drawer, or select it before invoking Quick Look. Treat Space as text while the filter is being edited so users can enter multiword queries. Verify grid, list, Clipboard, and Notes key paths.
+
+### Give new tab types a single chooser with examples
+
+**Missing affordance and usability.** `AppDelegate.buildMenu` lists nine creation actions, while the plus button in `TabsView` creates an Items tab immediately. Introduce a single New Tab chooser (with keyboard selection) available in both places. Describe what each tab watches and show a sample row or note; keep Folder selection and Clipboard consent in the deliberate creation flow. Keep a fast path for creating an Items tab. Validate time to create a Folder tab and to discover Fresh without documentation. The chooser can host optional starter kits later.
+
+### Add a placement map to Settings
+
+**Missing feature and usability.** Display and edge pickers plus the position slider edit numeric placement without showing nearby tabs, the reserved Dock/menu areas or parked tabs. Preview the selected display's edges at scale with named marker positions. Read the same layout and overlap policy used by the windows. Start with a noninteractive preview and a spoken position label; add drag editing only if manual trials show a need. Test two displays of different size and orientation and a saved disconnected anchor.
+
+## Visual design and accessibility
+
+### A maximum-size drawer can push its pill off-screen (SOL-20)
+
+visual issues and layout problems — important
+
+`MacDring/Drawer/DrawerMetrics.swift:135-136` allows an items drawer to consume screen depth minus 16 points. The riding pill is at least 24 points thick, and `MacDring/Screens/EdgeLayout.swift:160-180` adds it and a 22-point animation nudge outside that allowance. Unlike notes at `DrawerWindowController.swift:510-517`, large items drawers can strand the close target or spill onto an adjacent display.
+
+Bound one combined drawer/pill/animation envelope for every edge. Add pure containment cases for small visible frames, then check real display behavior. Effort: half a day plus macOS verification.
+
+### Metadata columns use configured rather than visible width (SOL-21)
+
+visual issues and layout problems — nice-to-have
+
+`MacDring/Drawer/ItemView.swift:107-109,362-368` chooses fixed metadata columns from nominal column/icon settings. `MacDring/Drawer/DrawerMetrics.swift:135` can clamp the actual panel much narrower. On narrow displays, Size/Kind can squeeze names or overflow available width.
+
+Choose metadata columns from measured available row width after clamping. Verify large-icon list layout on a narrow screen. Effort: half a day.
+
+### Translucent pill contrast is chosen from the tint alone (SOL-26)
+
+aesthetics and theming — nice-to-have
+
+`MacDring/Model/ColorHex.swift:62-65` chooses foreground from tint luminance, while `MacDring/Tabs/TabStripView.swift:96-111` renders idle fill at 62% opacity. A middle-dark tint selects white text, but bright underlying content can reduce contrast. This is a source-derived visual risk, not a measured current-screen contrast failure.
+
+Use a sufficiently opaque label backing or a tested composited palette. Check light, dark, and busy wallpapers. Effort: half a day.
+
+### Appearance choices lack a live contextual preview (SOL-27)
+
+aesthetics and theming — nice-to-have
+
+`MacDring/Settings/TabAppearanceEditor.swift:7-32` offers presets, hidden labels, and typography without a representative preview. Users must repeatedly open a drawer to judge those choices.
+
+Add a small tab-and-items preview using the existing view styles, bound to the same settings values. Effort: one day.
+
+### Folder popover always prefers the right side
+
+visual issues and layout problems — nice-to-have
+
+`MacDring/Drawer/FolderBrowserController.swift:23` always prefers `.maxX` regardless of drawer edge; on right-edge drawers it flips at the screen boundary and on top/bottom drawers may detach entirely.
+
+Pick the preferred edge pointing inward from the drawer's edge. Effort: small.
+
+### Disconnected displays are indistinguishable in the picker
+
+visual issues and layout problems — nice-to-have
+
+`MacDring/Settings/TabsView.swift:512` labels every missing display "Disconnected display"; with several, the user can't tell them apart.
+
+Include a UUID suffix or last-known name in the fallback label. Effort: trivial.
+
+### Fresh-item sparkle replays on every reopen
+
+visual issues and layout problems — nice-to-have
+
+`MacDring/Drawer/DrawerWindowController.swift:306-307`: `sparklingItemIDs` persists until the next apply and the animation runs once per `onAppear`, so a freshly landed item re-sparkles each reopen within its five-minute window.
+
+Clear sparkling ids after the animation completes. Effort: small.
+
 ### Tabs cannot follow the system accent color
 
 aesthetics and theming — nice-to-have
@@ -442,142 +522,6 @@ aesthetics and theming — nice-to-have
 `MacDring/Drawer/ItemView.swift:339` tints the iOS-style group tile fixed `.white.opacity(0.16)`; over the light appearance's solid/frosted backing it's subtle-to-invisible.
 
 Derive the tint from `Color.primary` or the tab color. Effort: small.
-
-### A Shelf tab for transient drops
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-A drop-zone drawer that holds dragged-in files temporarily and auto-empties after N minutes or on next open — DragThing-adjacent, low risk, high charm.
-
-New tab kind with a timed or session-scoped listing. Effort: medium.
-
-### Badge counts on the tab pill
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-Per-tab counts on the pill itself — Fresh shows "3" for newly landed files, a watched folder shows pending items — glanceable without opening.
-
-A badge overlay driven by the live listing counts. Effort: medium.
-
-### Shell-command items
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-A drawer item that runs a small script and copies the result — clipboard-friendly workflows without leaving the drawer.
-
-New item kind with a bounded subprocess runner. Effort: medium-large.
-
-### Paste-to-create items
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-Settings already offers Add Link. In a focused Items drawer, support ⌘V to add eligible clipboard text, URLs and file references. Preserve native paste when a text field is editing.
-
-Pasteboard handling on the drawer's key path. Effort: small-medium.
-
-### An edge-glow pulse on listing changes
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-A subtle edge-glow pulse on the pill when a watched folder or Fresh listing gains items — ambient notification without a badge.
-
-A brief pill highlight driven by the existing watch callbacks. Effort: small.
-
-### A plain file named like an app is treated as an application
-
-bugs — nice-to-have
-
-`MacDring/Model/DrawerItem.swift:218-224` classifies any path ending in `.app` as `.application` without checking it is a bundle directory, so a plain file named `notes.app` is routed through app-launch paths and fails instead of opening as a file.
-
-Require `isDirectory` for `.application` and fall through to the file classification otherwise. Effort: ten minutes plus a test.
-
-### Quarantine failure leaves a corrupt store in place
-
-bugs — nice-to-have
-
-`MacDring/Store/TabStore.swift:95-107` only logs when moving a corrupt `launcher.json` aside fails (destination name taken in the same second, read-only directory). The corrupt file stays at the primary path and `saveNow` then rotates those bytes over the `.bak`, straining the preserved-copy contract the comment above it promises.
-
-Make `quarantine` report success and, on failure, skip the normal save rotation (or write to a fresh destination name). Effort: one hour.
-
-### The prerelease update scan reads only the first 30 releases
-
-bugs — nice-to-have
-
-`MacDring/Updates/GitHubReleaseClient.swift:31-39` takes the max version of `releases?per_page=30`, so a higher-versioned prerelease older than the first 30 entries is missed and the app reports an older prerelease as latest.
-
-Follow pagination to exhaustion or define an explicit lookback policy. Test a higher semantic version on a later page after several lower versions. Effort: small.
-
-### Drop dedupe resolves every existing item's bookmark per incoming file
-
-performance problems, stuttering, and jank — nice-to-have
-
-`MacDring/Store/TabStore.swift:363-370` re-runs `flattenedLaunchable()` and resolves every existing item's bookmark for each dropped item, so dropping m files onto an n-item tab performs O(n·m) security-scoped resolves on the main thread before the drop appears.
-
-Build the existing standardized-target set once per `addItems` call and do membership lookups per incoming item. Effort: one hour.
-
-### The clipboard archive loads and saves on the main thread
-
-performance problems, stuttering, and jank — nice-to-have
-
-`MacDring/Store/ClipboardHistoryStore.swift:12-14,132-140` reads and decodes up to `maximumArchiveBytes` (~79 MB worst case) during `TabController.init`, and `saveNow` re-encodes the archive on the main queue after each capture.
-
-Move archive reading, decoding, encoding and atomic writing off the main queue. Measure launch and capture with a near-limit history and evaluate a tighter byte cap. Clearing history or disabling retention must invalidate any pending write. Effort: two to three hours.
-
-### Trash emptiness is probed while building an item's context menu
-
-performance problems, stuttering, and jank — nice-to-have
-
-`MacDring/Drawer/ItemView.swift:148` sweeps every volume's Trash (`TrashInspector.trashIsEmpty()`) on the main thread while the context menu is being built; a slow or network volume's Trash delays the menu.
-
-Reuse the answer the icon resolution already computes off-main, or a small cache invalidated by the Trash watch. Effort: one hour.
-
-### Launcher decode parses the document twice
-
-general issues — nice-to-have
-
-`MacDring/Store/TabStore.swift:133-141` runs `JSONSerialization.jsonObject` over the same bytes `JSONDecoder` just parsed, only to count a `tabs` array — double parse cost and peak memory at launch on large documents.
-
-Derive the raw-tab count from the lenient decode itself, or drop the sentinel check. Effort: one hour.
-
-### Icon style overrides are never pruned
-
-general issues — nice-to-have
-
-`MacDring/Store/TabStore.swift:531` accumulates one `Tab.iconStyles` entry per styled live item and never removes stale path-keyed entries when files are renamed/deleted or the tab's folder is repointed (`TabsView.chooseFolder`), so the document grows and a style can silently attach to a later file that reuses the path.
-
-Prune overrides absent from the latest listing and clear the map when the tab's folder changes. Effort: two hours.
-
-### Removing an item has no Undo
-
-missing features — nice-to-have
-
-`MacDring/Tabs/TabController.swift:1104-1112` poofs a removed item with no way back; one mis-click loses a configured launcher entry (placement, name, icon, lock state) even though the file itself is safe.
-
-Use the existing file-move `DrawerUndo` toast to show the removed item's name. Keep its identity, slot and customization for the toast window. Verify restore after another item has occupied the slot. Effort: two to three hours.
-
-### An update download has no completion feedback
-
-missing features — nice-to-have
-
-`MacDring/Updates/UpdateChecker.swift:164-186` starts a download from the alert with no in-app signal when the asset lands (or fails) — a user who closed Settings learns nothing beyond the Finder reveal.
-
-Show a transient confirmation on completion and an error banner on failure. Effort: one to two hours.
-
-### New-tab actions fail silently without a display
-
-usability: speed, convenience, and clarity — nice-to-have
-
-`MacDring/Settings/NewTabWindowController.swift:44-46` and `MacDring/Settings/TabsView.swift:133-139` silently return when `registry.mainScreenUUID()` is nil, so the "+" button or dialog does nothing with no explanation.
-
-Surface a short explanatory alert instead of a silent no-op. Effort: one hour.
-
-### The header truncation badge is a dead end
-
-usability: speed, convenience, and clarity — nice-to-have
-
-`MacDring/Drawer/DrawerView.swift:232-238` shows "300+" when a listing was capped, but the badge takes no action and its tooltip is the only explanation; items tabs give no way to see the rest.
-
-Make the badge clickable to reveal the folder or explain the cap. Effort: one to two hours.
 
 ### The appearance preview misrepresents the thickness slider
 
@@ -611,6 +555,64 @@ aesthetics and theming — nice-to-have
 
 Deepen the tint toward the drawer's inner edge (a subtle gradient from the tab color), checking text contrast in the high-contrast preset. Effort: two to three hours.
 
+### Verify the spoken controls for choosing a tab glyph
+
+SymbolPickerView shows its selected glyph with an accent fill. Its symbol buttons and the icon-only add/remove/import/export buttons in TabsView rely on images and help text. Inspect their actual accessible names and selection traits with VoiceOver, including the same picker in IconEditorView. Supply explicit action names where synthesized names fail, expose the selected glyph in speech and shape, and verify the disabled removal hint for a protected tab. Do this alongside the existing pill activation work, which covers different controls.
+
+### Make reduced motion coherent across drawer interactions
+
+**Visual design and accessibility.** Opening and closing, tab movement, selection scrolling, undo banners, and Fresh sparkles use several animation paths. Introduce one policy for spatial movement and decorative motion that honors the system Reduce Motion setting and the app's speed control. Preserve immediate target highlights and selection visibility. Compare stock settings and Reduce Motion across all four edges, preview opening, tab cycling and a drop. Measure time to first actionable frame, rather than just animation duration. Apply this policy before considering extra hover lift or arrival pulses.
+
+### Make the first row of decisions consistent
+
+**Interface and visual design.** The supplied screenshot shows the pill and header both naming the drawer, then a tiny standalone count, a lock, and a gear. Current `DrawerView.header` still clusters the same elements, with up to two additional icon actions. Keep a stable gear and one primary kind action in recognizable positions, reserve truncation for long names, and group lower-frequency controls where they remain discoverable via mouse and keyboard. Keep the duplicated title only where it helps identify icon-only or long-name tabs. Mock the narrowest drawer with a long title, a clipboard drawer, the issue/error state and VoiceOver labels before changing the header.
+
+### Add a current visual acceptance set
+
+**Aesthetics and maintenance.** The README screenshot still shows MacDring branding and the earlier notes presentation. Replace it after checking the native app. Capture: a compact vertical Items tab, a horizontal Notes drawer with native formatting, and a list on a light background. Use clean sample names and content, and capture the real open state and the location of the tab relative to the drawer. Also keep a sign-off checklist for Dark/Light, color extremes, long text, 1×/2× displays and small panels. The visual target is one legible rim and a restrained material treatment, with a clear selected item and sufficient contrast for the small header controls.
+
+## Feature prototypes
+
+### Explain the pending drop before releasing it (SOL-28)
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+`MacDring/Drawer/DrawerWindowController.swift:66-77` and `MacDring/Drawer/DrawerView.swift:397-436` show a target ring without explaining the pending action. New users must remember whether a tile opens, files, trashes, or adds a launcher.
+
+After a brief dwell, show target-specific text such as “Move to Downloads” or “Open with Preview,” using the same operation policy as the cursor. Test whether it reduces hesitation without obscuring the target. Effort: half a day after SOL-25.
+
+### Offer non-destructive starter drawer kits (SOL-29)
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+`MacDring/AppDelegate.swift:274-328` supplies Apps/Welcome. Useful Folder/Fresh/Notes combinations still require manual discovery; the import flow at `MacDring/Settings/TabsView.swift:108-124` replaces the entire layout.
+
+Offer a few optional local kits, such as “Downloads desk” with Folder, Fresh, and Notes, added without replacing current tabs and removable in one action. Reuse existing tab types; no automation or permissions are needed. Effort: one to two days.
+
+### Badge counts on the tab pill
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+Per-tab counts on the pill itself — Fresh shows "3" for newly landed files, a watched folder shows pending items — glanceable without opening.
+
+A badge overlay driven by the live listing counts. Effort: medium.
+
+### Shell-command items
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+A drawer item that runs a small script and copies the result — clipboard-friendly workflows without leaving the drawer.
+
+New item kind with a bounded subprocess runner. Effort: medium-large.
+
+### An edge-glow pulse on listing changes
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+A subtle edge-glow pulse on the pill when a watched folder or Fresh listing gains items — ambient notification without a badge.
+
+A brief pill highlight driven by the existing watch callbacks. Effort: small.
+
 ### Drag one tab onto another to merge drawers
 
 novel, delightful, or quirky ideas worth trying — nice-to-have
@@ -627,14 +629,6 @@ novel, delightful, or quirky ideas worth trying — nice-to-have
 
 Animate scale/shadow on `onHover`, respecting Reduce Motion. Effort: two to three hours.
 
-### A hotkey variant that opens straight into search
-
-novel, delightful, or quirky ideas worth trying — nice-to-have
-
-`MacDring/Tabs/TabController.swift:982-1046` per-tab hotkeys open the drawer, but nothing opens it deliberately focused for typing (a "search launcher" mode) — for example a variant for non-searchable drawers.
-
-Option-hotkey (or double-press) opens the drawer with the filter field forced visible and focused. Effort: half a day.
-
 ### Drag out of group preview tiles
 
 novel, delightful, or quirky ideas worth trying — nice-to-have
@@ -642,20 +636,6 @@ novel, delightful, or quirky ideas worth trying — nice-to-have
 `MacDring/Drawer/ItemView.swift:195-205` renders a mini-preview of group children; dragging a child straight out of the preview (to another app) is the natural next step for the iOS-style grouping interactions.
 
 Allow `onDrag` providers for group children in the preview tiles. Effort: one day.
-
-## Drawer interaction follow-ups
-
-The macOS interaction pass traced drawer presentation, keyboard routing, clipboard history and filesystem refreshes at `c905100`. The implementation PRs cover the hidden selection after Backspace and clipboard excerpts that show matching text. The tasks below build on that pass. [Keyboard selection PR](https://github.com/L-K-M/TopDrawer/pull/184), [clipboard excerpt PR](https://github.com/L-K-M/TopDrawer/pull/185).
-
-Two related refresh regressions deserve explicit coverage alongside BACKLOG U1. With an active query, shrink a watched folder below the five-item threshold and verify the filter can still be edited or cleared. Then remove the linked directory and verify the drawer distinguishes the read failure from a successful empty listing. Both cases were also identified in concurrent local design work.
-
-### Bound the cost of rapid folder refreshes
-
-DrawerWindowController.apply starts a new read for each relevant reconcile. BackgroundListing drops obsolete replies after the disk call completes. A burst can leave several full directory reads running even when only the newest result can be used. Instrument queued, active and delivered reads against a delayed loader. Prototype one active and one replaceable pending refresh per target. Opening a different local drawer must stay responsive while an earlier network read is blocked. Verify newest settings win after a sort change and dismissing cannot revive a panel.
-
-### Test interrupted closes as well as opens
-
-DrawerWindowController.show guards its animation completion with presentationGeneration. The animated hide checks isVisible alone. Exercise close A, reopen B, close B before A finishes. Record whether A's completion can remove B's panel early, clear its rows or reset opacity during the second fade. If reproducible, bind close cleanup to its originating generation. Check zero-duration switches, the riding pill and Reduce Motion.
 
 ### Make clipboard results legible at narrow drawer widths
 
@@ -669,10 +649,16 @@ DrawerSearch flattens groups. Two launchers named the same thing become indistin
 
 A two-line clip can be difficult to recognize. Activating the row replaces the system clipboard. Prototype Space on a selected clipboard row as a transient read-only text preview inside the drawer. Escape returns to the same selection and scroll position. Evaluate whether the preview is worthwhile after match excerpts ship. Verify no pasteboard write, history mutation, new permissions or external launch. Include long text, clipped lines and a switch to another tab while peeking.
 
-### Measure and coalesce full-text clipboard searches
+### Add a temporary return tray for a project
 
-A release-optimized Foundation microbenchmark on this Mac took a median 47 ms across 11 scans for an absent word in 50 distinct near-256 KiB ASCII clips. It exercised the same locale-aware, case- and diacritic-insensitive range search as DrawerModel. This is a synthetic worst-case workload and excludes SwiftUI. Profile query changes, selection changes and unrelated view updates with ordinary clips and the upper-bound fixture. Cache results by query and history revision, then consider moving scans off the main thread if typing still misses frames. Verify original ordering, history removal during a search, and stale result rejection.
+**Delightful prototype.** A user selects files across apps and drops references into a small shelf, optionally names the collection, then can reopen it as a normal Items drawer when the collection becomes useful. Offer a session-only tray or an explicit expiry (after a chosen time or the next open). Clearing the tray removes references only. Reuse existing bookmarks, lock rules and drop cues. Prototype return-to-task recovery after a desktop change and give explicit Undo before any reference is discarded.
 
-### Verify the spoken controls for choosing a tab glyph
+### Try an optional tab index for crowded edges
 
-SymbolPickerView shows its selected glyph with an accent fill. Its symbol buttons and the icon-only add/remove/import/export buttons in TabsView rely on images and help text. Inspect their actual accessible names and selection traits with VoiceOver, including the same picker in IconEditorView. Supply explicit action names where synthesized names fail, expose the selected glyph in speech and shape, and verify the disabled removal hint for a protected tab. Do this alongside the existing pill activation work, which covers different controls.
+**Delightful navigation.** The status menu is a flat list; two same-named tabs on distinct displays are hard to tell apart. Prototype a menu-bar index grouped by display and edge, with an unobtrusive recently used section and stable search labels. Make disconnected tabs explicit and handle duplicate names without changing persisted titles. Compare the 4- and 40-tab cases before adopting a richer interface.
+
+### Give drawers an explicit keyboard focus action
+
+convenience prototype — local to one drawer
+
+Per-tab hotkeys already toggle the drawer. Prototype a separate command that deliberately focuses an open drawer, or opens it with the search field visible even for a short Items listing. Compare a direct shortcut with double-press or an alternate chord and keep routine typing in the frontmost app untouched. For notes, focus the editor. For clipboard, focus the filter. Compare repeated launching from a pinned drawer and deliberate type-to-find in a newly opened drawer.
