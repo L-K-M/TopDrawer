@@ -12,8 +12,9 @@ struct ColorSwatchPicker: View {
     var body: some View {
         LabeledContent(title) {
             HStack(spacing: 4) {
+                let selected = TabPalette.swatch(matching: hex)
                 ForEach(TabPalette.swatches, id: \.hex) { swatch in
-                    swatchButton(swatch)
+                    swatchButton(swatch, isSelected: swatch == selected)
                 }
                 ColorPicker("Custom color", selection: customBinding, supportsOpacity: false)
                     .labelsHidden()
@@ -23,9 +24,8 @@ struct ColorSwatchPicker: View {
         }
     }
 
-    private func swatchButton(_ swatch: TabPalette.Swatch) -> some View {
-        let isSelected = TabPalette.swatch(matching: hex) == swatch
-        return Button { hex = swatch.hex } label: {
+    private func swatchButton(_ swatch: TabPalette.Swatch, isSelected: Bool) -> some View {
+        Button { hex = swatch.hex } label: {
             Circle()
                 .fill(Color(hexString: swatch.hex))
                 .overlay(Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))

@@ -1,9 +1,11 @@
 import Foundation
 
 /// The curated colors offered as one-click swatches wherever a tab or icon color
-/// is chosen. They are the macOS system accent hues as they render in dark mode,
-/// so tabs picked from here sit well together and beside the system UI; the color
-/// well next to the swatches still allows any other color.
+/// is chosen. They are the dark-mode system hues of macOS 11 to 15, the palette
+/// the default tab blue (`#0A84FF`) comes from, kept fixed rather than read from
+/// `NSColor` so stored colors and the swatch ring stay stable across OS updates
+/// (macOS 26 shifted most system hues slightly). The color well next to the
+/// swatches still allows any other color.
 enum TabPalette {
     struct Swatch: Equatable {
         let name: String
@@ -23,8 +25,8 @@ enum TabPalette {
         Swatch(name: "Pink", hex: "#FF375F"),
     ]
 
-    /// The swatch `hex` names, if any. Case and a missing `#` are ignored, since
-    /// hand-edited and older layouts store colors in either form.
+    /// The swatch `hex` names, if any. Case, surrounding whitespace and a missing
+    /// `#` are ignored, since hand-edited and older layouts store colors that way.
     static func swatch(matching hex: String) -> Swatch? {
         let normalized = normalize(hex)
         return swatches.first { $0.hex == normalized }
