@@ -12,7 +12,7 @@ test or release path does:
 | [`release.yml`](workflows/release.yml) | pushing a `v*` tag (e.g. `v1.2.0`; `v1.2.0-beta.1` for a pre-release) | builds a Release **without Developer ID signing or notarization**, ad-hoc signs it so it can launch, packages a **DMG** + **zip**, and creates a **GitHub Release** with both attached; separately builds the Linux **`.deb`**, smoke-tests it in a pristine Ubuntu 24.04 container, and attaches it to that release |
 | [`zai-code-review.yml`](workflows/zai-code-review.yml) | non-draft pull requests from branches in this repository | reviews the diff with GLM and posts the findings as PR comments. The one workflow that needs a secret (`ZAI_API_KEY`), and the one that never runs for a fork, because `pull_request_target` would hand that secret to untrusted code |
 
-The macOS jobs run on `macos-14` (Apple Silicon) with a **pinned Xcode** (`16.2`). The app
+The macOS jobs run on `macos-15` (Apple Silicon) with a **pinned Xcode** (`16.2`). The app
 target has no third-party dependencies, so there's nothing to cache or install beyond the
 build tools; the notes editor bundle is the exception, and it vendors its npm dependencies
 into the committed `EditorWeb/dist/` rather than resolving them at build time, so only

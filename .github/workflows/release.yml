@@ -30,7 +30,7 @@ env:
 jobs:
   test:
     name: Test before publishing
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       # Actions are pinned to immutable commit SHAs: a mutable tag like @v4 can be
@@ -67,7 +67,7 @@ jobs:
 
   release:
     name: Build & publish (unsigned)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     needs: test
     steps:
