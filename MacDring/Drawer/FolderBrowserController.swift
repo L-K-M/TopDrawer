@@ -10,6 +10,7 @@ final class FolderBrowserController: NSObject, NSPopoverDelegate {
     var isShown: Bool { popover.isShown }
 
     func show(_ item: DrawerItem, relativeTo rect: NSRect, of view: NSView,
+              preferredEdge: NSRectEdge = .maxX,
               onLaunch: @escaping (DrawerItem) -> Void,
               onReveal: @escaping (DrawerItem) -> Void,
               onPreview: @escaping (DrawerItem) -> Void) {
@@ -20,8 +21,26 @@ final class FolderBrowserController: NSObject, NSPopoverDelegate {
         popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         popover.contentViewController = NSHostingController(rootView: FolderBrowserView(
             folder: item, model: model, onLaunch: onLaunch, onReveal: onReveal, onPreview: onPreview))
-        popover.show(relativeTo: rect, of: view, preferredEdge: .maxX)
+        popover.show(relativeTo: rect, of: view, preferredEdge: preferredEdge)
         hasSession = popover.isShown
+    }
+
+    /// The popover edge that opens **inward** from a drawer on `edge`: a left-edge
+    /// drawer grows rightward, so its popovers open on the item's right; a right-edge
+    /// drawer grows leftward, so they open on the left; top/bottom drawers open
+    /// below/above. Pointing outward (the old fixed `.maxX`) pushed right-edge
+    /// popovers off the drawer and let top/bottom ones detach. AppKit may still
+    /// choose a different edge when the preferred side has no room.
+    ///
+    /// `NSRectEdge` is expressed in the positioning view's coordinate system, so the
+    /// vertical edges swap when that view is flipped (top-left origin).
+    static func preferredPopoverEdge(for edge: Edge, isFlippedView: Bool) -> NSRectEdge {
+        switch edge {
+        case .left:   return .maxX
+        case .right:  return .minX
+        case .top:    return isFlippedView ? .maxY : .minY
+        case .bottom: return isFlippedView ? .minY : .maxY
+        }
     }
 
     func contains(_ window: NSWindow?) -> Bool {
