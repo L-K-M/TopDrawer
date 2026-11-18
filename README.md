@@ -59,8 +59,8 @@ Jetty all draw it.
   slot under your cursor **highlights**, and dropping there files the item into that
   slot — onto an app to open it with, onto a folder to move it in.
 - **Type to find.** With a drawer open, just start typing to filter it; **↑/↓** move
-  the selection, **Return** opens it, **Esc** clears (then closes). Shown on drawers
-  with a handful of items or more.
+  the selection, **Return** opens it, **Esc** clears (then closes). Item drawers show the field
+  at five launchable items. An active filter stays editable if the listing shrinks.
 - **Keyboard navigation and previews.** Arrow through an unfiltered grid or list;
   **Return** opens the selection and **Space** shows Quick Look for a selected
   file or folder. **⌘[ / ⌘]** switch tabs on the same screen edge. Optional
