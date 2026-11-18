@@ -23,6 +23,8 @@ A later drawer-and-clipboard pass opened independent implementations of the byte
 
 A reliability pass opened four more implementations: a batch of small correctness fixes — update-timer re-entry, a stale Carbon hotkey press, case-folded recents identity, standardized Spotlight hit paths, `*.app` file classification, and conservative unknown-Trash counts ([#192](https://github.com/L-K-M/TopDrawer/pull/192)); asynchronous Settings item icons ([#194](https://github.com/L-K-M/TopDrawer/pull/194)); per-edge stack renumbering on a Settings move ([#196](https://github.com/L-K-M/TopDrawer/pull/196)); and a “Locate Tab” pill outline ([#206](https://github.com/L-K-M/TopDrawer/pull/206)).
 
+A further pass opened four focused fixes: a bounded update-download session so a stalled transfer cannot pin `isDownloading` for the default seven-day resource timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)); pagination for the prerelease release scan under a documented page budget ([#208](https://github.com/L-K-M/TopDrawer/pull/208)); folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211)); and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216)).
+
 ## Reliability and data safety
 
 ### Duplicate layout identities make entries ambiguous (SOL-02)
@@ -207,7 +209,7 @@ bug — verify on a filesystem without ATTR_DIR_ENTRYCOUNT
 
 bug — relevant when prerelease checking is enabled
 
-`GitHubReleaseClient` picks the highest version from the first 30 releases. When publication order differs from version order, a higher-version prerelease can sit on an older page. Define the supported history window or follow pagination with a bounded request policy and a test for out-of-order version tags.
+`GitHubReleaseClient` picks the highest version from the first 30 releases. When publication order differs from version order, a higher-version prerelease can sit on an older page. Define the supported history window or follow pagination with a bounded request policy and a test for out-of-order version tags. In review: [#208](https://github.com/L-K-M/TopDrawer/pull/208) follows 100-entry pages to a 10-page budget, stops on a short page, and picks the maximum non-draft version.
 
 ### Keep per-path icon overrides from attaching to unrelated files
 
@@ -235,7 +237,7 @@ visual / forward compatibility — nice-to-have
 
 reliability — small
 
-`FileMover.uniqueDestination` tests the destination with `fileExists(atPath:)`, which is false for a dangling symlink in the destination directory. `moveItem` then fails or replaces the link. Check `fileExists(atPath:isDirectory:)` and link existence, or catch the move failure and step to the next candidate. Add a test with a broken symlink in the destination directory. Effort: small.
+`FileMover.uniqueDestination` tests the destination with `fileExists(atPath:)`, which is false for a dangling symlink in the destination directory. `moveItem` then fails or replaces the link. Check `fileExists(atPath:isDirectory:)` and link existence, or catch the move failure and step to the next candidate. Add a test with a broken symlink in the destination directory. Effort: small. In review: [#216](https://github.com/L-K-M/TopDrawer/pull/216) treats any symlink as occupying the name via `destinationOfSymbolicLink` and leaves the link intact.
 
 ## Performance and responsiveness
 
@@ -461,7 +463,7 @@ Settings already offers an Add Link sheet. Direct paste into an Items drawer cou
 
 usability — make the transfer state visible
 
-`UpdateChecker.downloadAndReveal` tracks a Boolean, then reveals the download in Finder or opens the release page on failure. The user has no explicit progress or cancel action and receives little feedback while waiting. Give the transfer a visible state with completion and failure details. Consider an explicit timeout budget in addition to URLSession defaults. Test a slow server, cancellation before and during transfer, temporary file cleanup, and the browser fallback.
+`UpdateChecker.downloadAndReveal` tracks a Boolean, then reveals the download in Finder or opens the release page on failure. The user has no explicit progress or cancel action and receives little feedback while waiting. Give the transfer a visible state with completion and failure details. Consider an explicit timeout budget in addition to URLSession defaults. Test a slow server, cancellation before and during transfer, temporary file cleanup, and the browser fallback. The timeout half is in review: [#207](https://github.com/L-K-M/TopDrawer/pull/207) gives the downloader its own session with a 60 s request and 5 min resource timeout; progress and cancellation remain open.
 
 ### Offer Quick Look when selection starts in an unfiltered drawer
 
@@ -529,7 +531,7 @@ visual issues and layout problems — nice-to-have
 
 `MacDring/Drawer/FolderBrowserController.swift:23` always prefers `.maxX` regardless of drawer edge; on right-edge drawers it flips at the screen boundary and on top/bottom drawers may detach entirely.
 
-Pick the preferred edge pointing inward from the drawer's edge. Effort: small.
+Pick the preferred edge pointing inward from the drawer's edge. Effort: small. In review: [#211](https://github.com/L-K-M/TopDrawer/pull/211) derives `.maxX/.minX/.minY/.maxY` from the drawer's edge and passes it from `DrawerWindowController`.
 
 ### Disconnected displays are indistinguishable in the picker
 
