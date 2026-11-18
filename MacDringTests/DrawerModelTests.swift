@@ -3,6 +3,31 @@ import XCTest
 
 final class DrawerModelTests: XCTestCase {
 
+    func testActiveFilterRemainsAvailableWhenLiveListingShrinks() {
+        let model = DrawerModel()
+        model.kind = .folder
+        model.items = (0..<DrawerSearch.minItemsToShow).map {
+            DrawerItem(kind: .file, displayName: "Match \($0)", slot: $0)
+        }
+
+        XCTAssertTrue(model.isSearchable)
+        model.searchQuery = "match"
+        model.items = []
+
+        XCTAssertTrue(model.isSearchable)
+        XCTAssertTrue(model.searchResults.isEmpty)
+        model.clearSearch()
+        XCTAssertFalse(model.isSearchable)
+    }
+
+    func testNotesDoNotOfferSearchWithAnActiveQuery() {
+        let model = DrawerModel()
+        model.kind = .notes
+        model.searchQuery = "stale query"
+
+        XCTAssertFalse(model.isSearchable)
+    }
+
     // MARK: Clipboard
 
     func testClipboardSearchMatchesFullTextAndPreservesRecency() {

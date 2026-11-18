@@ -128,10 +128,11 @@ final class DrawerModel: ObservableObject {
     /// current grid/list with flattened results, including matching group children.
     var displayedItems: [DrawerItem] { isSearching ? searchResults : visibleItems }
 
-    /// Clipboard search stays visible as its history grows; item listings offer it
-    /// once enough items exist (including group children).
+    /// Clipboard search is always visible. Keep an active filter visible even if a
+    /// live listing shrinks, so the user can still edit or clear the query.
     var isSearchable: Bool {
-        kind == .clipboard || (kind != .notes && items.flattenedLaunchable().count >= DrawerSearch.minItemsToShow)
+        kind == .clipboard
+            || (kind != .notes && (isSearching || items.flattenedLaunchable().count >= DrawerSearch.minItemsToShow))
     }
     var isSearching: Bool { !searchQuery.isEmpty }
     /// The items matching the current query — groups flattened to their children so
