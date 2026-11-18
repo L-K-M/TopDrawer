@@ -13,6 +13,10 @@ import KeycapKit
 /// that silently does nothing.
 struct HotkeyRecorderView: View {
     @Binding var hotkey: HotkeySpec?
+    /// While the recorder listens, Clear is hidden: ⌫ clears from the
+    /// keyboard, and a click on Clear would first end recording by taking
+    /// focus, which reads as the click doing two things.
+    @State private var isRecording = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -35,10 +39,11 @@ struct HotkeyRecorderView: View {
                 ),
                 deleteAction: .clear,
                 placeholder: "Record Shortcut",
-                recordingPrompt: "Press shortcut… (Esc to cancel)"
+                recordingPrompt: "Press shortcut… (Esc to cancel)",
+                onRecordingChange: { isRecording = $0 }
             )
             .frame(minWidth: 130)
-            if hotkey != nil {
+            if hotkey != nil && !isRecording {
                 Button("Clear") { hotkey = nil }
             }
         }

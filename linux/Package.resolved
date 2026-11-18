@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/L-K-M/Keycap",
       "state" : {
-        "revision" : "416486bdc26d9b781db2f37f699b438ac7e6e958",
-        "version" : "0.1.0"
+        "revision" : "ce29c15104121d3afe1aa07f24f699862120eab7",
+        "version" : "0.1.1"
       }
     },
     {
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/L-K-M/Livery",
       "state" : {
-        "revision" : "e0e36b6abc10effdd04b9e1da8f3bb39e48113a8",
-        "version" : "0.1.0"
+        "revision" : "c36ac67afb29b5155fca370a08d679c6e9e75120",
+        "version" : "0.2.0"
       }
     },
     {

@@ -468,7 +468,7 @@
 			repositoryURL = "https://github.com/L-K-M/Livery";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.1.0;
+				minimumVersion = 0.2.0;
 			};
 		};
 		AA000000000000000000003C /* XCRemoteSwiftPackageReference "Keycap" */ = {
@@ -476,7 +476,7 @@
 			repositoryURL = "https://github.com/L-K-M/Keycap";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.1.0;
+				minimumVersion = 0.1.1;
 			};
 		};
 		AA000000000000000000003D /* XCRemoteSwiftPackageReference "Updraft" */ = {
@@ -484,7 +484,7 @@
 			repositoryURL = "https://github.com/L-K-M/Updraft";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.1.0;
+				minimumVersion = 0.2.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
