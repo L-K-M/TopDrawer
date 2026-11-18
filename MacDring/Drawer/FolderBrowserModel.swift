@@ -11,6 +11,10 @@ final class FolderBrowserModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
     @Published private(set) var truncated = false
+    /// The folders opened in this pop-up, outermost first. The last one is listed;
+    /// opening a subfolder pushes it and Back pops it, so the pop-up browses the
+    /// tree in place instead of handing every subfolder to Finder.
+    @Published private(set) var path: [DrawerItem] = []
     private var generation = UUID()
     private let listing: Loader
 
@@ -25,7 +29,36 @@ final class FolderBrowserModel: ObservableObject {
         return try FolderLister.listing(at: url)
     }
 
+    /// The folder currently listed.
+    var current: DrawerItem? { path.last }
+    var canGoBack: Bool { path.count > 1 }
+
+    /// Starts browsing at `item`, forgetting any folders opened before.
     func load(_ item: DrawerItem) {
+        path = [item]
+        read(item)
+    }
+
+    /// Lists `folder` (an entry of the current listing) in place.
+    func open(_ folder: DrawerItem) {
+        guard folder.kind == .folder else { return }
+        path.append(folder)
+        read(folder)
+    }
+
+    /// Returns to the enclosing folder.
+    func goBack() {
+        guard canGoBack else { return }
+        path.removeLast()
+        if let current { read(current) }
+    }
+
+    /// Reads the current folder again (Try Again after an error).
+    func reload() {
+        if let current { read(current) }
+    }
+
+    private func read(_ item: DrawerItem) {
         let generation = UUID()
         self.generation = generation
         items = []
