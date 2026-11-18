@@ -22,10 +22,13 @@ enum ModalActivation {
     }
 
     /// Whether activation should return to the app with `previousPID` once the
-    /// prompt ends: only another app that is still running. When Top Drawer itself
-    /// was frontmost (Settings had focus), it keeps it.
-    static func shouldHandBack(toPID previousPID: pid_t?, isTerminated: Bool, ownPID: pid_t) -> Bool {
-        guard let previousPID, !isTerminated else { return false }
+    /// prompt ends: only another app that is still running, and only while Top Drawer
+    /// still holds activation (`isActive`). If the user switched to another app
+    /// meanwhile, that app keeps it. When Top Drawer itself was frontmost (Settings
+    /// had focus), it keeps it.
+    static func shouldHandBack(isActive: Bool, toPID previousPID: pid_t?, isTerminated: Bool,
+                               ownPID: pid_t) -> Bool {
+        guard isActive, let previousPID, !isTerminated else { return false }
         return previousPID != ownPID
     }
 
@@ -38,11 +41,10 @@ enum ModalActivation {
         handBack(to: previous)
     }
 
-    /// Only while Top Drawer still holds activation: if the user switched to another
-    /// app meanwhile, that app keeps it.
     private static func handBack(to previous: NSRunningApplication?) {
-        guard NSApp.isActive, let previous,
-              shouldHandBack(toPID: previous.processIdentifier, isTerminated: previous.isTerminated,
+        guard let previous,
+              shouldHandBack(isActive: NSApp.isActive, toPID: previous.processIdentifier,
+                             isTerminated: previous.isTerminated,
                              ownPID: ProcessInfo.processInfo.processIdentifier) else { return }
         // Cooperative activation (macOS 14): yield explicitly, then ask it to activate.
         NSApp.yieldActivation(to: previous)
