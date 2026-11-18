@@ -124,6 +124,7 @@ final class GitHubReleaseTests: XCTestCase {
 
     // MARK: Prerelease scan pagination
 
+    #if os(macOS)
     func testPrereleaseScanPagesAndPicksTheHighestVersion() async throws {
         var requestedPages: [Int] = []
         let session = stubSession { request in
@@ -171,8 +172,10 @@ final class GitHubReleaseTests: XCTestCase {
         configuration.protocolClasses = [StubURLProtocol.self]
         return URLSession(configuration: configuration)
     }
+    #endif
 }
 
+#if os(macOS)
 private final class StubURLProtocol: URLProtocol {
     static var handler: ((URLRequest) -> (Int, Data))?
 
@@ -200,3 +203,4 @@ extension URL {
             .reduce(into: [:]) { $0[$1.name] = $1.value } ?? [:]
     }
 }
+#endif
