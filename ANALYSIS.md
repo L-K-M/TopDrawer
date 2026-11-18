@@ -23,7 +23,7 @@ A later drawer-and-clipboard pass opened independent implementations of the byte
 
 A reliability pass opened four more implementations: a batch of small correctness fixes — update-timer re-entry, a stale Carbon hotkey press, case-folded recents identity, standardized Spotlight hit paths, `*.app` file classification, and conservative unknown-Trash counts ([#192](https://github.com/L-K-M/TopDrawer/pull/192)); asynchronous Settings item icons ([#194](https://github.com/L-K-M/TopDrawer/pull/194)); per-edge stack renumbering on a Settings move ([#196](https://github.com/L-K-M/TopDrawer/pull/196)); and a “Locate Tab” pill outline ([#206](https://github.com/L-K-M/TopDrawer/pull/206)).
 
-A further pass opened four focused fixes: a bounded update-download session so a stalled transfer cannot pin `isDownloading` for the default seven-day resource timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)); pagination for the prerelease release scan under a documented page budget ([#208](https://github.com/L-K-M/TopDrawer/pull/208)); folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211)); and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216)).
+A further pass opened four focused fixes: a bounded update-download session so a stalled transfer cannot pin `isDownloading` for the default seven-day resource timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)); pagination for the prerelease release scan under a documented page budget ([#208](https://github.com/L-K-M/TopDrawer/pull/208)); folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211)); and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216)). A later small fix explains rejected hotkey combinations inline instead of consuming them silently ([#217](https://github.com/L-K-M/TopDrawer/pull/217)).
 
 ## Reliability and data safety
 
@@ -389,7 +389,7 @@ usability: speed, convenience, and clarity — nice-to-have
 
 `MacDring/Settings/HotkeyRecorderView.swift:51`: unusable combos (Shift-only, bare letters) are silently consumed while recording — the user gets no hint why nothing registered.
 
-Show a brief inline hint ("needs ⌘/⌃/⌥ or a function key"). Effort: small.
+Show a brief inline hint ("needs ⌘/⌃/⌥ or a function key"). Effort: small. In review: [#217](https://github.com/L-K-M/TopDrawer/pull/217) shows the hint and keeps recording.
 
 ### No keyboard path to remove a selected item
 
