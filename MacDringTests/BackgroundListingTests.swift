@@ -65,6 +65,15 @@ final class BackgroundListingTests: XCTestCase {
         wait(for: [delivered], timeout: 0.2)
     }
 
+    func testUnconfiguredFolderAndUnresolvableBookmarkHaveDifferentStates() {
+        var tab = Tab(title: "Folder", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "test", edge: .left, position: 0.5),
+                      kind: .folder)
+        XCTAssertNil(DrawerListing.read(tab).errorMessage)
+        tab.folderBookmark = Data([0])
+        XCTAssertNotNil(DrawerListing.read(tab).errorMessage)
+    }
+
     func testDrawerListingKeepsResolvedTargetWithItsItems() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

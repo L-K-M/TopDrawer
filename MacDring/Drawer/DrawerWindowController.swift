@@ -329,6 +329,7 @@ final class DrawerWindowController {
             // show marks the panel visible in the same main-thread turn as apply.
             guard let self, self.isVisible else { return }
             self.model.itemsTruncated = result.truncated
+            self.model.listingError = result.errorMessage
             self.model.folderURL = result.folderURL
             self.updateLiveItems(result.items.applyingIconStyles(from: tab.iconStyles))
         }
@@ -408,6 +409,7 @@ final class DrawerWindowController {
         model.isDropTargeted = false
         model.externalDropTargetFrames = [:]
         if !preservesListing {
+            model.listingError = nil
             model.itemsTruncated = false
             model.folderURL = nil
         }

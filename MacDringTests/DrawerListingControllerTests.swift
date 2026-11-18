@@ -4,6 +4,25 @@ import XCTest
 @testable import MacDring
 
 final class DrawerListingControllerTests: XCTestCase {
+    func testMissingFolderReportsAReadFailureAndRecoversOnRefresh() throws {
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let tab = folderTab(url: directory)
+        let drawer = try makeDrawer(read: DrawerListing.read)
+        try show(tab, in: drawer)
+        waitForItems([], in: drawer)
+        XCTAssertNotNil(drawer.model.listingError)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        drawer.model.actionError = "An unrelated action failed"
+        drawer.refresh(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen)
+        waitForItems([], in: drawer)
+        XCTAssertNil(drawer.model.listingError)
+        XCTAssertEqual(drawer.model.folderURL, directory)
+        XCTAssertEqual(drawer.model.actionError, "An unrelated action failed")
+    }
+
     func testOpeningFolderReturnsBeforeItsListingIsRead() throws {
         guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

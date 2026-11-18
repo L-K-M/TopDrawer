@@ -89,6 +89,7 @@ final class DrawerModel: ObservableObject {
     /// Whether the live listing was capped (a folder with more than `FolderLister.limit`
     /// entries) — drives the header's "300+" truncation badge.
     @Published var itemsTruncated = false
+    @Published var listingError: String?
     @Published var isLoadingListing = false
 
     /// A transient "Moved N items — Undo" banner shown in the drawer header after a
