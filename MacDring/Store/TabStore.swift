@@ -359,13 +359,23 @@ final class TabStore: ObservableObject {
         var addedItem = false
         var newIDs = Set<UUID>()
 
+        // Resolve the tab’s existing targets **once**. Dropping m items onto an n-item
+        // tab would otherwise re-run `flattenedLaunchable()` and resolve every existing
+        // item’s bookmark per incoming item — O(n·m) security-scoped reads on the main
+        // thread before the drop appears. Newly added items join the map so later items
+        // in the same drop still dedupe against them.
+        var targetIDs: [URL: UUID] = [:]
+        for existing in tab.items.flattenedLaunchable() {
+            if let target = BookmarkResolver.url(for: existing)?.standardized {
+                targetIDs[target] = existing.id
+            }
+        }
+
         for item in items {
+            let target = BookmarkResolver.url(for: item)?.standardized
             let resultID: UUID
-            if let target = BookmarkResolver.url(for: item)?.standardized,
-               let existing = tab.items.flattenedLaunchable().first(where: {
-                   BookmarkResolver.url(for: $0)?.standardized == target
-               }) {
-                resultID = existing.id
+            if let target = target, let existing = targetIDs[target] {
+                resultID = existing
             } else {
                 var item = item
                 // `lockNewItems` locks new entries only — a deduplicated existing
@@ -375,6 +385,7 @@ final class TabStore: ObservableObject {
                 resultID = item.id
                 addedItem = true
                 newIDs.insert(item.id)
+                if let target = target { targetIDs[target] = item.id }
             }
             if seenIDs.insert(resultID).inserted { resultIDs.append(resultID) }
         }
