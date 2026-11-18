@@ -450,6 +450,7 @@ final class TabWindowController {
     func close() {
         locateWork?.cancel()
         locateWork = nil
+        model.isLocating = false   // the cancelled work item can’t clear it any more
         panel.orderOut(nil)
         panel.contentView = nil
     }
