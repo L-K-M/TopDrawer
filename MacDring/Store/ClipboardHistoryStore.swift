@@ -137,7 +137,14 @@ final class ClipboardHistoryStore: ObservableObject {
             guard data.count <= Self.maximumArchiveBytes else {
                 throw CocoaError(.fileReadTooLarge)
             }
-            let decoded = try JSONDecoder().decode([ClipboardEntry].self, from: data)
+            let elements = try JSONDecoder().decode([FailableClipboardEntry].self, from: data)
+            let decoded = elements.compactMap(\.entry)
+            // Entries this build cannot read (hand edits, a newer format) are skipped.
+            // When none is readable the archive is treated as unreadable as a whole,
+            // so it is kept rather than overwritten by the next save.
+            if decoded.isEmpty, !elements.isEmpty {
+                throw CocoaError(.fileReadCorruptFile)
+            }
             var texts = Set<String>()
             var ids = Set<UUID>()
             var restored: [ClipboardEntry] = []
