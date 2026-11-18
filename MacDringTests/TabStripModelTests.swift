@@ -18,6 +18,7 @@ final class TabStripModelTests: XCTestCase {
 
     func testUntitledTabTooltipIsJustTheHotkey() {
         let pill = model(title: "")
+        XCTAssertEqual(pill.tooltip, "", "No title and no hotkey: nothing to show")
         pill.hotkeyLabel = "F12"
         XCTAssertEqual(pill.tooltip, "F12")
     }
