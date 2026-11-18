@@ -48,12 +48,14 @@ struct TabStripView: View {
             .onDrop(of: acceptedDropTypes, isTargeted: dropTargetBinding) { providers in
                 handleDrop(providers)
             }
-            .help(model.title)
+            .help(model.tooltip)
             .contextMenu {
                 Button("Configure Tab…") { model.onRequestSettings?() }
-                Menu("Move to Edge") {
+                // A picker so the current edge carries a checkmark instead of being a
+                // no-op choice indistinguishable from the others.
+                Picker("Move to Edge", selection: edgeBinding) {
                     ForEach(Edge.allCases) { edge in
-                        Button(edge.displayName) { model.onMoveToEdge?(edge) }
+                        Text(edge.displayName).tag(edge)
                     }
                 }
                 Divider()
@@ -223,6 +225,11 @@ struct TabStripView: View {
                 .rotationEffect(.degrees(-90))
                 .frame(width: ceil(measured.height), height: ceil(measured.width) + 6)
         }
+    }
+
+    private var edgeBinding: Binding<Edge> {
+        Binding(get: { model.edge },
+                set: { edge in if edge != model.edge { model.onMoveToEdge?(edge) } })
     }
 
     // MARK: Drag to reposition

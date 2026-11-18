@@ -89,7 +89,7 @@ Jetty all draw it.
   react live to displays connecting, disconnecting, and changing resolution.
 - **Stable restore.** Tabs return to the same display and spot after a restart,
   resolution change, or reconnection.
-- **Optional per-tab hotkey** to toggle drawers.
+- **Optional per-tab hotkey** to toggle drawers; hovering a tab shows it.
 - **Layout import / export.** Back up or move your whole arrangement: **Settings →
   Tabs** has export/import buttons that save the tabs-and-items document as a
   JSON file and load it back (importing replaces the current layout, after a

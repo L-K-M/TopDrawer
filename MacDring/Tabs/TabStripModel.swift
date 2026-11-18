@@ -29,6 +29,15 @@ final class TabStripModel: ObservableObject {
     /// Something landed recently (a Fresh tab whose newest item is within the recent
     /// window) — drives the "just landed" dot on the closed pill.
     @Published var hasRecentArrival: Bool = false
+    /// The tab's global hotkey as symbols (`⌃⌥A`) while it is registered, so the
+    /// pill can advertise it; `nil` without one, or when macOS refused it.
+    @Published var hotkeyLabel: String?
+
+    /// The pill's tooltip: its title, plus the hotkey that toggles it.
+    var tooltip: String {
+        guard let hotkeyLabel else { return title }
+        return title.isEmpty ? hotkeyLabel : "\(title) (\(hotkeyLabel))"
+    }
 
     // Interaction callbacks (set by the window controller).
     var onTap: (() -> Void)?

@@ -174,6 +174,7 @@ let macDringTestsSources: [String] = [
     "TabPlacementPolicyTests.swift",
     // LP-10
     "TabDragPolicyTests.swift",
+    "TabStripModelTests.swift",
     // LP-11
     "SpringLoadPolicyTests.swift",
     "HotkeyRegistrationPolicyTests.swift",

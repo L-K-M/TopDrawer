@@ -263,6 +263,12 @@ final class TabController {
         for tab in internallyBlockedHotkeyTabs {
             registerHotkeyIfNeeded(for: tab)
         }
+        // Advertise only hotkeys that are actually live: a spec macOS refused, or one
+        // another tab owns, would be a tooltip promise the key can't keep.
+        for (id, wc) in tabWindows {
+            let label = hotkeys[id].map { KeyCodes.displayString(for: $0.spec) }
+            if wc.model.hotkeyLabel != label { wc.model.hotkeyLabel = label }
+        }
 
         deOverlapStackedTabs()
         restackTabs()
