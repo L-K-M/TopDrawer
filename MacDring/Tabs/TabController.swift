@@ -50,13 +50,15 @@ final class TabController {
     /// activity even when the drawer ends up closed again.
     private var drawerInteractionGeneration: UInt = 0
     /// The app that was frontmost when the current drawer session began, so closing
-    /// the drawer can return the keyboard to it if a pop-up activated Top Drawer.
+    /// the drawer can return the keyboard to it if a prompt or pop-up activated Top
+    /// Drawer.
     private var appFrontmostBeforeDrawer: NSRunningApplication?
 
     /// Who gets the keyboard once a drawer closes.
     private enum FocusAfterClose {
         /// The app that was frontmost when the drawer opened, if Top Drawer has since
-        /// become active (a click in the folder pop-up or a preview activates it).
+        /// become active (a prompt over the drawer, or a click in the folder pop-up or
+        /// a preview, activates it).
         case previousApp
         /// Leave activation alone: a click in another app or a launch is already
         /// moving focus, or one of our own windows is about to take it.
@@ -1353,8 +1355,8 @@ final class TabController {
         alert.window.initialFirstResponder = field
 
         floatAboveDrawer(alert.window)
-        // A text prompt needs key focus; the user's app gets it back afterwards.
-        guard ModalActivation.run({ alert.runModal() }) == .alertFirstButtonReturn else { return }
+        // A text prompt needs key focus; the user's app gets it back when the drawer closes.
+        guard ModalActivation.runOverDrawer({ alert.runModal() }) == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         var updated = item
@@ -1374,7 +1376,7 @@ final class TabController {
         panel.message = "Choose an image to use as this item's icon"
 
         floatAboveDrawer(panel)
-        guard ModalActivation.run({ panel.runModal() }) == .OK, let url = panel.url else { return }
+        guard ModalActivation.runOverDrawer({ panel.runModal() }) == .OK, let url = panel.url else { return }
         store.setCustomIconBookmark(BookmarkResolver.makeBookmark(for: url),
                                     forItem: item.id, inTab: id)
     }
@@ -1394,7 +1396,7 @@ final class TabController {
         alert.addButton(withTitle: "Empty Trash")
         alert.addButton(withTitle: "Cancel")
         floatAboveDrawer(alert.window)
-        guard ModalActivation.run({ alert.runModal() }) == .alertFirstButtonReturn else { return }
+        guard ModalActivation.runOverDrawer({ alert.runModal() }) == .alertFirstButtonReturn else { return }
         if trashService.emptyTrash() {
             drawer.model.iconNonce += 1   // re-resolve the Trash icon in place (full → empty)
         }
