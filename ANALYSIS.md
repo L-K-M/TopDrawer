@@ -23,7 +23,7 @@ A later drawer-and-clipboard pass opened independent implementations of the byte
 
 A reliability pass opened four more implementations: a batch of small correctness fixes — update-timer re-entry, a stale Carbon hotkey press, case-folded recents identity, standardized Spotlight hit paths, `*.app` file classification, and conservative unknown-Trash counts ([#192](https://github.com/L-K-M/TopDrawer/pull/192)); asynchronous Settings item icons ([#194](https://github.com/L-K-M/TopDrawer/pull/194)); per-edge stack renumbering on a Settings move ([#196](https://github.com/L-K-M/TopDrawer/pull/196)); and a “Locate Tab” pill outline ([#206](https://github.com/L-K-M/TopDrawer/pull/206)).
 
-A further pass opened four focused fixes: a bounded update-download session so a stalled transfer cannot pin `isDownloading` for the default seven-day resource timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)); pagination for the prerelease release scan under a documented page budget ([#208](https://github.com/L-K-M/TopDrawer/pull/208)); folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211)); and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216)). A later small fix explains rejected hotkey combinations inline instead of consuming them silently ([#217](https://github.com/L-K-M/TopDrawer/pull/217)).
+A further pass opened four focused fixes: a bounded update-download session so a stalled transfer cannot pin `isDownloading` for the default seven-day resource timeout ([#207](https://github.com/L-K-M/TopDrawer/pull/207)); pagination for the prerelease release scan under a documented page budget ([#208](https://github.com/L-K-M/TopDrawer/pull/208)); folder popovers opening inward from the drawer's own edge ([#211](https://github.com/L-K-M/TopDrawer/pull/211), merged); and a dangling-symlink collision check in `FileMover` ([#216](https://github.com/L-K-M/TopDrawer/pull/216)). A later small fix explains rejected hotkey combinations inline instead of consuming them silently ([#217](https://github.com/L-K-M/TopDrawer/pull/217)).
 
 ## Reliability and data safety
 
@@ -531,13 +531,11 @@ aesthetics and theming — nice-to-have
 
 Add a small tab-and-items preview using the existing view styles, bound to the same settings values. Effort: one day.
 
-### Folder popover always prefers the right side
+### Derive the popover edge from the positioning view
 
 visual issues and layout problems — nice-to-have
 
-`MacDring/Drawer/FolderBrowserController.swift:23` always prefers `.maxX` regardless of drawer edge; on right-edge drawers it flips at the screen boundary and on top/bottom drawers may detach entirely.
-
-Pick the preferred edge pointing inward from the drawer's edge. Effort: small. In review: [#211](https://github.com/L-K-M/TopDrawer/pull/211) derives `.maxX/.minX/.minY/.maxY` from the drawer's edge and passes it from `DrawerWindowController`.
+`FolderBrowserController.preferredPopoverEdge(for:isFlippedView:)` takes a Bool the call site must keep in sync with the view passed to `NSPopover.show`. Add an `of positioningView: NSView` overload so the edge hint and the positioning rect always come from the same coordinate system. Effort: trivial.
 
 ### Disconnected displays are indistinguishable in the picker
 
