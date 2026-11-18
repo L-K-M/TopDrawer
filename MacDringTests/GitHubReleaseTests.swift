@@ -126,44 +126,52 @@ final class GitHubReleaseTests: XCTestCase {
 
     #if os(macOS)
     func testPrereleaseScanPagesAndPicksTheHighestVersion() async throws {
-        var requestedPages: [Int] = []
+        let requestedPages = LockedPageList()
         let session = stubSession { request in
             let page = Int(request.url?.queryParameters["page"] ?? "1") ?? 1
             requestedPages.append(page)
             if page == 1 {
                 // A full page, so the scan must continue.
-                return (200, self.releasesJSON((0..<GitHubReleaseClient.releasesPerPage).map { "v1.0.\($0)" }))
+                return (200, self.releasesJSON((0..<GitHubReleaseClient.releasesPerPage).map {
+                    (tag: "v1.0.\($0)", draft: false)
+                }))
             }
             // An older page carries the highest version — the bug the scan fixes.
-            return (200, self.releasesJSON(["v2.0.0-beta.1"]))
+            // A draft with an even higher tag must be ignored.
+            return (200, self.releasesJSON([
+                (tag: "v3.0.0-draft", draft: true),
+                (tag: "v2.0.0-beta.1", draft: false),
+            ]))
         }
         let client = GitHubReleaseClient(owner: "owner", repo: "repo", session: session)
 
         let release = try await client.latestRelease(includePrereleases: true)
 
         XCTAssertEqual(release.tagName, "v2.0.0-beta.1")
-        XCTAssertEqual(requestedPages, [1, 2])   // stopped on the short page
+        XCTAssertEqual(requestedPages.all, [1, 2])   // stopped on the short page
     }
 
     func testPrereleaseScanStopsAtThePageBudget() async throws {
-        var requestedPages: [Int] = []
+        let requestedPages = LockedPageList()
         let session = stubSession { request in
             let page = Int(request.url?.queryParameters["page"] ?? "1") ?? 1
             requestedPages.append(page)
-            return (200, self.releasesJSON((0..<GitHubReleaseClient.releasesPerPage).map { "v1.0.\($0)" }))
+            return (200, self.releasesJSON((0..<GitHubReleaseClient.releasesPerPage).map {
+                (tag: "v1.0.\($0)", draft: false)
+            }))
         }
         let client = GitHubReleaseClient(owner: "owner", repo: "repo", session: session)
 
         _ = try await client.latestRelease(includePrereleases: true)
 
-        XCTAssertEqual(requestedPages.count, GitHubReleaseClient.maximumPrereleasePages)
+        XCTAssertEqual(requestedPages.all.count, GitHubReleaseClient.maximumPrereleasePages)
     }
 
-    private func releasesJSON(_ tags: [String]) -> Data {
-        let entries = tags.map { tag in
-            "{\"tag_name\":\"\(tag)\",\"html_url\":\"https://example.com/\(tag)\",\"prerelease\":true,\"draft\":false,\"assets\":[]}"
+    private func releasesJSON(_ entries: [(tag: String, draft: Bool)]) -> Data {
+        let json = entries.map { entry in
+            "{\"tag_name\":\"\(entry.tag)\",\"html_url\":\"https://example.com/\(entry.tag)\",\"prerelease\":true,\"draft\":\(entry.draft),\"assets\":[]}"
         }.joined(separator: ",")
-        return Data("[\(entries)]".utf8)
+        return Data("[\(json)]".utf8)
     }
 
     private func stubSession(_ handler: @escaping (URLRequest) -> (Int, Data)) -> URLSession {
@@ -197,10 +205,26 @@ private final class StubURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-extension URL {
+private extension URL {
     var queryParameters: [String: String] {
         URLComponents(url: self, resolvingAgainstBaseURL: false)?.queryItems?
             .reduce(into: [:]) { $0[$1.name] = $1.value } ?? [:]
+    }
+}
+
+/// Thread-safe page collector: `URLProtocol` delivers on a background queue while
+/// the test reads the result after `await`.
+private final class LockedPageList {
+    private let lock = NSLock()
+    private var pages: [Int] = []
+
+    func append(_ page: Int) {
+        lock.lock(); pages.append(page); lock.unlock()
+    }
+
+    var all: [Int] {
+        lock.lock(); defer { lock.unlock() }
+        return pages
     }
 }
 #endif
