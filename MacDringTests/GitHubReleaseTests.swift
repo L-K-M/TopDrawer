@@ -164,7 +164,7 @@ final class GitHubReleaseTests: XCTestCase {
 
         _ = try await client.latestRelease(includePrereleases: true)
 
-        XCTAssertEqual(requestedPages.all.count, GitHubReleaseClient.maximumPrereleasePages)
+        XCTAssertEqual(requestedPages.all, Array(1...GitHubReleaseClient.maximumPrereleasePages))
     }
 
     private func releasesJSON(_ entries: [(tag: String, draft: Bool)]) -> Data {
