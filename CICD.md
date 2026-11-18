@@ -14,7 +14,7 @@ Top Drawer (repository: MacDring) is a Swift/Xcode macOS app with a Linux port i
 
 ## Continuous integration (`ci.yml`)
 
-Runs a single **Build & Test** job on `macos-14`. In-progress runs for the same ref are cancelled when a new commit is pushed.
+Runs a single **Build & Test** job on `macos-15`. In-progress runs for the same ref are cancelled when a new commit is pushed.
 
 - Runs `scripts/check-notes-protocol-version.sh` first, which checks the legacy web editor's bridge protocol pins. It runs here rather than in `editor-web.yml` because that workflow is path-filtered to `EditorWeb/**` and would miss a Swift-only change. The macOS app now uses the native editor; its integration tests run with the rest of the macOS suite.
 - Checks the license statements next: the README's `## License` section and the app's `NSHumanReadableCopyright` in both build configurations.
@@ -54,7 +54,7 @@ Or use the helper, which also bumps the committed `MARKETING_VERSION` so local/d
 scripts/release.sh 1.2.3 --push
 ```
 
-The version is derived from the tag with the leading `v` stripped (e.g. `v1.2.3` → `1.2.3`), and the build number is the workflow run number. The job runs on `macos-14` with Xcode 16.2. A tag with a semver pre-release suffix (`v2.2.0-beta.1`) is published as a GitHub **pre-release**: the in-app updater reads `releases/latest`, which excludes pre-releases, so users are not offered it — the vehicle for a Linux test build.
+The version is derived from the tag with the leading `v` stripped (e.g. `v1.2.3` → `1.2.3`), and the build number is the workflow run number. The jobs run on `macos-15` with Xcode 16.2. A tag with a semver pre-release suffix (`v2.2.0-beta.1`) is published as a GitHub **pre-release**: the in-app updater reads `releases/latest`, which excludes pre-releases, so users are not offered it — the vehicle for a Linux test build.
 
 It produces:
 
