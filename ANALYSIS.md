@@ -19,6 +19,8 @@ Independent implementations also cover the filter and linked-folder regressions 
 
 Two additional PRs preserve byte-distinct clipboard text across restarts and keep compact drawer headers visible. A hosted macOS rendering with one column and 32-point icons reproduced an 88-point folder drawer that clipped the title, gear and empty-state text. The 220-point treatment showed all three. [Clipboard text identity](https://github.com/L-K-M/TopDrawer/pull/189), [compact drawer headers](https://github.com/L-K-M/TopDrawer/pull/188).
 
+A later drawer-and-clipboard pass opened independent implementations of the byte-distinct clipboard identity ([#191](https://github.com/L-K-M/TopDrawer/pull/191), alongside #189) and the match excerpt ([#195](https://github.com/L-K-M/TopDrawer/pull/195), alongside #185), plus two small fixes: keep shared Pict icons ahead of fetched favicons ([#193](https://github.com/L-K-M/TopDrawer/pull/193)) and preview the first result on Space ([#205](https://github.com/L-K-M/TopDrawer/pull/205)). Choose one implementation per behavior.
+
 ## Reliability and data safety
 
 ### Duplicate layout identities make entries ambiguous (SOL-02)
@@ -214,6 +216,24 @@ general issue — respect transient listing limits
 ### Separate durable tab identity from immediate availability
 
 **Bug and usability.** AppDelegate's menu suggests it opens tabs even when parked on a disconnected display. `TabController.openDrawer` requires a resolved screen and a live pill. An enabled row then performs no visible action. Build menu rows from the same placement state the controller uses. For parked tabs, show their state and route to placement settings, or offer a separately designed temporary opening that leaves the saved anchor intact. Verify disconnect and reconnect, an already-open drawer, and the move-to-main setting. This complements the backlog's portable import display mapping.
+
+### A fetched favicon can override the shared store's link icon
+
+reliability / icon precedence — nice-to-have
+
+`ItemView.resolveIcon` returns the shared Pict icon for a `.url` item (precedence rung 3), but the resolution `.task` then replaces it with a fetched favicon whenever the item has no image or generated-style override. The favicon is the kind-specific default (rung 5), so a link with a shared icon set is demoted to its site favicon. Gate the fetch on the shared lookup, and reuse that lookup rather than resolving the target twice. In review: [PR #193](https://github.com/L-K-M/TopDrawer/pull/193). Effort: small.
+
+### Unknown SF Symbol names blank the tab pill
+
+visual / forward compatibility — nice-to-have
+
+`TabStripView.glyphView` draws `Image(systemName: name)` with no fallback. A document written by a newer build (or hand-edited) can carry a symbol this OS does not know, leaving an empty glyph on an otherwise colored pill. `IconName` only maps names for Linux; macOS renders the stored name unchanged. Fall back to `TabGlyph.default` when the symbol cannot be resolved, and cover it at the name-resolution layer. Effort: small.
+
+### A move can target a dangling symlink
+
+reliability — small
+
+`FileMover.uniqueDestination` tests the destination with `fileExists(atPath:)`, which is false for a dangling symlink in the destination directory. `moveItem` then fails or replaces the link. Check `fileExists(atPath:isDirectory:)` and link existence, or catch the move failure and step to the next candidate. Add a test with a broken symlink in the destination directory. Effort: small.
 
 ## Performance and responsiveness
 
@@ -451,6 +471,18 @@ Return can use the first visible item before the user moves the selection. Space
 
 **Missing feature and usability.** Display and edge pickers plus the position slider edit numeric placement without showing nearby tabs, the reserved Dock/menu areas or parked tabs. Preview the selected display's edges at scale with named marker positions. Read the same layout and overlap policy used by the windows. Start with a noninteractive preview and a spoken position label; add drag editing only if manual trials show a need. Test two displays of different size and orientation and a saved disconnected anchor.
 
+### The drawer header count ignores the active filter
+
+usability — trivial
+
+`DrawerView.header` always shows `items.count` (or the clipboard entry count) even while a filter is active, so the number disagrees with the rows on screen. Show "matches of total" while searching, and keep the untruncated total for the tooltip.
+
+### Remember a drawer's scroll position per tab
+
+missing feature — nice-to-have
+
+A folder or list drawer with more rows than fit reopens at the top. Store the last scroll offset (or first visible item id) per tab and restore it on reopen, clearing it when the listing changes length or the tab is repointed. Verify a capped folder, a search result list and a notes drawer.
+
 ## Visual design and accessibility
 
 ### A maximum-size drawer can push its pill off-screen (SOL-20)
@@ -575,6 +607,24 @@ At the 180-point sidebar minimum, compare the four borderless footer buttons wit
 
 **Aesthetics and maintenance.** The README screenshot still shows MacDring branding and the earlier notes presentation. Replace it after checking the native app. Capture: a compact vertical Items tab, a horizontal Notes drawer with native formatting, and a list on a light background. Use clean sample names and content, and capture the real open state and the location of the tab relative to the drawer. Also keep a sign-off checklist for Dark/Light, color extremes, long text, 1×/2× displays and small panels. The visual target is one legible rim and a restrained material treatment, with a clear selected item and sufficient contrast for the small header controls.
 
+### Use the tab color as the drawer's interaction color
+
+aesthetics — nice-to-have
+
+Grid/list selection, focus and progress use the system accent, while the tab color is only a 10% wash. Tinting selection with the tab's own color would strengthen per-tab identity on a screen with several drawers. Keep the system accent in Settings, and check the high-contrast preset and the existing selection contrast.
+
+### Render monogram tabs on a small tile
+
+delight — small
+
+A letters/emoji glyph is currently bare text in the readable foreground. Drawing it on a tiny rounded tile in the tab color would make monogram tabs look intentional and match the pill's continuous corners. Keep the monogram to the two characters the pill already renders.
+
+### Give the modern pill a subtle inner highlight
+
+aesthetics — small
+
+A 1 pt top-left light stroke or a soft gradient would make the translucent pill read as a physical object rather than a flat bar. Combine with the existing hover-lift and reduced-motion work, and compare Light/Dark plus Reduce Transparency.
+
 ## Feature prototypes
 
 ### Undo for removed launcher entries
@@ -684,3 +734,27 @@ A two-line clip can be difficult to recognize. Activating the row replaces the s
 convenience prototype — local to one drawer
 
 Per-tab hotkeys already toggle the drawer. Prototype a separate command that deliberately focuses an open drawer, or opens it with the search field visible even for a short Items listing. Compare a direct shortcut with double-press or an alternate chord and keep routine typing in the frontmost app untouched. For notes, focus the editor. For clipboard, focus the filter. Compare repeated launching from a pinned drawer and deliberate type-to-find in a newly opened drawer.
+
+### Offer clipboard history in the status menu
+
+feature prototype — medium
+
+The status menu already lists tabs. A "Recent Copies" submenu would allow a quick paste without opening a drawer, with no new permission. Bound it to the same store, retention and privacy rules, and keep the menu short.
+
+### Option-click a tab to open every tab on an edge
+
+delight — small
+
+A power-user path that reuses the existing open/close plumbing: Option-click a pill opens every tab on that display and edge (or closes them). Keep the ordinary click unchanged and document the modifier.
+
+### Add quiet hours for Fresh arrival cues
+
+delight — small
+
+Suppress the Fresh pill dot and arrival sparkle during a user-set window. Small, privacy-adjacent, and easy to ignore.
+
+### Give empty drawers a direct action
+
+usability — small
+
+"Drag apps & files here" plus an Add Files… button; "No matches" plus Clear filter; "Folder unreadable" plus Try Again and Choose Folder…. Keep the existing tone and test the narrow header.
