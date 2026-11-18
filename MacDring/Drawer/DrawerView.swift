@@ -183,8 +183,7 @@ struct DrawerView: View {
                                 .background(RoundedRectangle(cornerRadius: 8)
                                     .fill(item.id == model.selectedItemID ? Color.accentColor.opacity(0.30) : .clear))
                                 .overlay {
-                                    if model.fileDropTarget == target,
-                                       item.kind == .folder || item.kind == .application {
+                                    if model.fileDropTarget == target, Self.takesFilesInto(item.kind) {
                                         RoundedRectangle(cornerRadius: 8)
                                             .strokeBorder(Color(hexString: model.colorHex), lineWidth: 2)
                                     }
@@ -380,9 +379,9 @@ struct DrawerView: View {
     private func listRow(_ item: DrawerItem) -> some View {
         let target = model.externalDropTarget(for: item, atLocalSlot: item.slot)
         let fileDropHere = model.fileDropTarget == target
-        // Match the grid: a file dragged onto a folder/app is a
-        // "file into / open with" target — give it a distinct ring.
-        let intoTarget = fileDropHere && (item.kind == .folder || item.kind == .application)
+        // Match the grid: a file dragged onto a folder, app or the Trash is a
+        // "file into / open with / trash" target — give it a distinct ring.
+        let intoTarget = fileDropHere && Self.takesFilesInto(item.kind)
         return inCellItem(item)
             .padding(.vertical, 3)
             .padding(.horizontal, 4)
@@ -409,7 +408,7 @@ struct DrawerView: View {
         let fileDropHere = model.fileDropTarget == externalTarget
         // A file dragged onto a folder/app is a "file into / open with" target, not a
         // plain slot drop — give it a distinct ring so the difference is obvious.
-        let intoTarget = fileDropHere && (item?.kind == .folder || item?.kind == .application || item?.kind == .trash)
+        let intoTarget = fileDropHere && Self.takesFilesInto(item?.kind)
         // A drag has dwelled over this (occupied) slot: releasing here forms a group.
         let groupHere = groupTargetSlot == slot && dragging != nil && dragging?.slot != slot
         return ZStack {
@@ -545,6 +544,13 @@ struct DrawerView: View {
         dwellWork = nil
         dwellSlot = nil
         groupTargetSlot = nil
+    }
+
+    /// Kinds a dropped file goes *into* rather than beside: filed into a folder,
+    /// opened with an app, or moved to the Trash (`TabController.handleFileDrop`).
+    /// Grid cells, list rows and search results ring these alike.
+    private static func takesFilesInto(_ kind: ItemKind?) -> Bool {
+        kind == .folder || kind == .application || kind == .trash
     }
 
     private func targetSlot(at point: CGPoint) -> Int? {
