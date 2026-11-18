@@ -141,7 +141,7 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(history.entries.map(\.text), ["after clear"])
     }
 
-    func testStopErasesHistoryAndRestartSkipsInterveningCopies() {
+    func testStopEndsSessionViewAndRestartSkipsInterveningCopies() {
         let (pasteboard, history, monitor) = makeMonitor()
         monitor.start()
         write("recorded", to: pasteboard)
@@ -191,7 +191,10 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), archive)
     }
 
-    func testRemovingLastTabDeletesSavedHistoryAndStopsCapture() {
+    /// Removing the last Clipboard tab stops capture and ends the session view, but a
+    /// user who opted into "Keep history after quitting" must not lose the archive —
+    /// deleting a tab is a layout gesture, not an opt-out.
+    func testRemovingLastTabKeepsSavedHistoryAndStopsCapture() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("clipboard-removal-tests-\(UUID().uuidString)", isDirectory: true)
             .appendingPathComponent("history.json")
@@ -205,9 +208,26 @@ final class ClipboardMonitorTests: XCTestCase {
         monitor.stop()
         write("while stopped", to: pasteboard)
         monitor.captureChanges()
+        XCTAssertTrue(history.entries.isEmpty, "the session view still clears")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+            .entries.map(\.text), ["recorded"])
+    }
+
+    /// With session-only retention nothing ever lands on disk, so tab removal still
+    /// purges everything.
+    func testRemovingLastTabPurgesSessionOnlyHistory() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clipboard-removal-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("history.json")
+        let (pasteboard, history, monitor) = makeMonitor(storeURL: url, retention: .sessionOnly)
+        monitor.start()
+        write("recorded", to: pasteboard)
+        monitor.captureChanges()
+
+        monitor.stop()
         XCTAssertTrue(history.entries.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
-        XCTAssertTrue(ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts).entries.isEmpty)
     }
 }
 #endif

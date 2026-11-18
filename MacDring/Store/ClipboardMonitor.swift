@@ -44,11 +44,10 @@ final class ClipboardMonitor {
         timer?.invalidate()
         timer = nil
         lastChangeCount = nil
-        if reason == .quit {
-            history.finishSession()
-        } else {
-            history.clear()
-        }
+        // Both stops end the session view; finishSession keeps a retained archive on
+        // disk (acrossRestarts) while still discarding under sessionOnly. Removing the
+        // tab is a layout gesture, not an opt-out — Clear is the explicit erase.
+        history.finishSession()
     }
 
     /// Also called on drawer open so a recent copy needn't wait for the next tick.
