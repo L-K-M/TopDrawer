@@ -46,6 +46,19 @@ final class LinuxVolumesTests: XCTestCase {
         XCTAssertEqual(MountInfoParser.unescape("/plain/path"), "/plain/path")
     }
 
+    func testParsePreservesUnicodeInEscapedMountPointAndSource() {
+        let mounts = MountInfoParser.parse(
+            #"41 30 0:50 / /media/alice/Clé\040資料 rw - cifs //server/Café\134共有 rw"#
+        )
+
+        XCTAssertEqual(mounts.first?.mountPoint, "/media/alice/Clé 資料")
+        XCTAssertEqual(mounts.first?.device, #"//server/Café\共有"#)
+    }
+
+    func testUnescapePreservesInvalidOctalEscapes() {
+        XCTAssertEqual(MountInfoParser.unescape(#"/a\400b\089c\04"#), #"/a\400b\089c\04"#)
+    }
+
     // MARK: - Classifier
 
     /// Nothing is removable and no dropbox folder exists — only the network and cloud
