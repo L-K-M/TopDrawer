@@ -91,6 +91,37 @@ final class FolderBrowserTests: XCTestCase {
 
         model.load(root)
         XCTAssertEqual(model.path.map(\.id), [root.id], "A new session starts at its own folder")
+        waitUntilLoaded(model)
+    }
+
+    func testBackShowsTheEnclosingListingAtOnceThenRereadsIt() {
+        let root = DrawerItem(kind: .folder, displayName: "Root")
+        let sub = DrawerItem(kind: .folder, displayName: "Sub")
+        let before = DrawerItem(kind: .file, displayName: "Before")
+        let after = DrawerItem(kind: .file, displayName: "After")
+        let lock = NSLock()
+        var rootReads = 0
+        let release = DispatchSemaphore(value: 0)
+        let model = FolderBrowserModel { item in
+            guard item.id == root.id else { return ([], false) }
+            lock.lock(); rootReads += 1; let read = rootReads; lock.unlock()
+            if read == 1 { return ([sub, before], false) }
+            release.wait()
+            return ([sub, after], false)
+        }
+        model.load(root)
+        waitUntilLoaded(model)
+        model.open(sub)
+        waitUntilLoaded(model)
+
+        model.goBack()
+        XCTAssertFalse(model.isLoading, "Back shows the enclosing folder without a spinner")
+        XCTAssertEqual(model.items.map(\.id), [sub.id, before.id])
+        release.signal()
+        let reread = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            model.items.map(\.id) == [sub.id, after.id]
+        }, object: nil)
+        wait(for: [reread], timeout: 5)
     }
 
     func testTryAgainRereadsTheFolderBeingShown() {
