@@ -30,7 +30,7 @@ struct GitHubReleaseClient {
     /// highest-versioned non-draft one.
     func latestRelease(includePrereleases: Bool) async throws -> GitHubRelease {
         if includePrereleases {
-            let releases = try await fetch([GitHubRelease].self, path: "releases?per_page=30")
+            let releases = try await prereleaseScan()
             let newest = releases
                 .filter { !$0.draft }
                 .max { (SemanticVersion($0.tagName) ?? .zero) < (SemanticVersion($1.tagName) ?? .zero) }
@@ -38,6 +38,27 @@ struct GitHubReleaseClient {
             return newest
         }
         return try await fetch(GitHubRelease.self, path: "releases/latest")
+    }
+
+    /// How many release-list pages a prerelease scan reads before stopping. GitHub
+    /// orders releases by creation date, not version, so a higher version can sit on
+    /// an older page; the scan is bounded so a repo with a long history cannot make
+    /// the check unbounded.
+    static let maximumPrereleasePages = 10
+    /// GitHub's maximum `per_page` for the release list.
+    static let releasesPerPage = 100
+
+    /// Every release the bounded scan can see, oldest page last. Stops early on a
+    /// short page (the end of the list).
+    private func prereleaseScan() async throws -> [GitHubRelease] {
+        var releases: [GitHubRelease] = []
+        for page in 1...Self.maximumPrereleasePages {
+            let batch = try await fetch([GitHubRelease].self,
+                                        path: "releases?per_page=\(Self.releasesPerPage)&page=\(page)")
+            releases += batch
+            if batch.count < Self.releasesPerPage { break }
+        }
+        return releases
     }
 
     private func fetch<T: Decodable>(_ type: T.Type, path: String) async throws -> T {

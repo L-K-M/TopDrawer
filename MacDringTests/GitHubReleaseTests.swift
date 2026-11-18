@@ -121,4 +121,82 @@ final class GitHubReleaseTests: XCTestCase {
         XCTAssertEqual(notes?.count, 101)             // 100 chars + the ellipsis
         XCTAssertEqual(notes?.last, "…")
     }
+
+    // MARK: Prerelease scan pagination
+
+    func testPrereleaseScanPagesAndPicksTheHighestVersion() async throws {
+        var requestedPages: [Int] = []
+        let session = stubSession { request in
+            let page = Int(request.url?.queryParameters["page"] ?? "1") ?? 1
+            requestedPages.append(page)
+            if page == 1 {
+                // A full page, so the scan must continue.
+                return (200, self.releasesJSON((0..<GitHubReleaseClient.releasesPerPage).map { "v1.0.\($0)" }))
+            }
+            // An older page carries the highest version — the bug the scan fixes.
+            return (200, self.releasesJSON(["v2.0.0-beta.1"]))
+        }
+        let client = GitHubReleaseClient(owner: "owner", repo: "repo", session: session)
+
+        let release = try await client.latestRelease(includePrereleases: true)
+
+        XCTAssertEqual(release.tagName, "v2.0.0-beta.1")
+        XCTAssertEqual(requestedPages, [1, 2])   // stopped on the short page
+    }
+
+    func testPrereleaseScanStopsAtThePageBudget() async throws {
+        var requestedPages: [Int] = []
+        let session = stubSession { request in
+            let page = Int(request.url?.queryParameters["page"] ?? "1") ?? 1
+            requestedPages.append(page)
+            return (200, self.releasesJSON((0..<GitHubReleaseClient.releasesPerPage).map { "v1.0.\($0)" }))
+        }
+        let client = GitHubReleaseClient(owner: "owner", repo: "repo", session: session)
+
+        _ = try await client.latestRelease(includePrereleases: true)
+
+        XCTAssertEqual(requestedPages.count, GitHubReleaseClient.maximumPrereleasePages)
+    }
+
+    private func releasesJSON(_ tags: [String]) -> Data {
+        let entries = tags.map { tag in
+            "{\"tag_name\":\"\(tag)\",\"html_url\":\"https://example.com/\(tag)\",\"prerelease\":true,\"draft\":false,\"assets\":[]}"
+        }.joined(separator: ",")
+        return Data("[\(entries)]".utf8)
+    }
+
+    private func stubSession(_ handler: @escaping (URLRequest) -> (Int, Data)) -> URLSession {
+        StubURLProtocol.handler = handler
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+}
+
+private final class StubURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) -> (Int, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler, let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let (status, data) = handler(request)
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+extension URL {
+    var queryParameters: [String: String] {
+        URLComponents(url: self, resolvingAgainstBaseURL: false)?.queryItems?
+            .reduce(into: [:]) { $0[$1.name] = $1.value } ?? [:]
+    }
 }
