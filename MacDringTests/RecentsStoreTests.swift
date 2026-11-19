@@ -79,7 +79,8 @@ final class RecentsStoreTests: XCTestCase {
 
     func testRecordingPreservesUnreadableArchiveAcrossSessions() {
         let defaults = freshDefaults()
-        for json in ["[", #"{"unexpected":"object"}"#] {
+        // Malformed JSON, the wrong shape, and an array with no readable record.
+        for json in ["[", #"{"unexpected":"object"}"#, #"[{"kind":"file","name":"no-url"}]"#] {
             let archive = Data(json.utf8)
             defaults.set(archive, forKey: archiveKey)
 
@@ -90,6 +91,7 @@ final class RecentsStoreTests: XCTestCase {
             XCTAssertEqual(defaults.data(forKey: archiveKey), archive)
 
             let reloaded = RecentsStore(defaults: defaults)
+            XCTAssertTrue(reloaded.items.isEmpty, "the session item was never saved")
             reloaded.record(recent("Next session", "/next"))
             XCTAssertEqual(defaults.data(forKey: archiveKey), archive)
         }

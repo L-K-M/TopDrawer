@@ -21,6 +21,11 @@ public final class RecentsStore: ObservableObject {
 
     private let defaults: UserDefaults
     private static let key = "recentItems"
+    /// False after an archive this build can't read: the session's history stays in
+    /// memory, unsaved, so the stored bytes survive for a build that can read them.
+    /// Only `clear()`, the user's explicit reset, replaces them (the clipboard
+    /// archive follows the same rule). The app has one store (`shared`) over its
+    /// defaults, so a per-instance latch covers every writer.
     private var canSave = true
 
     /// A custom `UserDefaults` can be injected for tests.
@@ -83,6 +88,10 @@ public final class RecentsStore: ObservableObject {
         // history — the next `record()` would persist the wipe. Mirrors the launcher
         // document's `FailableTab` / `FailableDrawerItem` lenient-decode policy.
         let wrapped = try JSONDecoder().decode([FailableRecentItem].self, from: data)
-        return wrapped.compactMap(\.item)
+        let items = wrapped.compactMap(\.item)
+        // Nothing readable in a non-empty archive (a newer format, say) is as
+        // unreadable as malformed JSON, and must be kept the same way.
+        if items.isEmpty, !wrapped.isEmpty { throw CocoaError(.fileReadCorruptFile) }
+        return items
     }
 }
