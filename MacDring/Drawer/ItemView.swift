@@ -232,12 +232,14 @@ struct ItemView: View {
                 let resolved = await Task.detached(priority: .userInitiated) { () -> Resolution in
                     let meta: (size: Int64?, kind: String?) =
                         wantsListMeta ? ItemView.resolveMetadata(item) : (nil, nil)
-                    return Resolution(icon: ItemView.resolveIcon(item),
+                    let sharedIcon = ItemView.sharedIcon(for: item)
+                    return Resolution(icon: ItemView.resolveIcon(item, sharedIcon: sharedIcon),
                                       broken: BookmarkResolver.isBroken(item),
                                       bundleID: ItemView.appBundleID(item),
                                       byteSize: meta.size,
                                       typeDescription: meta.kind,
-                                      trashCount: item.kind == .trash ? TrashInspector.trashCount() : 0)
+                                      trashCount: item.kind == .trash ? TrashInspector.trashCount() : 0,
+                                      hasSharedIcon: sharedIcon != nil)
                 }.value
                 guard !Task.isCancelled else { return }
                 icon = resolved.icon
@@ -247,10 +249,14 @@ struct ItemView: View {
                 typeDescription = resolved.typeDescription
                 trashCount = resolved.trashCount
                 // Best-effort: swap the globe for the site's favicon once fetched —
-                // but never over a user-chosen icon (image or generated style).
-                if item.kind == .url, item.customIconBookmark == nil, item.iconStyle == nil,
+                // but never over a user-chosen icon or the shared store's artwork.
+                // Re-check the shared store after the await: its cache may have
+                // warmed while the fetch was in flight.
+                if ItemView.shouldApplyFavicon(for: item, hasSharedIcon: resolved.hasSharedIcon),
                    let url = item.url,
-                   let favicon = await FaviconCache.shared.fetch(for: url), !Task.isCancelled {
+                   let favicon = await FaviconCache.shared.fetch(for: url), !Task.isCancelled,
+                   ItemView.shouldApplyFavicon(for: item,
+                                              hasSharedIcon: ItemView.sharedIcon(for: item) != nil) {
                     icon = favicon
                 }
             }
@@ -268,6 +274,10 @@ struct ItemView: View {
         let byteSize: Int64?
         let typeDescription: String?
         let trashCount: Int
+        /// Whether the shared store had artwork, retained so the favicon gate can
+        /// apply the documented precedence without crossing the task boundary with
+        /// a second image.
+        let hasSharedIcon: Bool
     }
 
     @ViewBuilder
@@ -507,6 +517,13 @@ struct ItemView: View {
     // MARK: Icon resolution
 
     static func resolveIcon(_ item: DrawerItem) -> NSImage {
+        resolveIcon(item, sharedIcon: sharedIcon(for: item))
+    }
+
+    /// `resolveIcon` with the shared store's artwork already looked up, so a caller
+    /// that needs the same answer for the favicon precedence rule doesn't resolve the
+    /// target twice.
+    private static func resolveIcon(_ item: DrawerItem, sharedIcon: NSImage?) -> NSImage {
         // A group renders a child preview, not a single icon; this is only a fallback
         // (e.g. if a group ever appears where a plain icon is expected).
         if item.kind == .group { return symbol("square.grid.2x2.fill") }
@@ -545,8 +562,7 @@ struct ItemView: View {
         // The shared store, then the target's own un-masked artwork — both from
         // PictKit, both beneath the item's own overrides above. A dictionary lookup;
         // a miss returns nil and warms in the background, so a drawer never waits.
-        if let target = TopDrawerIcons.target(for: item),
-           let shared = TopDrawerIcons.shared.icon(for: target) {
+        if let shared = sharedIcon {
             return shared
         }
         switch item.kind {
@@ -561,6 +577,21 @@ struct ItemView: View {
             }
             return symbol("questionmark.square.dashed")
         }
+    }
+
+    /// The shared store's artwork for `item`, or `nil` when none is set. Extracted
+    /// from `resolveIcon` so the favicon precedence rule can reuse the same lookup.
+    static func sharedIcon(for item: DrawerItem) -> NSImage? {
+        guard let target = TopDrawerIcons.target(for: item) else { return nil }
+        return TopDrawerIcons.shared.icon(for: target)
+    }
+
+    /// Whether a fetched favicon may replace the resolved icon for a `.url` item.
+    /// The favicon is the kind-specific default (precedence rung 5); it must never
+    /// override a custom image, a generated style, or the shared store's artwork
+    /// (rungs 1-3).
+    static func shouldApplyFavicon(for item: DrawerItem, hasSharedIcon: Bool) -> Bool {
+        item.kind == .url && !hasSharedIcon && item.customIconBookmark == nil && item.iconStyle == nil
     }
 
     /// The system Trash icon — full when the Trash holds anything, empty otherwise.
