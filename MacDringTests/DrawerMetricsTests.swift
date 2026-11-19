@@ -44,6 +44,16 @@ final class DrawerMetricsTests: XCTestCase {
         XCTAssertEqual(DrawerMetrics.notesSize(columns: 1, rows: 1, iconSize: 32, in: tiny), .zero)
     }
 
+    func testCompactGridHasRoomForHeaderControlsWithinScreenBounds() {
+        func oneColumn(in frame: CGRect) -> CGSize {
+            DrawerMetrics.contentSize(itemCount: 0, maxSlot: -1, configuredRows: 2,
+                                      layout: .grid, iconSize: 32, columns: 1, in: frame)
+        }
+
+        XCTAssertEqual(oneColumn(in: visible).width, 220)
+        XCTAssertEqual(oneColumn(in: CGRect(x: 0, y: 0, width: 200, height: 600)).width, 184)
+    }
+
     func testGridWidthScalesWithColumns() {
         let two = DrawerMetrics.contentSize(itemCount: 8, maxSlot: 7, configuredRows: 2, layout: .grid, iconSize: 64, columns: 2, in: visible)
         let four = DrawerMetrics.contentSize(itemCount: 8, maxSlot: 7, configuredRows: 2, layout: .grid, iconSize: 64, columns: 4, in: visible)
@@ -151,10 +161,10 @@ final class DrawerMetricsTests: XCTestCase {
     func testSmallIconListDropsKindToAvoidOverflow() {
         // 4 columns at the smallest icon (32) is narrow enough that Kind would overflow,
         // so it's dropped; a normal icon (64) at 4 columns fits the full table.
-        let narrow = DrawerMetrics.listWidth(columns: 4, iconSize: 32)   // 298
+        let narrow = DrawerMetrics.contentWidth(columns: 4, iconSize: 32)   // 298
         XCTAssertTrue(DrawerMetrics.listMetaColumns(forWidth: narrow).size)
         XCTAssertFalse(DrawerMetrics.listMetaColumns(forWidth: narrow).kind)
-        let wide = DrawerMetrics.listWidth(columns: 4, iconSize: 64)     // 426
+        let wide = DrawerMetrics.contentWidth(columns: 4, iconSize: 64)     // 426
         XCTAssertTrue(DrawerMetrics.listMetaColumns(forWidth: wide).kind)
     }
 

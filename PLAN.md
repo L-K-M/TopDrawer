@@ -649,7 +649,9 @@ MacDring/
 > - **Configure Tab…** opens Settings **directly to the Tabs pane with that tab
 >   selected** (`SettingsRouter`); **Settings** content fills/resizes with its window.
 > - **Per-tab drawer grid** — each tab sets its drawer's `gridColumns` × `gridRows`
->   (Tabs editor); new tabs default from General → New tab defaults.
+>   (Tabs editor); new tabs default from General → New tab defaults. Grid and
+>   list drawers share a 220-point minimum width for header controls, subject
+>   to available screen space.
 > - **Resizable notes drawers:** exposed edges/corners resize the editor live.
 >   Per-tab size and normalized alignment restore across restarts; the tab follows
 >   the inward face. Notes settings offer Reset Drawer Size instead of grid steppers.
