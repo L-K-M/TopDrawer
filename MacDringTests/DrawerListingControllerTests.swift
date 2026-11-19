@@ -205,6 +205,35 @@ final class DrawerListingControllerTests: XCTestCase {
         XCTAssertFalse(drawer.model.itemsTruncated)
     }
 
+    func testReopeningAfterAReadFailureStartsFromTheFailure() throws {
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        let folder = URL(fileURLWithPath: "/folder")
+        let recovered = [DrawerItem(kind: .file, displayName: "Back", slot: 0)]
+        let lock = NSLock()
+        var reads = 0
+        let drawer = try makeDrawer { _ in
+            lock.lock()
+            reads += 1
+            let isFirstRead = reads == 1
+            lock.unlock()
+            return isFirstRead
+                ? DrawerListing(items: [], truncated: false, folderURL: folder, errorMessage: "Couldn't read")
+                : DrawerListing(items: recovered, truncated: false, folderURL: folder)
+        }
+        let tab = folderTab(url: folder)
+        try show(tab, in: drawer)
+        waitForItems([], in: drawer)
+        XCTAssertEqual(drawer.model.listingError, "Couldn't read")
+        drawer.hide(duration: 0)
+
+        drawer.show(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen, duration: 0)
+        XCTAssertEqual(drawer.model.listingError, "Couldn't read",
+                       "A reopened drawer starts from its last listing, failure included")
+
+        waitForItems(recovered, in: drawer)
+        XCTAssertNil(drawer.model.listingError)
+    }
+
     func testChangedListingInputsDoNotReuseTheLastListing() throws {
         let item = DrawerItem(kind: .file, displayName: "Loaded")
         let drawer = try makeDrawer { _ in
@@ -335,11 +364,12 @@ final class DrawerListingControllerTests: XCTestCase {
 
     /// Runs the main run loop until `condition` holds (or five seconds pass), for
     /// loops too long for `XCTNSPredicateExpectation`'s coarse polling.
-    private func spin(until condition: () -> Bool) {
+    private func spin(until condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) {
         let deadline = Date().addingTimeInterval(5)
         while !condition(), Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.01))
         }
+        XCTAssertTrue(condition(), "Timed out waiting for the drawer", file: file, line: line)
     }
 
     private func waitForItems(_ items: [DrawerItem], in drawer: DrawerWindowController) {

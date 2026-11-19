@@ -502,6 +502,8 @@ final class DrawerWindowController {
                 model.items = remembered?.items.applyingIconStyles(from: tab.iconStyles) ?? []
                 model.itemsTruncated = remembered?.truncated ?? false
                 model.folderURL = remembered?.folderURL
+                // A remembered read failure reopens as that failure, not as an empty folder.
+                model.listingError = remembered?.errorMessage
             }
             model.notes = ""
             gatherListing(for: tab)
