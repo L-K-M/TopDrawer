@@ -76,11 +76,12 @@ final class ClipboardEntryTests: XCTestCase {
         XCTAssertLessThanOrEqual(excerpt.text.count, ClipboardEntry.previewLength + 2)
     }
 
-    func testMatchesUsesTheSameFoldingAsTheExcerpt() {
+    func testSearchResultUsesTheSameFoldingAsTheExcerpt() {
         let e = entry(String(repeating: "z", count: 200) + "caf\u{00E9}" + String(repeating: "z", count: 50))
-        XCTAssertTrue(e.matches("cafe"))
-        XCTAssertEqual(e.excerpt(matching: "cafe").matched, "caf\u{00E9}")
-        XCTAssertFalse(e.matches("absent"))
-        XCTAssertFalse(e.matches("   "))
+        XCTAssertEqual(e.searchResult(for: "cafe")?.excerpt, e.excerpt(matching: "cafe"))
+        XCTAssertEqual(e.searchResult(for: "cafe")?.excerpt.matched, "caf\u{00E9}")
+        XCTAssertNil(e.searchResult(for: "absent"))
+        // A blank query filters nothing and shows the plain preview.
+        XCTAssertEqual(e.searchResult(for: "   ")?.excerpt.text, e.preview)
     }
 }

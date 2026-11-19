@@ -24,10 +24,23 @@ struct ClipboardEntry: Identifiable, Equatable, Codable {
         var text: String { leading + matched + trailing }
     }
 
-    /// Whether `query` matches this clip. Uses the same folding as
-    /// `excerpt(matching:)` so the search filter and the highlight cannot drift.
-    func matches(_ query: String) -> Bool {
-        firstMatchRange(for: query) != nil
+    /// A clip that matched the clipboard search, with the excerpt its row shows.
+    struct SearchResult: Identifiable {
+        let entry: ClipboardEntry
+        let excerpt: Excerpt
+        var id: UUID { entry.id }
+    }
+
+    /// This clip as a search result, or `nil` when `query` doesn't match. A blank
+    /// query matches every clip with the plain preview. The filter and the
+    /// highlight share this one scan, so they cannot drift apart, and the row
+    /// never searches the text again.
+    func searchResult(for query: String) -> SearchResult? {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return SearchResult(entry: self, excerpt: plainExcerpt)
+        }
+        guard let match = firstMatchRange(for: query) else { return nil }
+        return SearchResult(entry: self, excerpt: excerpt(around: match))
     }
 
     /// The first occurrence of `query`, matched case- and diacritic-insensitively
@@ -45,31 +58,41 @@ struct ClipboardEntry: Identifiable, Equatable, Codable {
     /// diacritic-insensitive). Falls back to `preview` for an empty query or no
     /// match, so a row always has something to show.
     func excerpt(matching query: String) -> Excerpt {
-        guard let match = firstMatchRange(for: query) else {
-            return Excerpt(leading: preview, matched: "", trailing: "")
+        firstMatchRange(for: query).map(excerpt(around:)) ?? plainExcerpt
+    }
+
+    private var plainExcerpt: Excerpt { Excerpt(leading: preview, matched: "", trailing: "") }
+
+    /// Centers the window on the match; when the match is at least as long as the
+    /// window, shows its first `previewLength` characters instead. Room one side
+    /// can't use goes to the other. Every walk starts at the match and is bounded
+    /// by the window, so the cost doesn't grow with the clip's length (a clip can
+    /// be 256 KiB).
+    private func excerpt(around match: Range<String.Index>) -> Excerpt {
+        let window = Self.previewLength
+        // Offsetting by zero rounds a bound inside a grapheme (a diacritic-folded
+        // match can end in one) down to a Character boundary.
+        let matchStart = text.index(match.lowerBound, offsetBy: 0)
+        let matchEnd = text.index(match.upperBound, offsetBy: 0)
+        let matchedEnd = text.index(matchStart, offsetBy: window, limitedBy: matchEnd) ?? matchEnd
+        let spare = window - text.distance(from: matchStart, to: matchedEnd)
+
+        var sliceStart = text.index(matchStart, offsetBy: -(spare / 2), limitedBy: text.startIndex)
+            ?? text.startIndex
+        let wantedAfter = spare - text.distance(from: sliceStart, to: matchStart)
+        let sliceEnd = text.index(matchedEnd, offsetBy: wantedAfter, limitedBy: text.endIndex)
+            ?? text.endIndex
+        let unusedAfter = wantedAfter - text.distance(from: matchedEnd, to: sliceEnd)
+        if unusedAfter > 0 {
+            sliceStart = text.index(sliceStart, offsetBy: -unusedAfter, limitedBy: text.startIndex)
+                ?? text.startIndex
         }
 
-        let matchStart = text.distance(from: text.startIndex, to: match.lowerBound)
-        let matchEnd = text.distance(from: text.startIndex, to: match.upperBound)
-        let matchLength = matchEnd - matchStart
-        let window = Self.previewLength
-        // Center the window on the match; when the match is at least as long as the
-        // window, show its first `window` characters instead.
-        let start = max(0, min(matchStart - (window - min(matchLength, window)) / 2,
-                              text.count - min(window, text.count)))
-        let end = min(text.count, start + window)
-
-        let leadingEnd = text.index(text.startIndex, offsetBy: max(matchStart, start))
-        let matchedEnd = text.index(text.startIndex, offsetBy: min(matchEnd, end))
-        let sliceStart = text.index(text.startIndex, offsetBy: start)
-        let sliceEnd = text.index(text.startIndex, offsetBy: end)
-
-        var leading = String(text[sliceStart..<leadingEnd])
+        var leading = String(text[sliceStart..<matchStart])
         var trailing = String(text[matchedEnd..<sliceEnd])
-        if start > 0 { leading = "…" + leading }
-        if end < text.count { trailing += "…" }
-        return Excerpt(leading: leading,
-                       matched: String(text[leadingEnd..<matchedEnd]),
+        if sliceStart > text.startIndex { leading = "…" + leading }
+        if sliceEnd < text.endIndex { trailing += "…" }
+        return Excerpt(leading: leading, matched: String(text[matchStart..<matchedEnd]),
                        trailing: trailing)
     }
 }

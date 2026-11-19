@@ -7,8 +7,9 @@ drawer closed. Copies made before recording starts are excluded.
 - Copy text in any app. Open the drawer to see the newest copies first.
 - Click an entry, then paste with **⌘V** in your app. This copies plain text;
   links stay text rather than opening a browser.
-- Type to filter the full text. **↑/↓** select; **Return** copies; **Esc** clears
-  the filter, then closes the drawer.
+- Type to filter the full text. Each result shows the passage around its first
+  match, with the match highlighted. **↑/↓** select; **Return** copies; **Esc**
+  clears the filter, then closes the drawer.
 - Right-click an entry to remove it. The header's trash button clears all history
   without changing your current system clipboard.
 - **Settings → Tabs → Keep open after copying** leaves the drawer open after a
@@ -53,7 +54,8 @@ Requires a macOS GUI session:
    history starts empty.
 2. Close the drawer. Copy two different multiline strings, allowing a second
    between copies. Reopen; verify newest-first previews and exact pasted text.
-3. Search for text beyond a preview. Use arrows and Return to copy it. Confirm
+3. Search for text beyond the initial preview. Verify the row shows the matching
+   passage with the match highlighted. Use arrows and Return to copy it. Confirm
    the frontmost app stays active and can receive **⌘V** after the drawer closes.
 4. Enable **Keep open after copying**. Copy an older entry; it moves to the front
    without duplicates. Remove it; clear the remaining history.
