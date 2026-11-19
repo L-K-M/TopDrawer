@@ -51,6 +51,9 @@ public actor TopDrawerService {
     private let trashDirectory: URL
     private let ejector: @Sendable (LinuxVolume) -> Bool
     private let recentsProvider: RecentsProviding
+    /// The cache wrapping `recentsProvider` — invalidated whenever a `RecentsChanged`
+    /// signal goes out so a cached snapshot never survives a detected change.
+    private let recentsCache: CachedRecentsProvider
     private let launcher: LinuxLaunching
     private let recorder: RecentsRecording
     private let runningApps: RunningAppsScanning
@@ -102,8 +105,11 @@ public actor TopDrawerService {
         self.trashService = trashService
         self.trashDirectory = trashDirectory
         self.ejector = ejector
-        self.recentsProvider = recentsProvider
-            ?? LinuxRecentsProvider(xbelURL: xbelLocation, freshScopes: freshScopes)
+        let recentsCache = CachedRecentsProvider(
+            wrapping: recentsProvider
+                ?? LinuxRecentsProvider(xbelURL: xbelLocation, freshScopes: freshScopes))
+        self.recentsCache = recentsCache
+        self.recentsProvider = recentsCache
         self.launcher = launcher
         self.recorder = recorder
         self.runningApps = runningApps
@@ -490,6 +496,9 @@ public actor TopDrawerService {
     /// Fires `RecentsChanged(tabID)` for every tab of `kind` in the current document, so
     /// the frontend refreshes exactly the affected tabs.
     private func emitRecentsChanged(forKind kind: String) async {
+        // The signal promises a real change — drop the cache first so the refetch it
+        // triggers can never be served the pre-change snapshot.
+        recentsCache.invalidate()
         let ids = LauncherTabs.all(in: source.rawJSON()).filter { tab in
             guard tab.kind == kind else { return false }
             // A macDring-only recents tab's contents can't change from an xbel write (its
