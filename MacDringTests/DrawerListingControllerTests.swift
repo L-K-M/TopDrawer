@@ -21,6 +21,21 @@ final class DrawerListingControllerTests: XCTestCase {
         XCTAssertNil(drawer.model.listingError)
         XCTAssertEqual(drawer.model.folderURL, directory)
         XCTAssertEqual(drawer.model.actionError, "An unrelated action failed")
+
+        try FileManager.default.removeItem(at: directory)
+        drawer.refresh(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen)
+        waitForItems([], in: drawer)
+        XCTAssertNotNil(drawer.model.listingError)
+
+        // A tab with no folder chosen is the empty state, not a read failure, and
+        // must not inherit the previous tab's error or folder.
+        var unconfigured = tab
+        unconfigured.id = UUID()
+        unconfigured.folderURL = nil
+        try show(unconfigured, in: drawer)
+        waitForItems([], in: drawer)
+        XCTAssertNil(drawer.model.listingError)
+        XCTAssertNil(drawer.model.folderURL)
     }
 
     func testOpeningFolderReturnsBeforeItsListingIsRead() throws {
