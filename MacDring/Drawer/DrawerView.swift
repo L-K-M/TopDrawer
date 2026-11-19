@@ -132,6 +132,19 @@ struct DrawerView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 20)
             }
+            else if let error = model.listingError {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Configure Tab…") { model.onOpenSettings?() }
+                            .controlSize(.small)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
             else if model.isSearching { searchResultsList }
             else if model.items.isEmpty { emptyState }
             else { content }

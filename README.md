@@ -187,7 +187,8 @@ the research and plan behind it.
    See [network & cloud](docs/network-and-cloud-drives.md) and
    [recents & fresh](docs/recents-and-fresh.md).
    Folder, Disks, Network, and Cloud drawers load in the background; refreshes keep
-   the previous listing visible until the new one arrives.
+   the previous listing visible until the new one arrives. If a linked directory
+   cannot be read, the Folder drawer explains why and offers **Configure Tab…**.
 6. For clipboard history on macOS, choose **New Clipboard Tab…**. Copy text in any
    app, open the drawer, click an entry to copy it, then paste with **⌘V**. Type to filter;
    **↑/↓** and **Return** select and copy. The header's trash button clears history.

@@ -65,6 +65,47 @@ final class BackgroundListingTests: XCTestCase {
         wait(for: [delivered], timeout: 0.2)
     }
 
+    func testUnconfiguredFolderAndUnresolvableBookmarkHaveDifferentStates() {
+        var tab = Tab(title: "Folder", colorHex: "#0A84FF",
+                      anchor: ScreenAnchor(displayUUID: "test", edge: .left, position: 0.5),
+                      kind: .folder)
+        XCTAssertNil(DrawerListing.read(tab).errorMessage)
+        tab.folderBookmark = Data([0])
+        XCTAssertNotNil(DrawerListing.read(tab).errorMessage)
+    }
+
+    func testUnreadableFolderIsAReadErrorNotAnEmptyListing() throws {
+        // Root ignores permission bits (the Linux CI container runs as root).
+        try XCTSkipIf(geteuid() == 0, "root can read a chmod-000 directory")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: directory.path)
+
+        let result = DrawerListing.read(folderTab(url: directory))
+
+        XCTAssertNotNil(result.errorMessage)
+        XCTAssertTrue(result.items.isEmpty)
+        XCTAssertEqual(result.folderURL, directory)
+    }
+
+    func testDeletedFolderIsAReadError() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tab = folderTab(url: directory)
+        XCTAssertNil(DrawerListing.read(tab).errorMessage)
+
+        try FileManager.default.removeItem(at: directory)
+        let result = DrawerListing.read(tab)
+
+        XCTAssertNotNil(result.errorMessage)
+        XCTAssertTrue(result.items.isEmpty)
+    }
+
     func testDrawerListingKeepsResolvedTargetWithItsItems() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -77,5 +118,11 @@ final class BackgroundListingTests: XCTestCase {
         XCTAssertEqual(listing.items.compactMap { $0.url?.lastPathComponent }, ["Document.txt"])
         XCTAssertEqual(listing.folderURL, directory)
         XCTAssertFalse(listing.truncated)
+    }
+
+    private func folderTab(url: URL) -> Tab {
+        Tab(title: "Folder", colorHex: "#0A84FF",
+            anchor: ScreenAnchor(displayUUID: "test", edge: .left, position: 0.5),
+            kind: .folder, folderURL: url)
     }
 }
