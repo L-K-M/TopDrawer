@@ -174,6 +174,116 @@ final class DrawerListingControllerTests: XCTestCase {
         }
     }
 
+    func testReopeningStartsFromTheLastListingThenRevalidates() throws {
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        let folder = URL(fileURLWithPath: "/folder")
+        let first = (0..<12).map { DrawerItem(kind: .file, displayName: "First \($0)", slot: $0) }
+        let second = [DrawerItem(kind: .file, displayName: "Second", slot: 0)]
+        let lock = NSLock()
+        var reads = 0
+        let drawer = try makeDrawer { _ in
+            lock.lock()
+            reads += 1
+            let isFirstRead = reads == 1
+            lock.unlock()
+            return DrawerListing(items: isFirstRead ? first : second, truncated: isFirstRead, folderURL: folder)
+        }
+        let tab = folderTab(url: folder)
+        try show(tab, in: drawer)
+        waitForItems(first, in: drawer)
+        let loadedFrame = drawer.openFrame
+        drawer.hide(duration: 0)
+
+        drawer.show(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen, duration: 0)
+        XCTAssertEqual(drawer.model.items, first, "A reopened drawer starts from its last listing")
+        XCTAssertTrue(drawer.model.itemsTruncated)
+        XCTAssertEqual(drawer.model.folderURL, folder)
+        XCTAssertEqual(drawer.openFrame, loadedFrame, "so it opens at its loaded size instead of growing later")
+        XCTAssertTrue(drawer.model.isLoadingListing, "and still re-reads the folder")
+
+        waitForItems(second, in: drawer)
+        XCTAssertFalse(drawer.model.itemsTruncated)
+    }
+
+    func testReopeningAfterAReadFailureStartsFromTheFailure() throws {
+        guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
+        let folder = URL(fileURLWithPath: "/folder")
+        let recovered = [DrawerItem(kind: .file, displayName: "Back", slot: 0)]
+        let lock = NSLock()
+        var reads = 0
+        let drawer = try makeDrawer { _ in
+            lock.lock()
+            reads += 1
+            let isFirstRead = reads == 1
+            lock.unlock()
+            return isFirstRead
+                ? DrawerListing(items: [], truncated: false, folderURL: folder, errorMessage: "Couldn't read")
+                : DrawerListing(items: recovered, truncated: false, folderURL: folder)
+        }
+        let tab = folderTab(url: folder)
+        try show(tab, in: drawer)
+        waitForItems([], in: drawer)
+        XCTAssertEqual(drawer.model.listingError, "Couldn't read")
+        drawer.hide(duration: 0)
+
+        drawer.show(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen, duration: 0)
+        XCTAssertEqual(drawer.model.listingError, "Couldn't read",
+                       "A reopened drawer starts from its last listing, failure included")
+
+        waitForItems(recovered, in: drawer)
+        XCTAssertNil(drawer.model.listingError)
+    }
+
+    func testChangedListingInputsDoNotReuseTheLastListing() throws {
+        let item = DrawerItem(kind: .file, displayName: "Loaded")
+        let drawer = try makeDrawer { _ in
+            DrawerListing(items: [item], truncated: false, folderURL: URL(fileURLWithPath: "/folder"))
+        }
+        var tab = folderTab(url: URL(fileURLWithPath: "/folder"))
+        let changes: [(inout Tab) -> Void] = [
+            { $0.folderSort = .dateModified },
+            { $0.folderShowsHidden = true },
+            { $0.folderURL = URL(fileURLWithPath: "/elsewhere") },
+            { $0.kind = .disks },
+        ]
+        for change in changes {
+            try show(tab, in: drawer)
+            waitForItems([item], in: drawer)
+            drawer.hide(duration: 0)
+            change(&tab)
+            try show(tab, in: drawer)
+            XCTAssertTrue(drawer.model.items.isEmpty, "A listing for other inputs must not be shown")
+            XCTAssertNil(drawer.model.folderURL)
+            waitForItems([item], in: drawer)
+            drawer.hide(duration: 0)
+        }
+    }
+
+    func testAFullCacheDropsOnlyTheListingStoredLongestAgo() throws {
+        let tabs = (0...DrawerWindowController.lastListingLimit).map {
+            folderTab(url: URL(fileURLWithPath: "/folder\($0)"))
+        }
+        let items = Dictionary(uniqueKeysWithValues: tabs.enumerated().map { index, tab in
+            (tab.id, DrawerItem(kind: .file, displayName: "Folder \(index)", slot: 0))
+        })
+        let drawer = try makeDrawer { tab in
+            DrawerListing(items: items[tab.id].map { [$0] } ?? [], truncated: false, folderURL: tab.folderURL)
+        }
+        for tab in tabs {
+            try show(tab, in: drawer)
+            spin { drawer.model.items == [items[tab.id]!] && !drawer.model.isLoadingListing }
+            XCTAssertEqual(drawer.model.items, [items[tab.id]!])
+            drawer.hide(duration: 0)
+        }
+
+        try show(tabs[1], in: drawer)
+        XCTAssertEqual(drawer.model.items, [items[tabs[1].id]!],
+                       "Storing one listing past the limit keeps the others")
+        drawer.hide(duration: 0)
+        try show(tabs[0], in: drawer)
+        XCTAssertTrue(drawer.model.items.isEmpty, "The listing stored longest ago is the one dropped")
+    }
+
     func testDirectScanFreshShowsLoadingUntilItsFirstReply() throws {
         let drawer = try makeDrawer(configure: { $0.freshDirectScan = true }) { _ in
             XCTFail("Fresh is gathered by TabController")
@@ -250,6 +360,16 @@ final class DrawerListingControllerTests: XCTestCase {
     private func show(_ tab: Tab, in drawer: DrawerWindowController) throws {
         guard let screen = NSScreen.main else { throw XCTSkip("Requires a screen") }
         drawer.show(tab: tab, tabFrame: restingFrame(on: screen), edge: .left, on: screen, duration: 0)
+    }
+
+    /// Runs the main run loop until `condition` holds (or five seconds pass), for
+    /// loops too long for `XCTNSPredicateExpectation`'s coarse polling.
+    private func spin(until condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertTrue(condition(), "Timed out waiting for the drawer", file: file, line: line)
     }
 
     private func waitForItems(_ items: [DrawerItem], in drawer: DrawerWindowController) {
