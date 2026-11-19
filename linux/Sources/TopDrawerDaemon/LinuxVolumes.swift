@@ -115,21 +115,34 @@ public enum VolumeClassifier {
     ]
 
     /// Mount points we never surface even with a real fstype (system areas).
-    static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap", "/var/lib/docker"]
+    /// `/home` is deliberately absent: a prefix would also hide data drives mounted
+    /// *inside* the user's home (`$HOME/Games`, `$HOME/VMs`) that are safe to eject.
+    /// A mount exactly at `/home` is excluded on its own (see `classify`).
+    static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap",
+                                 "/usr", "/var", "/opt", "/etc", "/root"]
 
     /// - Parameters:
     ///   - mounts: parsed `/proc/self/mountinfo`.
     ///   - user: `$USER`, for the `/media/$USER` + `/run/media/$USER` removable convention.
     ///   - isRemovable: whether a block device is removable (`/sys/block/<base>/removable`).
     ///   - dropboxRoots: cloud folders that aren't mounts (e.g. from `~/.dropbox/info.json`).
+    ///   - home: `$HOME`; a mount at or above it (a separate `/home`, `/users`, …) holds
+    ///     the running system's data and is never ejectable, same as `/` itself.
     public static func classify(mounts: [RawMount], user: String,
                                 isRemovable: (String) -> Bool,
-                                dropboxRoots: [String] = []) -> [LinuxVolume] {
+                                dropboxRoots: [String] = [],
+                                home: String = "") -> [LinuxVolume] {
         var volumes: [LinuxVolume] = []
         var seenPaths = Set<String>()
 
         for mount in mounts {
+            // `/home` holds every user's data even when `$HOME` lives elsewhere or
+            // is unset (a service started without it), where the ancestor check
+            // can't see it.
             guard !pseudoFSTypes.contains(mount.fsType),
+                  mount.mountPoint != "/",
+                  mount.mountPoint != "/home",
+                  !isAtOrAbove(mount.mountPoint, of: home),
                   !systemPrefixes.contains(where: { mount.mountPoint == $0 || mount.mountPoint.hasPrefix($0 + "/") }),
                   !seenPaths.contains(mount.mountPoint) else { continue }
 
@@ -145,6 +158,13 @@ public enum VolumeClassifier {
         }
 
         return volumes.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// `path` is `base` itself or a directory above it — ejecting such a mount removes
+    /// the base directory (a home mount, or a partition `home` lives on) from under the
+    /// running system.
+    private static func isAtOrAbove(_ path: String, of base: String) -> Bool {
+        !base.isEmpty && (path == base || base.hasPrefix(path + "/"))
     }
 
     private static func classifyOne(_ mount: RawMount, user: String,
@@ -206,7 +226,9 @@ public struct ProcMounts: VolumeSnapshotProviding {
             mounts: MountInfoParser.parse(mountinfo),
             user: user,
             isRemovable: Self.isRemovable(device:),
-            dropboxRoots: dropboxRoots())
+            dropboxRoots: dropboxRoots(),
+            home: ProcessInfo.processInfo.environment["HOME"].flatMap { $0.isEmpty ? nil : $0 }
+                ?? NSHomeDirectory())
     }
 
     /// `true` when `device`'s parent block device is removable per
