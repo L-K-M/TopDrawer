@@ -311,8 +311,14 @@ private struct TabEditor: View {
                                 Button(item.isLocked ? "Unlock Item" : "Lock Item") {
                                     store.setItemLock(item.isLocked ? .unlocked : .locked, forItem: item.id, inTab: tab.id)
                                 }
-                                Button("Remove", role: .destructive) {
-                                    store.removeItem(id: item.id, fromTab: tab.id)
+                                // A group dissolves, as the drawer's Delete Group does:
+                                // its launchers return to the top level.
+                                Button(item.isGroup ? "Remove Group" : "Remove", role: .destructive) {
+                                    if item.isGroup {
+                                        store.dissolveGroup(id: item.id, fromTab: tab.id)
+                                    } else {
+                                        store.removeItem(id: item.id, fromTab: tab.id)
+                                    }
                                 }
                                 .disabled(store.isItemEditingLocked(item.id, inTab: tab.id))
                             }
