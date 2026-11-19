@@ -203,6 +203,35 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertNil(restored.persistenceError)
     }
 
+    func testAnUnreadableEntryIsSkippedWithoutHidingTheRest() throws {
+        let url = makeStoreURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let kept = ClipboardEntry(id: UUID(), text: "kept", date: Date(timeIntervalSince1970: 1))
+        let readable = try XCTUnwrap(String(data: JSONEncoder().encode([kept]), encoding: .utf8))
+        // Well-formed JSON this build can't decode, under any date decoding strategy.
+        let archive = "[" + readable.dropFirst().dropLast()
+            + #",{"id":"\#(UUID().uuidString)","text":"newer","date":{"not":"a date"}}]"#
+        try Data(archive.utf8).write(to: url)
+
+        let history = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        XCTAssertEqual(history.entries, [kept])
+        XCTAssertNil(history.persistenceError)
+    }
+
+    func testAnArchiveWithNoReadableEntryIsKept() throws {
+        let url = makeStoreURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let archive = Data(#"[{"id":"\#(UUID().uuidString)","text":"newer","date":{"not":"a date"}}]"#.utf8)
+        try archive.write(to: url)
+
+        let history = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        XCTAssertTrue(history.entries.isEmpty)
+        XCTAssertNotNil(history.persistenceError)
+        history.record("temporary")
+        history.saveNow()
+        XCTAssertEqual(try Data(contentsOf: url), archive, "Nothing readable: keep the archive until Clear")
+    }
+
     func testUnreadableArchiveSurvivesQuitUntilExplicitlyCleared() throws {
         let url = makeStoreURL()
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
