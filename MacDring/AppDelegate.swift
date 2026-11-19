@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             seedStarterTab()
         }
         controller.onOpenSettings = { [weak self] tabID in self?.settingsWindow.show(selectTab: tabID) }
+        settingsWindow.onLocateTab = { [weak self] tabID in self?.controller.locate(tabID: tabID) }
         setUpStatusItem()
         controller.start()
         store.remintStaleBookmarks()   // heal bookmarks whose targets moved/renamed

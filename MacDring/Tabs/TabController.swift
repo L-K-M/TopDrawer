@@ -488,6 +488,20 @@ final class TabController {
         toggleDrawer(tabID)
     }
 
+    /// Briefly outlines a tab’s pill so it can be found from Settings’ tab list.
+    /// Never opens the drawer or moves the tab; a parked tab has no pill on screen,
+    /// so there is nothing to highlight.
+    func locate(tabID: UUID) {
+        guard let wc = tabWindows[tabID], wc.isShown else {
+            // The Locate button is disabled for parked tabs, so this is unreachable
+            // today; log it so a future hidden state surfaces instead of failing
+            // silently (parking is currently the only thing that hides a pill).
+            NSLog("Top Drawer: locate(tabID:) ignored — no visible pill for \(tabID)")
+            return
+        }
+        wc.locate()
+    }
+
     private func toggleDrawer(_ id: UUID) {
         if openTabID == id { closeDrawer() } else { openDrawer(id) }
     }

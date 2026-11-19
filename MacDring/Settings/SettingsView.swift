@@ -8,6 +8,8 @@ struct SettingsView: View {
     let registry: DisplayRegistry
     @ObservedObject var router: SettingsRouter
     @ObservedObject var updateChecker: UpdateChecker
+    /// Asks the app to briefly outline a tab’s pill (the Tabs pane’s “Locate Tab”).
+    let onLocateTab: (UUID) -> Void
 
     var body: some View {
         TabView(selection: $router.section) {
@@ -19,7 +21,8 @@ struct SettingsView: View {
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
                 .tag(SettingsSection.appearance)
 
-            TabsView(preferences: preferences, store: store, registry: registry, router: router)
+            TabsView(preferences: preferences, store: store, registry: registry, router: router,
+                     onLocateTab: onLocateTab)
                 .tabItem { Label("Tabs", systemImage: "square.grid.2x2") }
                 .tag(SettingsSection.tabs)
 

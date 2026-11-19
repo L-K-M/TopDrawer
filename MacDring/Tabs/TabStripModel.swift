@@ -29,6 +29,9 @@ final class TabStripModel: ObservableObject {
     /// Something landed recently (a Fresh tab whose newest item is within the recent
     /// window) — drives the "just landed" dot on the closed pill.
     @Published var hasRecentArrival: Bool = false
+    /// A “Locate Tab” request from Settings is outlining the pill so it can be found.
+    /// A static ring (no size change, no motion) that clears itself after a moment.
+    @Published var isLocating: Bool = false
     /// The tab's global hotkey as symbols (`⌃⌥A`) while it is registered, so the
     /// pill can advertise it; `nil` without one, or when macOS refused it.
     @Published var hotkeyLabel: String?

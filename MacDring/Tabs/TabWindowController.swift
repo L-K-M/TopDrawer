@@ -56,6 +56,8 @@ final class TabWindowController {
     /// re-arm the frame-defender while a later one is still running. See BACKLOG.md's legacy ID index (B8).
     private var frameAdjustmentDepth = 0
     private var frameObservers: [NSObjectProtocol] = []
+    /// Clears the “Locate Tab” outline; cancelled and re-armed on each request.
+    private var locateWork: DispatchWorkItem?
 
     // Controller hooks.
     var onTap: (() -> Void)?
@@ -433,7 +435,22 @@ final class TabWindowController {
     func show() { panel.orderFrontRegardless() }
     func hide() { panel.orderOut(nil) }
 
+    /// Briefly outlines the pill so it can be found from Settings’ tab list. Orders the
+    /// panel forward — it is non-activating, so this never steals keyboard focus — and
+    /// clears the ring after a moment. Repeated requests restart the window.
+    func locate() {
+        locateWork?.cancel()
+        model.isLocating = true
+        panel.orderFrontRegardless()
+        let work = DispatchWorkItem { [weak self] in self?.model.isLocating = false }
+        locateWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: work)
+    }
+
     func close() {
+        locateWork?.cancel()
+        locateWork = nil
+        model.isLocating = false   // the cancelled work item can’t clear it any more
         panel.orderOut(nil)
         panel.contentView = nil
     }
