@@ -92,6 +92,9 @@ final class TabWindowController {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
+        // The pill never activates the app or becomes key, and AppKit otherwise shows
+        // tooltips only there, so without this the pill's `.help` never appeared.
+        panel.allowsToolTipsWhenApplicationIsInactive = true
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
         panel.isMovable = false   // we position it programmatically; deter window drags
