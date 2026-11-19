@@ -45,7 +45,7 @@ struct AppearanceView: View {
                 Text("Side tabs (left/right edges) print their name vertically, so longer names fit. Auto-fade opacity sets how faint an idle auto-fading tab gets (Tabs → When idle).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                ColorPicker("Default color for new tabs", selection: defaultColorBinding, supportsOpacity: false)
+                ColorSwatchPicker(title: "Default color for new tabs", hex: $preferences.defaultTabColorHex)
             }
 
             Section("Notes") {
@@ -57,13 +57,6 @@ struct AppearanceView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-    }
-
-    private var defaultColorBinding: Binding<Color> {
-        Binding(
-            get: { Color(hexString: preferences.defaultTabColorHex) },
-            set: { preferences.defaultTabColorHex = $0.hexString }
-        )
     }
 
     // MARK: Live preview

@@ -47,7 +47,7 @@ struct IconEditorView: View {
                         ForEach(IconStyle.Base.allCases) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    ColorPicker("Color", selection: colorBinding, supportsOpacity: false)
+                    ColorSwatchPicker(title: "Color", hex: $colorHex)
                     LabeledContent("Symbol") {
                         HStack(spacing: 6) {
                             SymbolPickerView(symbolName: $symbol)
@@ -73,9 +73,5 @@ struct IconEditorView: View {
         }
         .padding(20)
         .frame(width: 460)
-    }
-
-    private var colorBinding: Binding<Color> {
-        Binding(get: { Color(hexString: colorHex) }, set: { colorHex = $0.hexString })
     }
 }
