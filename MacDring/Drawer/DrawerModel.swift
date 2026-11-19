@@ -200,14 +200,24 @@ final class DrawerModel: ObservableObject {
         if target.isGroup { openGroupID = target.id } else { onLaunch?(target) }
     }
 
-    func previewSelection() {
-        guard kind != .clipboard, let selectedItemID,
-              let item = displayedItems.first(where: { $0.id == selectedItemID }) else { return }
+    /// Previews the selected item, or the top visible item when nothing is
+    /// selected. Returns whether a preview was actually triggered, so the key
+    /// handler can leave Space to the app when there is nothing to preview.
+    @discardableResult
+    func previewSelection() -> Bool {
+        guard kind != .clipboard else { return false }
+        // Same top-result fallback as Return, so Space is useful before any
+        // arrow-key selection and while a filter is active.
+        let item = selectedItemID.flatMap { id in displayedItems.first { $0.id == id } } ?? displayedItems.first
+        guard let item else { return false }
         if item.kind == .url, let url = item.url, ItemPreviewPolicy.isWebsite(url) {
             onPreviewWebsite?(item)
+            return true
         } else if item.kind == .file || item.kind == .folder {
             onPreviewItem?(item)
+            return true
         }
+        return false
     }
 
     func isEditingLocked(_ item: DrawerItem) -> Bool {
