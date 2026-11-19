@@ -109,9 +109,9 @@ public enum VolumeClassifier {
     ]
 
     /// Mount points we never surface even with a real fstype (system areas).
-    /// `/home` is deliberately absent: the `home` ancestor check already excludes a
-    /// mount at or above `$HOME`, and a prefix would also hide data drives mounted
+    /// `/home` is deliberately absent: a prefix would also hide data drives mounted
     /// *inside* the user's home (`$HOME/Games`, `$HOME/VMs`) that are safe to eject.
+    /// A mount exactly at `/home` is excluded on its own (see `classify`).
     static let systemPrefixes = ["/boot", "/proc", "/sys", "/dev", "/snap",
                                  "/usr", "/var", "/opt", "/etc", "/root"]
 
@@ -130,8 +130,12 @@ public enum VolumeClassifier {
         var seenPaths = Set<String>()
 
         for mount in mounts {
+            // `/home` holds every user's data even when `$HOME` lives elsewhere or
+            // is unset (a service started without it), where the ancestor check
+            // can't see it.
             guard !pseudoFSTypes.contains(mount.fsType),
                   mount.mountPoint != "/",
+                  mount.mountPoint != "/home",
                   !isAtOrAbove(mount.mountPoint, of: home),
                   !systemPrefixes.contains(where: { mount.mountPoint == $0 || mount.mountPoint.hasPrefix($0 + "/") }),
                   !seenPaths.contains(mount.mountPoint) else { continue }

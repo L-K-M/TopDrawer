@@ -126,6 +126,19 @@ final class LinuxVolumesTests: XCTestCase {
                        "a removable mount outside system areas still qualifies")
     }
 
+    /// `/home` holds other users' data, so it stays excluded when `$HOME` lives
+    /// elsewhere or is unknown and the ancestor check can't cover it.
+    func testClassifyNeverOffersHomeMountWhenHomeIsElsewhereOrUnset() {
+        let line = "31 30 8:33 / /home rw,relatime shared:2 - ext4 /dev/sda1 rw"
+        for home in ["/users/alice", ""] {
+            let volumes = VolumeClassifier.classify(
+                mounts: MountInfoParser.parse(line), user: "alice",
+                isRemovable: { _ in true },
+                home: home)
+            XCTAssertTrue(volumes.isEmpty, "home \"\(home)\" must not expose /home")
+        }
+    }
+
     /// A data drive mounted *inside* the user's home (`$HOME/Games`) is below `$HOME`,
     /// not at or above it — the ancestor check leaves it alone, and no system prefix
     /// should either: ejecting a second disk there is safe and expected.
