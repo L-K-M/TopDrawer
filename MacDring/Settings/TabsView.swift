@@ -143,7 +143,10 @@ struct TabsView: View {
             colorHex: preferences.defaultTabColorHex,
             glyph: .symbol("folder.fill"),
             anchor: ScreenAnchor(displayUUID: uuid, edge: .right, position: 0.5, order: order),
-            behavior: preferences.newTabBehavior
+            behavior: preferences.newTabBehavior,
+            // The General pane's "New tab defaults" apply here as in the New Tab dialog.
+            gridColumns: Int(preferences.gridColumns),
+            gridRows: Int(preferences.gridRows)
         )
         store.addTab(tab)
         selection = tab.id
