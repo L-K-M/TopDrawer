@@ -234,7 +234,8 @@ struct NotesEditorNativeView: NSViewRepresentable {
             guard textView.visibleRect.contains(point), let storage = textView.textStorage else { return event }
             let insertion = textView.characterIndexForInsertion(at: point)
             let activation: NotesEditorLinkInteraction.Activation =
-                modifiers.intersection([.command, .control]).isEmpty ? .edit : .open
+                !modifiers.intersection([.command, .control]).isEmpty ? .open
+                : modifiers.contains(.shift) ? .extendSelection : .edit
             switch linkInteraction.activate(at: insertion, in: storage, as: activation,
                                             clickCount: event.clickCount) {
             case .open(let url):

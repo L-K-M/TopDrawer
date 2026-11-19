@@ -19,6 +19,18 @@ final class NotesEditorLinkInteractionTests: XCTestCase {
         XCTAssertEqual(storage.string, "Open link now")
     }
 
+    func testShiftClickOnALinkPassesThroughToExtendTheSelection() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/note"))
+        let storage = NSTextStorage(string: "Open link now")
+        let range = (storage.string as NSString).range(of: "link")
+        storage.addAttribute(.link, value: url, range: range)
+        let interaction = NotesEditorLinkInteraction()
+
+        XCTAssertEqual(interaction.activate(at: range.location, in: storage, as: .extendSelection,
+                                            clickCount: 1), .passthrough)
+        XCTAssertNotNil(storage.attribute(.link, at: range.location, effectiveRange: nil))
+    }
+
     func testCommandClickOpensAfterAPlainClick() throws {
         let url = try XCTUnwrap(URL(string: "https://example.com/note"))
         let storage = NSTextStorage(string: "link")

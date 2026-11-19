@@ -3,7 +3,9 @@ import AppKit
 
 /// Keeps native link editing separate from host-controlled URL activation.
 struct NotesEditorLinkInteraction {
-    enum Activation { case edit, open }
+    /// What the click asks for: `edit` (plain), `open` (⌘ or ⌃), or
+    /// `extendSelection` (⇧), which must reach the text view untouched.
+    enum Activation { case edit, open, extendSelection }
 
     /// What the host should do with the gesture.
     enum Outcome: Equatable {
@@ -25,7 +27,8 @@ struct NotesEditorLinkInteraction {
                   as activation: Activation, clickCount: Int) -> Outcome {
         guard insertion >= 0, insertion <= storage.length else { return .passthrough }
         // clickCount ≥ 2 is word/line selection, not navigation — let it through.
-        guard clickCount <= 1 else { return .passthrough }
+        // So is a Shift-click: parking the caret would collapse the selection it extends.
+        guard clickCount <= 1, activation != .extendSelection else { return .passthrough }
         let candidates = [insertion, insertion - 1].filter { $0 >= 0 && $0 < storage.length }
         guard let link = nativeLink(at: candidates, in: storage) else { return .passthrough }
 
