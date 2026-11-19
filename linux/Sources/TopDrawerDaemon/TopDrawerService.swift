@@ -323,11 +323,23 @@ public actor TopDrawerService {
     /// Runs a synchronous, potentially blocking call off the D-Bus actor. The object
     /// server is an actor, so a blocking subprocess inside a handler (the eject chain
     /// alone can take ~20s) stalls every other method — Ping included — behind it.
-    /// `Task.detached` drops the work onto the global concurrency pool; the handler
-    /// still awaits the result before replying, so the method contract is unchanged.
+    /// The handler still awaits the result before replying, so the method contract is
+    /// unchanged.
+    ///
+    /// The work runs on a dispatch queue, not `Task.detached`: the concurrency pool
+    /// has one thread per core and must never block, so a few slow ejects or
+    /// launches there would starve every other task in the daemon. Dispatch adds
+    /// threads for blocked work instead.
     private static func offloaded<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
-        await Task.detached(priority: nil, operation: work).value
+        await withCheckedContinuation { continuation in
+            blockingWorkQueue.async { continuation.resume(returning: work()) }
+        }
     }
+
+    /// Where `offloaded` runs blocking calls. Concurrent, so one slow eject doesn't
+    /// hold up a launch or a reveal behind it.
+    private static let blockingWorkQueue = DispatchQueue(label: "TopDrawerService.blocking",
+                                                         qos: .userInitiated, attributes: .concurrent)
 
     // MARK: - Bus name
 
