@@ -1814,9 +1814,9 @@ final class TabController {
         // Match the physical bracket keys, not the characters they produce: on layouts
         // where [ and ] need Option (German, French…), a character match makes ⌘[
         // unreachable because .option then shows up in the modifier mask. ⇧⌘[ / ⇧⌘]
-        // also cycle — browsers use them for previous/next tab. Caps Lock is noise.
-        let cyclingModifiers = event.modifierFlags
-            .intersection(.deviceIndependentFlagsMask).subtracting(.capsLock)
+        // also cycle — browsers use them for previous/next tab. Only the four chord
+        // modifiers count: Caps Lock, Fn and the keypad flag are noise here.
+        let cyclingModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         if model.kind != .notes, cyclingModifiers == .command || cyclingModifiers == [.command, .shift],
            let id = openTabID {
             switch event.keyCode {
