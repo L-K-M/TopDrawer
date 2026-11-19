@@ -44,6 +44,8 @@ struct FolderBrowserView: View {
                                      onPreview: item.kind == .file || item.kind == .folder ? { onPreview(item) } : nil,
                                      onLaunchExternally: item.kind == .folder ? { onLaunch(item) } : nil)
                                 .padding(.vertical, 3)
+                                .padding(.horizontal, 4)
+                                .hoverHighlight(cornerRadius: 6)
                         }
                     }
                 }
