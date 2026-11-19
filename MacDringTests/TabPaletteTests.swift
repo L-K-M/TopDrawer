@@ -1,4 +1,5 @@
 import XCTest
+import LiveryKit
 @testable import MacDring
 
 final class TabPaletteTests: XCTestCase {

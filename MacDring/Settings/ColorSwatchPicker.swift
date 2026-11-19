@@ -1,4 +1,5 @@
 import SwiftUI
+import LiveryKit
 
 /// A color row for Settings and the New Tab and icon editors: the curated
 /// `TabPalette` swatches for one-click choices, then the system color well for
