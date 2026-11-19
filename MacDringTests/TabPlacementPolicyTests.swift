@@ -131,4 +131,73 @@ final class TabPlacementPolicyTests: XCTestCase {
         XCTAssertLessThanOrEqual(delta, 0.5, "precondition: but only by float noise (≤ 0.5pt)")
         XCTAssertNil(nudgedResult.persistedPosition, "a sub-threshold nudge is not persisted")
     }
+
+    // MARK: Settings list reorder
+
+    private func tab(_ id: UUID, display: String, edge: Edge, order: Int) -> Tab {
+        Tab(id: id, title: "Tab", colorHex: "#0A84FF",
+            anchor: ScreenAnchor(displayUUID: display, edge: edge, position: 0.5, order: order),
+            kind: .items)
+    }
+
+    func testReorderRenumbersOnlyTheMovedTabsOwnEdge() {
+        let a = UUID(), b = UUID(), c = UUID(), d = UUID()
+        let tabs = [
+            tab(a, display: "D1", edge: .right, order: 0),
+            tab(b, display: "D1", edge: .right, order: 1),
+            tab(c, display: "D1", edge: .left, order: 7),   // unrelated edge, gapped order
+            tab(d, display: "D2", edge: .right, order: 3),   // unrelated display
+        ]
+        // Move the last tab (d, D2) to the front — only D2's group is affected.
+        let result = TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet(integer: 3), to: 0)
+        XCTAssertEqual(result.map(\.id), [d, a, b, c])
+        XCTAssertEqual(result[0].anchor.order, 0, "the moved tab's edge is renumbered")
+        XCTAssertEqual(result[1].anchor.order, 0, "D1/right is untouched")
+        XCTAssertEqual(result[2].anchor.order, 1)
+        XCTAssertEqual(result[3].anchor.order, 7, "an unrelated edge keeps its gap")
+    }
+
+    func testReorderWithinAnEdgeFollowsTheListAndLeavesOtherEdgesAlone() {
+        let a = UUID(), b = UUID(), c = UUID(), x = UUID()
+        let tabs = [
+            tab(a, display: "D1", edge: .right, order: 0),
+            tab(b, display: "D1", edge: .right, order: 1),
+            tab(c, display: "D1", edge: .right, order: 2),
+            tab(x, display: "D1", edge: .bottom, order: 9),
+        ]
+        // Move the first tab below the last: the right-edge order becomes b, c, a.
+        let result = TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet(integer: 0), to: 3)
+        XCTAssertEqual(result.map(\.id), [b, c, a, x])
+        XCTAssertEqual(result.filter { $0.anchor.edge == .right }.map(\.anchor.order), [0, 1, 2])
+        XCTAssertEqual(result.last?.anchor.order, 9, "the bottom edge is not renumbered")
+    }
+
+    func testReorderWithNoSelectionIsANoOp() {
+        let a = UUID(), b = UUID()
+        let tabs = [tab(a, display: "D1", edge: .right, order: 0),
+                    tab(b, display: "D1", edge: .right, order: 1)]
+        XCTAssertEqual(TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet(), to: 0), tabs)
+    }
+
+    func testReorderAcrossTwoGroupsRenumbersBoth() {
+        let a = UUID(), b = UUID(), x = UUID(), y = UUID()
+        let tabs = [
+            tab(a, display: "D1", edge: .right, order: 0),
+            tab(b, display: "D1", edge: .right, order: 1),
+            tab(x, display: "D1", edge: .left, order: 4),
+            tab(y, display: "D1", edge: .left, order: 5),
+        ]
+        // Multi-select the last tab of each stack and drop both at the top: both
+        // groups' relative order changes, so both are renumbered.
+        let result = TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet([1, 3]), to: 0)
+        XCTAssertEqual(result.map(\.id), [b, y, a, x])
+        XCTAssertEqual(result.filter { $0.anchor.edge == .right }.map(\.anchor.order), [0, 1])
+        XCTAssertEqual(result.filter { $0.anchor.edge == .left }.map(\.anchor.order), [0, 1])
+    }
+
+    func testReorderWithStaleIndicesIsANoOp() {
+        let a = UUID()
+        let tabs = [tab(a, display: "D1", edge: .right, order: 0)]
+        XCTAssertEqual(TabPlacementPolicy.reorderedTabs(tabs, moving: IndexSet(integer: 4), to: 0), tabs)
+    }
 }

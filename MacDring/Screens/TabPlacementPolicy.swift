@@ -92,6 +92,48 @@ enum TabPlacementPolicy {
         }
         return results
     }
+
+    // MARK: Settings list reorder — stack order after a move
+
+    /// The stack a tab's `order` belongs to: `order` is a per-edge index, so tabs on
+    /// different displays or edges never compete for a position.
+    struct TabStackKey: Hashable {
+        let displayUUID: String
+        let edge: Edge
+    }
+
+    /// Returns `tabs` after a list move (`offsets` → `destination`), renumbering stack
+    /// `order` so an edge's stacking follows the list order. Only the moved tabs' own
+    /// (display, edge) groups can change relative order, so every other group keeps its
+    /// persisted order — including any gaps — instead of being renumbered globally on
+    /// every move.
+    static func reorderedTabs(_ tabs: [Tab], moving offsets: IndexSet, to destination: Int) -> [Tab] {
+        var result = tabs
+        // A stale index would trap; an invalid move is a no-op. (`ScreenAnchor.order`
+        // clamps itself in its `didSet`, so the sequential values below need no
+        // explicit `clampedOrder`.)
+        guard offsets.allSatisfy({ tabs.indices.contains($0) }) else { return result }
+        let movedKeys = Set(offsets.map {
+            TabStackKey(displayUUID: tabs[$0].anchor.displayUUID, edge: tabs[$0].anchor.edge)
+        })
+        guard !movedKeys.isEmpty else { return result }
+        // `move(fromOffsets:toOffset:)` is a Darwin-only stdlib extension, so do the
+        // removal/insertion directly with the same semantics (the destination is in the
+        // original array’s coordinate space, so subtract the removed indices before it).
+        let moved = offsets.sorted().map { tabs[$0] }
+        for index in offsets.sorted(by: >) { result.remove(at: index) }
+        let insertion = max(0, min(destination - offsets.filter { $0 < destination }.count, result.count))
+        result.insert(contentsOf: moved, at: insertion)
+        var nextOrder: [TabStackKey: Int] = [:]
+        for index in result.indices {
+            let key = TabStackKey(displayUUID: result[index].anchor.displayUUID, edge: result[index].anchor.edge)
+            guard movedKeys.contains(key) else { continue }
+            let order = nextOrder[key, default: 0]
+            if result[index].anchor.order != order { result[index].anchor.order = order }
+            nextOrder[key] = order + 1
+        }
+        return result
+    }
 }
 
 extension TabPlacementPolicy.TabPlacement: Equatable where Display: Equatable {}

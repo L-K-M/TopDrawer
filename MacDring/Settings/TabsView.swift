@@ -155,15 +155,10 @@ struct TabsView: View {
         selection = store.tabs.first?.id
     }
 
-    /// Reorders the tab list, renumbering each tab's stack `order` to its new
-    /// position so tabs sharing an edge restack to match the list.
+    /// Reorders the tab list so tabs sharing an edge restack to match it. The pure
+    /// reorder renumbers only the moved tabs' own edges — see `TabPlacementPolicy`.
     private func moveTabs(from offsets: IndexSet, to destination: Int) {
-        var tabs = store.tabs
-        tabs.move(fromOffsets: offsets, toOffset: destination)
-        for index in tabs.indices {
-            tabs[index].anchor.order = PersistedLayoutBounds.clampedOrder(index)
-        }
-        store.replaceTabs(tabs)
+        store.replaceTabs(TabPlacementPolicy.reorderedTabs(store.tabs, moving: offsets, to: destination))
     }
 }
 
