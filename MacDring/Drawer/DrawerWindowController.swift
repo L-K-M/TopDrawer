@@ -9,6 +9,18 @@ import SwiftUI
 /// `model.externalDropTargetFrames` (reported by the displayed SwiftUI content in
 /// this view's coordinate space) and routed through `model.onDropFiles`. Also accepts
 /// the first mouse click while non-key.
+/// The source of drag-out sessions started from the drawer. A separate object
+/// because NSHostingView's own `NSDraggingSource` methods are public but not open,
+/// so the hosting view can't override them.
+private final class DrawerDragOutSource: NSObject, NSDraggingSource {
+    func draggingSession(_ session: NSDraggingSession,
+                         sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        // Copy out, as dragging from Finder does. Nothing inside Top Drawer takes the
+        // drag: dropping it on a folder item in a drawer would move the file itself.
+        context == .outsideApplication ? .copy : []
+    }
+}
+
 private final class DrawerHostingView: NSHostingView<DrawerView> {
     /// Wired by the controller right after construction (the same model the
     /// SwiftUI `DrawerView` observes), used to read target frames + the tab kind and
@@ -59,6 +71,27 @@ private final class DrawerHostingView: NSHostingView<DrawerView> {
     private func pasteboardOptions(for model: DrawerModel) -> [NSPasteboard.ReadingOptionKey: Any] {
         [.urlReadingFileURLsOnly: model.kind == .folder]
     }
+
+    /// Hands `item` to the system as a real dragging session — drag-out to Finder,
+    /// Mail, an upload dialog… The SwiftUI reorder gesture calls this once a drag
+    /// wanders out of the drawer's content. Returns false when the item has no
+    /// resolvable URL or there is no live mouse event to attach the session to, so
+    /// the caller can fall back to plain reordering.
+    func startExternalDrag(of item: DrawerItem) -> Bool {
+        guard let url = BookmarkResolver.url(for: item),
+              let event = NSApp.currentEvent,
+              event.type == .leftMouseDragged || event.type == .leftMouseDown else { return false }
+        let draggingItem = NSDraggingItem(pasteboardWriter: url as NSURL)
+        let point = convert(event.locationInWindow, from: nil)
+        let size = NSSize(width: 32, height: 32)
+        draggingItem.setDraggingFrame(NSRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                                             width: size.width, height: size.height),
+                                      contents: ItemView.resolveIcon(item))
+        beginDraggingSession(with: [draggingItem], event: event, source: dragOutSource)
+        return true
+    }
+
+    private let dragOutSource = DrawerDragOutSource()
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { updateDrag(sender) }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { updateDrag(sender) }
@@ -157,6 +190,7 @@ final class DrawerWindowController {
 
         let hosting = DrawerHostingView(rootView: DrawerView(model: model, preferences: preferences))
         hosting.model = model
+        model.onDragOutItem = { [weak hosting] item in hosting?.startExternalDrag(of: item) ?? false }
         hosting.registerForDraggedTypes([.fileURL, .URL])
         hosting.translatesAutoresizingMaskIntoConstraints = true
         hosting.autoresizingMask = [.width, .height]
