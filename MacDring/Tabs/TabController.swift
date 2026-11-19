@@ -1820,10 +1820,10 @@ final class TabController {
         if model.kind != .notes, cyclingModifiers == .command || cyclingModifiers == [.command, .shift],
            let id = openTabID {
             switch event.keyCode {
-            case UInt16(kVK_LeftBracket):
+            case UInt16(kVK_ANSI_LeftBracket):
                 cycleTab(from: id, direction: .previous)
                 return nil
-            case UInt16(kVK_RightBracket):
+            case UInt16(kVK_ANSI_RightBracket):
                 cycleTab(from: id, direction: .next)
                 return nil
             default:
