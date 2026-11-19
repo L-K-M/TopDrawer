@@ -67,6 +67,25 @@ final class TopDrawerServiceTests: XCTestCase {
         }
     }
 
+    /// A blocking subprocess inside a method handler must not hold the object-server
+    /// actor: while a 1s `Launch` is in flight, `Ping` still has to answer. (With the
+    /// handler running the launch synchronously, this Ping would sit behind the whole
+    /// second and `launchInFlight` would already be false when the reply arrived.)
+    func testPingAnswersWhileASlowLaunchIsInFlight() async throws {
+        let json = #"{"version":1,"tabs":[{"id":"t","items":[{"id":"slow-item","kind":"file","displayName":"S","url":"file:///tmp/s"}]}]}"#
+        try json.write(to: launcherURL, atomically: true, encoding: .utf8)
+        let slow = BlockingLauncher(delay: 1)
+        startServer(launcher: slow)
+        try await withClient { client in
+            _ = try await self.callReady(client, method: "Ping")
+            async let launch = self.call(client, method: "Launch", body: [.string("slow-item")])
+            let ping = try await self.call(client, method: "Ping")
+            XCTAssertEqual(ping.body.first?.string, "topdrawerd \(TopDrawerService.version) alive")
+            XCTAssertTrue(slow.launchInFlight, "Ping returned only after Launch finished — the handler still blocks")
+            _ = try await launch
+        }
+    }
+
     func testIntrospectionExportsTheInterfaceMethodsAndSignal() async throws {
         startServer()
         try await withClient { client in
@@ -811,6 +830,28 @@ final class FakeRecorder: RecentsRecording, @unchecked Sendable {
         lock.lock(); _recorded.append((url, kind, name, date)); lock.unlock()
     }
     func recents(limit: Int) async -> [RecentFileHit] { Array(canned.prefix(limit)) }
+}
+
+/// A launcher whose `launch` sleeps — models a synchronous subprocess holding the
+/// object-server actor. `launchInFlight` lets a test prove a concurrent call was
+/// answered *during* the sleep, not after it.
+final class BlockingLauncher: LinuxLaunching, @unchecked Sendable {
+    private let lock = NSLock()
+    private var inFlight = false
+    private let delay: TimeInterval
+
+    init(delay: TimeInterval) { self.delay = delay }
+
+    var launchInFlight: Bool { lock.lock(); defer { lock.unlock() }; return inFlight }
+
+    func launch(_ item: LauncherItem) -> Bool {
+        lock.lock(); inFlight = true; lock.unlock()
+        Thread.sleep(forTimeInterval: delay)
+        lock.lock(); inFlight = false; lock.unlock()
+        return true
+    }
+    func openWith(desktopID: String, uris: [String]) -> Bool { true }
+    func reveal(uri: String) -> Bool { true }
 }
 
 /// A fixed running-apps set, so `GetRunningAppIDs` is deterministic without a real `/proc`.
