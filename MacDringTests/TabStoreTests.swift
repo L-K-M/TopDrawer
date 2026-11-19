@@ -536,6 +536,26 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(saved.first { $0.id == new.id }?.slot, 2)
     }
 
+    func testAddItemsIndexesNewGroupChildrenInInsertionOrder() throws {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        let first = DrawerItem(kind: .url, displayName: "First", url: URL(string: "https://first.example"))
+        let repeated = DrawerItem(kind: .url, displayName: "Repeated", url: first.url)
+        let child = DrawerItem(kind: .url, displayName: "New child", url: URL(string: "https://new.example"))
+        let group = DrawerItem(kind: .group, displayName: "Group", children: [repeated, child])
+        tab.items = [first]
+        store.addTab(tab)
+
+        let firstDrop = DrawerItem(kind: .url, displayName: "First drop", url: first.url)
+        let childDrop = DrawerItem(kind: .url, displayName: "Child drop", url: child.url)
+        let ids = store.addItems([group, firstDrop, childDrop], toTab: tab.id)
+
+        XCTAssertEqual(ids, [group.id, first.id, child.id])
+        let saved = try XCTUnwrap(store.tab(id: tab.id))
+        XCTAssertEqual(saved.items.map(\.id), [first.id, group.id])
+        XCTAssertEqual(saved.items.last?.children.map(\.id), [repeated.id, child.id])
+    }
+
     func testAddItemsPlacesExistingAndNewItemsFromTarget() {
         let store = TabStore(storeURL: storeURL)
         let tab = makeTab(); store.addTab(tab)

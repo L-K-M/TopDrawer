@@ -359,19 +359,41 @@ final class TabStore: ObservableObject {
         var addedItem = false
         var newIDs = Set<UUID>()
 
+        // Index in tab order as needed: even a small drop can find its first
+        // match without resolving bookmarks for every remaining item.
+        var candidates = tab.items.flattenedLaunchable()
+        var nextCandidate = 0
+        var targetIDs: [URL: UUID] = [:]
+
+        func existingID(for target: URL) -> UUID? {
+            if let id = targetIDs[target] { return id }
+
+            while nextCandidate < candidates.count {
+                let candidate = candidates[nextCandidate]
+                nextCandidate += 1
+                guard let url = BookmarkResolver.url(for: candidate)?.standardized else { continue }
+                if targetIDs[url] == nil { targetIDs[url] = candidate.id }
+                if url == target { return candidate.id }
+            }
+            return nil
+        }
+
         for item in items {
             let resultID: UUID
-            if let target = BookmarkResolver.url(for: item)?.standardized,
-               let existing = tab.items.flattenedLaunchable().first(where: {
-                   BookmarkResolver.url(for: $0)?.standardized == target
-               }) {
-                resultID = existing.id
+            let target = BookmarkResolver.url(for: item)?.standardized
+            if let target, let id = existingID(for: target) {
+                resultID = id
             } else {
                 var item = item
                 // `lockNewItems` locks new entries only — a deduplicated existing
                 // item keeps its own lock state.
                 if tab.lockNewItems { item.isLocked = true }
                 tab.items.append(item)
+                if item.isGroup {
+                    candidates.append(contentsOf: item.children)
+                } else if let target {
+                    targetIDs[target] = item.id
+                }
                 resultID = item.id
                 addedItem = true
                 newIDs.insert(item.id)
