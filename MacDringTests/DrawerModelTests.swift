@@ -105,6 +105,29 @@ final class DrawerModelTests: XCTestCase {
             id: topLevel.id, topLevelPlacementSlot: topLevel.slot)))
     }
 
+    func testErasingFilterClearsSelectionOfHiddenGroupChild() {
+        let model = DrawerModel()
+        let child = DrawerItem(kind: .file, displayName: "Needle", slot: 0)
+        let sibling = DrawerItem(kind: .file, displayName: "Other", slot: 1)
+        let group = DrawerItem(kind: .group, displayName: "Projects", slot: 0, children: [child, sibling])
+        let others = (1..<DrawerSearch.minItemsToShow).map {
+            DrawerItem(kind: .file, displayName: "File \($0)", slot: $0)
+        }
+        model.items = [group] + others
+        XCTAssertTrue(model.isSearchable)
+        model.searchQuery = "needle"
+        XCTAssertEqual(model.selectedItemID, child.id)
+
+        // Backspace updates the field binding directly.
+        model.searchQuery = ""
+        XCTAssertNil(model.selectedItemID)
+        // Return with no selection opens the first visible item.
+        model.launchSelection()
+        XCTAssertEqual(model.openGroupID, group.id)
+        model.moveSelection(.right)
+        XCTAssertEqual(model.selectedItemID, child.id)
+    }
+
     func testExternalDropTargetResolvesFlattenedSearchResult() {
         let model = DrawerModel()
         let topLevel = DrawerItem(kind: .file, displayName: "Unrelated", slot: 0)
