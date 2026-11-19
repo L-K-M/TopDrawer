@@ -19,9 +19,16 @@ struct DrawerView: View {
 
     @State private var dragging: DrawerItem?
     @State private var dragOffset: CGSize = .zero
-    /// Set once a gesture has handed its item to a native drag-out session, so the
-    /// rest of that gesture's events can't restart the SwiftUI reorder overlay.
-    @State private var dragOutStarted = false
+    /// The current reorder gesture's drag-out attempt, if it made one. Keyed by the
+    /// gesture's start point because a gesture whose pointer a native session took
+    /// over may never deliver `onEnded`: the next gesture starts elsewhere and so
+    /// starts clean.
+    @State private var dragOutAttempt: DragOutAttempt?
+
+    private struct DragOutAttempt: Equatable {
+        let gestureStart: CGPoint
+        let started: Bool
+    }
     @State private var slotFrames: [Int: CGRect] = [:]
     @State private var dropTargetSlot: Int?      // internal reorder target
     // The external file-drop target lives on the model so the AppKit-driven drop
@@ -488,24 +495,28 @@ struct DrawerView: View {
     private func reorderGesture(_ item: DrawerItem) -> some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .named(contentSpace))
             .onChanged { value in
-                // A drag that wanders out of the drawer's content is a drag to
-                // *another app*: hand the item to a real dragging session and stand
-                // down. This is what lets items-tab entries drag out to Finder or
-                // Mail like folder entries always could — inside the drawer the same
-                // gesture keeps reordering.
-                if shouldStartDragOut(of: item, at: value.location),
-                   model.onDragOutItem?(item) == true {
-                    // Session started: stand down and let the native drag run. When
-                    // it can't start (no resolvable URL), fall through and keep
-                    // reordering as before.
-                    dragOutStarted = true
-                    dragging = nil
-                    dragOffset = .zero
-                    dropTargetSlot = nil
-                    cancelDwell()
-                    return
+                if let attempt = dragOutAttempt, attempt.gestureStart != value.startLocation {
+                    dragOutAttempt = nil   // a new gesture
                 }
-                guard !dragOutStarted else { return }
+                // The native session owns this gesture's pointer now.
+                if dragOutAttempt?.started == true { return }
+                // A drag that leaves the reorder margin is a drag to *another app*:
+                // hand the item to a real dragging session and stand down. This is
+                // what lets items-tab entries drag out to Finder or Mail like folder
+                // entries always could — inside the drawer the same gesture keeps
+                // reordering. One attempt per gesture: an item with no resolvable URL
+                // keeps reordering instead of re-resolving on every pointer move.
+                if dragOutAttempt == nil, shouldStartDragOut(of: item, at: value.location) {
+                    let started = model.onDragOutItem?(item) == true
+                    dragOutAttempt = DragOutAttempt(gestureStart: value.startLocation, started: started)
+                    if started {
+                        dragging = nil
+                        dragOffset = .zero
+                        dropTargetSlot = nil
+                        cancelDwell()
+                        return
+                    }
+                }
                 if dragging?.id != item.id { dragging = item }
                 dragOffset = value.translation
                 let target = targetSlot(at: value.location)
@@ -513,8 +524,9 @@ struct DrawerView: View {
                 updateDwell(target: target, dragged: item)
             }
             .onEnded { value in
-                let wasDragOut = dragOutStarted
-                dragOutStarted = false
+                let wasDragOut = dragOutAttempt?.started == true
+                    && dragOutAttempt?.gestureStart == value.startLocation
+                dragOutAttempt = nil
                 dragging = nil
                 dragOffset = .zero
                 dropTargetSlot = nil
@@ -526,19 +538,14 @@ struct DrawerView: View {
             }
     }
 
-    /// How far outside the reported cell frames a reorder drag may wander before it
-    /// becomes a drag *out* to another app. The slop covers the drawer's padding and
-    /// row gaps so ordinary reorders (even across the grid) stay reorders.
-    private static let dragOutSlop: CGFloat = 24
-
-    /// Whether this drag has left the drawer's content far enough that the user must
-    /// mean "drag this somewhere else", not "drop it on another slot".
+    /// Whether this drag has left every slot by more than the reorder margin, where
+    /// releasing would cancel the reorder (`targetSlot`): the user must mean "drag
+    /// this somewhere else", not "drop it on another slot". Sharing the margin keeps
+    /// the two in step: inside it a drag reorders, past it a draggable item leaves
+    /// the drawer and anything else cancels on release.
     private func shouldStartDragOut(of item: DrawerItem, at point: CGPoint) -> Bool {
-        guard !dragOutStarted, item.kind != .group, !model.isEditingLocked(item) else { return false }
-        let frames = model.externalDropTargetFrames.values
-        guard !frames.isEmpty else { return false }
-        let grid = frames.reduce(CGRect.null) { $0.union($1) }
-        return !grid.insetBy(dx: -Self.dragOutSlop, dy: -Self.dragOutSlop).contains(point)
+        guard item.kind != .group, !model.isEditingLocked(item), !slotFrames.isEmpty else { return false }
+        return slotFrames.values.allSatisfy { edgeDistance($0, to: point) > Self.reorderDropMargin }
     }
 
     /// Resolves a finished drag. Top level: a dwell over another item forms a group,
@@ -596,11 +603,13 @@ struct DrawerView: View {
         // past a slot must keep working), but a point far outside the grid means the
         // drag was released out of the drawer — that cancels the reorder instead of
         // silently snapping, matching how every other drag destination works.
-        let dropMargin: CGFloat = 28
         guard let nearest = slotFrames.min(by: { edgeDistance($0.value, to: point) < edgeDistance($1.value, to: point) }),
-              edgeDistance(nearest.value, to: point) <= dropMargin else { return nil }
+              edgeDistance(nearest.value, to: point) <= Self.reorderDropMargin else { return nil }
         return nearest.key
     }
+
+    /// How far past the nearest slot a reorder drag still counts as a drop on it.
+    private static let reorderDropMargin: CGFloat = 28
 
     /// Distance from `point` to `rect` — 0 when inside, gap distance otherwise.
     /// (Center distance is wrong here: a slot at the panel edge reads "far" even
