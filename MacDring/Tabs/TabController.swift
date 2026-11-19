@@ -1084,17 +1084,17 @@ final class TabController {
         drawer.model.onRemoveItem = { [weak self] item in
             guard let self, let id = self.openTabID,
                   !self.drawer.model.isRemovalLocked(item) else { return }
+            // "Delete Group" dissolves the container and returns its children to the
+            // top level, so nothing vanishes and there is no poof.
+            if item.isGroup {
+                self.store.dissolveGroup(id: item.id, fromTab: id)
+                return
+            }
             // The classic poof, same as drop-on-Trash — physical feedback that the
             // item left the grid (only the launcher entry goes; the file stays put).
             NSAnimationEffect.poof.show(centeredAt: NSEvent.mouseLocation,
                                         size: NSSize(width: 32, height: 32), completionHandler: {})
-            // "Delete Group" dissolves the container and returns its children to the
-            // top level; plain Remove on a non-group item deletes as before.
-            if item.isGroup {
-                self.store.dissolveGroup(id: item.id, fromTab: id)
-            } else {
-                self.store.removeItem(id: item.id, fromTab: id)
-            }
+            self.store.removeItem(id: item.id, fromTab: id)
         }
         drawer.model.onRevealItem = { item in ItemLauncher.revealInFinder(item) }
         drawer.model.onEmptyTrash = { [weak self] in self?.emptyTrash() }

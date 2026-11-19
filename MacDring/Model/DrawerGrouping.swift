@@ -79,9 +79,21 @@ enum DrawerGrouping {
         var result = items
         let group = result.remove(at: index)
         var children = group.children.sorted { $0.slot < $1.slot }
-        // The first child inherits the group's slot so something lands where the group
-        // was; the rest take whatever free slots assigningMissingSlots finds.
-        for i in children.indices { children[i].slot = i == children.startIndex ? group.slot : -1 }
+        // The children keep their order: the first takes the group's slot, each next
+        // one the next free slot after it. Slots other items hold are walked past, so
+        // nothing else moves. Without a group slot, or past the grid's bounds, a child
+        // stays unassigned and assigningMissingSlots places it.
+        var taken = Set(result.map(\.slot).filter { $0 >= 0 })
+        var next = group.slot
+        for i in children.indices {
+            children[i].slot = -1
+            guard next >= 0 else { continue }
+            while next <= PersistedLayoutBounds.maximumSlotOrOrder, taken.contains(next) { next += 1 }
+            guard next <= PersistedLayoutBounds.maximumSlotOrOrder else { continue }
+            children[i].slot = next
+            taken.insert(next)
+            next += 1
+        }
         result.insert(contentsOf: children, at: index)
         return result.assigningMissingSlots()
     }

@@ -231,6 +231,23 @@ final class TabStoreTests: XCTestCase {
         XCTAssertEqual(items.map(\.id), [group.id], "a group with a locked child stays put")
     }
 
+    /// A locked group can't be dissolved either: its children would move.
+    func testDissolveGroupIsDeniedWhenTheGroupIsLocked() throws {
+        let store = TabStore(storeURL: storeURL)
+        var tab = makeTab()
+        let a = DrawerItem(kind: .application, displayName: "A", slot: 0)
+        let b = DrawerItem(kind: .application, displayName: "B", slot: 1)
+        var group = DrawerItem(kind: .group, displayName: "G", slot: 0, children: [a, b])
+        group.isLocked = true
+        tab.items = [group]
+        store.addTab(tab)
+
+        store.dissolveGroup(id: group.id, fromTab: tab.id)
+
+        let items = try XCTUnwrap(store.tab(id: tab.id)?.items)
+        XCTAssertEqual(items.map(\.id), [group.id], "a locked group stays put")
+    }
+
     func testSettingCustomIconBookmarkClearsGeneratedStyle() throws {
         let store = TabStore(storeURL: storeURL)
         let tab = makeTab()
