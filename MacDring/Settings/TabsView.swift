@@ -302,8 +302,7 @@ private struct TabEditor: View {
                     } else {
                         ForEach(currentTab.items) { item in
                             HStack(spacing: 8) {
-                                Image(nsImage: ItemView.resolveIcon(item))
-                                    .resizable().frame(width: 18, height: 18)
+                                AsyncItemIcon(item: item, size: 18)
                                 Text(item.displayName).lineLimit(1)
                                 if item.containsLockedItems { Image(systemName: "lock.fill").foregroundStyle(.secondary) }
                                 Spacer(minLength: 0)

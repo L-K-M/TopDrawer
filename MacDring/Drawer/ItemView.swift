@@ -500,7 +500,9 @@ struct ItemView: View {
 
     /// A 1×1 transparent image shown for the one frame before `.task` resolves the
     /// real icon (avoids a blocking `resolveIcon` in `body`).
-    private static let placeholder = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { _ in true }
+    /// Internal (not `private`) so `AsyncItemIcon` can show the same transparent
+    /// placeholder while its resolution task is in flight.
+    static let placeholder = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { _ in true }
 
     // MARK: Icon resolution
 
@@ -582,5 +584,35 @@ struct ItemView: View {
 
     private static func symbol(_ name: String) -> NSImage {
         NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage()
+    }
+}
+
+/// A small item icon that resolves **off the render path**. Settings' tab editor lists
+/// every item in a tab; calling `ItemView.resolveIcon` synchronously in `body` does
+/// bookmark resolution and disk reads for each row while the pane is built, which can
+/// stall a large tab on a slow or remote target. This mirrors `ItemView`'s own `.task`
+/// resolution: a transparent placeholder for one frame, then the real icon.
+struct AsyncItemIcon: View {
+    let item: DrawerItem
+    var size: CGFloat = 18
+
+    @State private var icon: NSImage?
+
+    var body: some View {
+        Image(nsImage: icon ?? ItemView.placeholder)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)   // decorative; the adjacent name is the label
+            .task(id: item.id) {
+                let work = Task.detached(priority: .utility) { ItemView.resolveIcon(item) }
+                await withTaskCancellationHandler {
+                    let resolved = await work.value
+                    guard !Task.isCancelled else { return }
+                    icon = resolved
+                } onCancel: {
+                    work.cancel()
+                }
+            }
     }
 }
