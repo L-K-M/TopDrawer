@@ -19,7 +19,7 @@ final class NotesDrawerResizeControllerTests: XCTestCase {
         defer { drawer.hide(duration: 0) }
         let resting = EdgeLayout.tabFrame(edge: .left, position: tab.anchor.position,
                                            size: CGSize(width: 30, height: 100), in: visible)
-        drawer.show(tab: tab, tabFrame: resting, edge: .left, on: screen, duration: 0)
+        drawer.show(tab: tab, tabFrame: resting, edge: .left, on: screen, duration: 0, reason: .click)
         let overlay = try XCTUnwrap(drawer.window.contentView?.subviews.compactMap { $0 as? NotesDrawerResizeView }.first)
         var writes = 0
         drawer.onNotesSizeChanged = { _, _ in writes += 1 }
