@@ -1347,7 +1347,9 @@ final class TabController {
     /// activates Top Drawer, so the keyboard goes back to the user's app once it
     /// closes; with a drawer open, closing the drawer hands it back instead.
     private func removeTabAfterConfirming(_ id: UUID) {
-        guard let tab = store.tab(id: id) else { return }
+        // The store refuses to remove a tab holding locked items, as Settings does;
+        // asking first would only end in a confirmed removal that never happens.
+        guard let tab = store.tab(id: id), !tab.items.contains(where: \.containsLockedItems) else { return }
         let previousApp = NSWorkspace.shared.frontmostApplication
         let confirmed = TabRemoval.confirm(tab) { alert in
             floatAboveDrawer(alert.window)
