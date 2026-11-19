@@ -230,9 +230,10 @@ final class DrawerWindowController {
 
     /// Shows the drawer for `tab` over `duration` seconds (0 = instant) with a fade
     /// + small inward slide. The slide stays on the drawer's own screen, so it
-    /// never bleeds onto an adjacent display at a shared edge.
+    /// never bleeds onto an adjacent display at a shared edge. `reason` defaults to a
+    /// deliberate open; `TabController` always passes the real one.
     func show(tab: Tab, tabFrame: CGRect, edge: Edge, on screen: NSScreen, duration: TimeInterval,
-              reason: DrawerOpenReason) {
+              reason: DrawerOpenReason = .click) {
         finishResize()
         presentationGeneration &+= 1
         let generation = presentationGeneration
