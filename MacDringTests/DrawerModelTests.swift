@@ -87,9 +87,18 @@ final class DrawerModelTests: XCTestCase {
         model.items = []
         XCTAssertTrue(model.isSearchable, "No matches must still allow editing the filter")
         XCTAssertEqual(model.searchQuery, "match")
+        XCTAssertTrue(model.searchResults.isEmpty)
 
         model.clearSearch()
         XCTAssertFalse(model.isSearching)
+        XCTAssertFalse(model.isSearchable)
+    }
+
+    func testNotesDoNotOfferSearchWithAnActiveQuery() {
+        let model = DrawerModel()
+        model.kind = .notes
+        model.searchQuery = "stale query"
+
         XCTAssertFalse(model.isSearchable)
     }
 
