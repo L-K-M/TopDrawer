@@ -217,7 +217,9 @@ extension DrawerItem {
         // Foundation (not @discardableResult there) doesn't warn. No-op on macOS.
         _ = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
         let kind: ItemKind
-        if url.pathExtension.lowercased() == "app" {
+        // A bundle is a *directory* whose name ends in `.app`. A plain file that merely
+        // happens to be called `notes.app` must open as a file, not launch as an app.
+        if isDirectory.boolValue, url.pathExtension.lowercased() == "app" {
             kind = .application
         } else if isDirectory.boolValue {
             kind = .folder

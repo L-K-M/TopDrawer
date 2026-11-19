@@ -23,6 +23,22 @@ final class DrawerItemTests: XCTestCase {
         XCTAssertEqual(item.url?.path, "/usr/bin")
     }
 
+    func testPlainFileNamedAppIsAFileAndDirectoryNamedAppIsAnApplication() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let plainFile = dir.appendingPathComponent("notes.app")
+        try Data("x".utf8).write(to: plainFile)
+        let bundle = dir.appendingPathComponent("Thing.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+
+        // A file that merely ends in `.app` must open as a file, not launch as an app;
+        // a real bundle directory is still an application.
+        XCTAssertEqual(DrawerItem.fromFileURL(plainFile).kind, .file)
+        XCTAssertEqual(DrawerItem.fromFileURL(bundle).kind, .application)
+    }
+
     func testFromLinkDefaultsSchemeAndTrimsInput() {
         let item = DrawerItem.fromLink("  example.com/path  ")
         XCTAssertEqual(item?.kind, .url)

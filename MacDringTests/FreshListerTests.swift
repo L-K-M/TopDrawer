@@ -73,4 +73,19 @@ final class FreshListerTests: XCTestCase {
         XCTAssertEqual(merged.count, 1)
         XCTAssertEqual(merged.first?.url.path, shared)
     }
+
+    // MARK: indexed-path construction (Spotlight)
+
+    func testIndexedPathIsStandardizedSoAliasesShareAnIdentity() {
+        let path = "/Users/me/Downloads/../Documents/report.pdf"
+        let hit = RecentFileHit(indexedPath: path, name: "report.pdf", date: Date())
+        let expected = URL(fileURLWithPath: path).standardizedFileURL
+
+        XCTAssertEqual(hit.url, expected)
+        XCTAssertEqual(hit.url.path, "/Users/me/Documents/report.pdf")
+        // The stable item id follows, so an aliased hit and its canonical form are
+        // the same row across listings.
+        XCTAssertEqual(DrawerItem.stableID(kind: .file, url: hit.url),
+                       DrawerItem.stableID(kind: .file, url: expected))
+    }
 }

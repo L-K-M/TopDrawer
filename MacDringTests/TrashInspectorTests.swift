@@ -47,6 +47,24 @@ final class TrashInspectorTests: XCTestCase {
         XCTAssertFalse(TrashInspector.isEmpty(tempDir))   // a subfolder also counts
     }
 
+    // MARK: isEmpty(entryCount:) — the pure decision
+
+    func testUnreadableEntryCountIsNonEmpty() {
+        // A filesystem without ATTR_DIR_ENTRYCOUNT (some network/exotic volumes)
+        // must not report empty: loose files are invisible to the link-count
+        // fallback, so "unknown" has to read as non-empty.
+        XCTAssertFalse(TrashInspector.isEmpty(entryCount: nil))
+    }
+
+    func testZeroEntryCountIsEmpty() {
+        XCTAssertTrue(TrashInspector.isEmpty(entryCount: 0))
+    }
+
+    func testNonZeroEntryCountIsNonEmpty() {
+        XCTAssertFalse(TrashInspector.isEmpty(entryCount: 1))
+        XCTAssertFalse(TrashInspector.isEmpty(entryCount: 3))
+    }
+
     // MARK: trashDirectories / trashIsEmpty
 
     func testTrashDirectoriesIncludesHomeTrash() {

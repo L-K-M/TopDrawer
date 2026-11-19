@@ -14,7 +14,7 @@ enum TrashInspector {
     /// Whether the whole Trash is empty: true only when every trash directory Finder
     /// would empty is empty. `fileManager` is injectable for tests.
     static func trashIsEmpty(fileManager: FileManager = .default) -> Bool {
-        trashDirectories(fileManager: fileManager).allSatisfy { isEmpty($0, fileManager: fileManager) }
+        trashDirectories(fileManager: fileManager).allSatisfy { isEmpty($0) }
     }
 
     /// The total number of items across every trash Finder's "Empty Trash" clears —
@@ -55,21 +55,26 @@ enum TrashInspector {
 
     /// Whether a single directory holds no entries, decided from directory metadata
     /// (no listing → no permission prompt).
-    static func isEmpty(_ url: URL, fileManager: FileManager = .default) -> Bool {
-        if let count = entryCount(of: url) { return count == 0 }
-        // Fallback when the entry-count attribute is unavailable (rare; non-APFS/HFS+):
-        // a directory's link count is 2 + its subdirectory count, so <= 2 means no
-        // subfolders. Coarser (it can't see loose files) but never prompts.
-        let attrs = try? fileManager.attributesOfItem(atPath: url.path)
-        if let linkCount = (attrs?[.referenceCount] as? NSNumber)?.intValue { return linkCount <= 2 }
-        return false   // can't tell → treat as non-empty (a usable "Empty Trash" item)
+    static func isEmpty(_ url: URL) -> Bool {
+        isEmpty(entryCount: entryCount(of: url))
+    }
+
+    /// Pure half of `isEmpty`: the entry count is authoritative. When the filesystem
+    /// doesn't supply `ATTR_DIR_ENTRYCOUNT`, a directory's link count (2 + its
+    /// subdirectories) can't distinguish an empty directory from one holding only
+    /// loose files, so the safe answer is non-empty — a wrong "empty" would disable
+    /// Empty Trash and show an empty trash can for a Trash that still has items.
+    static func isEmpty(entryCount: Int?) -> Bool {
+        guard let entryCount else { return false }
+        return entryCount == 0
     }
 
     /// The number of entries in a directory (files *and* subdirectories, excluding
     /// `.`/`..`), read via `getattrlist`'s `ATTR_DIR_ENTRYCOUNT`. This reads the
     /// directory's metadata, not its contents, so unlike `contentsOfDirectory` it
     /// counts loose files too and doesn't trip Trash access. `nil` if the filesystem
-    /// doesn't supply the attribute (then the caller falls back).
+    /// doesn't supply the attribute (then `isEmpty(entryCount:)` treats the
+    /// directory as non-empty rather than risking a false "empty").
     static func entryCount(of url: URL) -> Int? {
         url.withUnsafeFileSystemRepresentation { path -> Int? in
             guard let path else { return nil }
