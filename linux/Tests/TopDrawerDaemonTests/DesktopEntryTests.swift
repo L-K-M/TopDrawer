@@ -71,6 +71,31 @@ final class DesktopEntryTests: XCTestCase {
         XCTAssertEqual(link?.isShown, false)
     }
 
+    func testCRLFLineEndingsParse() {
+        // A Windows-authored or autocrlf-checked-out file must parse like LF text:
+        // the header, keys, and values all carried a trailing \r before the trim fix.
+        let text = "[Desktop Entry]\r\n\r\nType=Application\r\nName=Editor\r\nExec=gedit %U\r\n"
+        let e = DesktopEntry.parse(text, id: "gedit", path: URL(fileURLWithPath: "/x.desktop"))
+        XCTAssertEqual(e?.name, "Editor")
+        XCTAssertEqual(e?.exec, "gedit %U")
+        XCTAssertEqual(e?.isShown, true)
+    }
+
+    func testUTF8BOMParses() {
+        // A leading BOM is not whitespace and otherwise defeats the "[" group test.
+        let text = "\u{FEFF}[Desktop Entry]\nType=Application\nName=Editor\nExec=gedit %U\n"
+        let e = DesktopEntry.parse(text, id: "gedit", path: URL(fileURLWithPath: "/x.desktop"))
+        XCTAssertEqual(e?.name, "Editor")
+    }
+
+    func testBOMWithCRLFLineEndingsParses() {
+        // Windows-authored files often pair a BOM with CRLF; guard the combination.
+        let text = "\u{FEFF}[Desktop Entry]\r\nType=Application\r\nName=Editor\r\nExec=gedit %U\r\n"
+        let e = DesktopEntry.parse(text, id: "gedit", path: URL(fileURLWithPath: "/x.desktop"))
+        XCTAssertEqual(e?.name, "Editor")
+        XCTAssertEqual(e?.exec, "gedit %U")
+    }
+
     func testGarbageAndCommentsYieldNilOrEmpty() {
         XCTAssertNil(DesktopEntry.parse("no groups here\n# just a comment",
                                         id: "x", path: URL(fileURLWithPath: "/x.desktop")))

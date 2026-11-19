@@ -42,8 +42,12 @@ public struct DesktopEntry: Sendable, Equatable {
     public static func parse(_ text: String, id: String, path: URL) -> DesktopEntry? {
         var inGroup = false
         var values: [String: String] = [:]
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+        // U+FEFF is not whitespace, so strip a UTF-8 BOM or "[Desktop Entry]" detection fails.
+        let body = text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
+        // Split on the newline *character set*, not "\n": a CR+LF pair is a single
+        // grapheme cluster, so split(separator: "\n") never matches inside CRLF text.
+        for rawLine in body.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
             if line.hasPrefix("[") && line.hasSuffix("]") {
                 // A new group header. We only care about the first [Desktop Entry] group;
