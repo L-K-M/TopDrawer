@@ -57,8 +57,8 @@ jobs:
         # of #89 still fits.
         timeout-minutes: 170
         # Pin privileged third-party actions to an immutable commit.
-        # b44215f = v0.0.16. Verify before bumping:
-        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.16*'
+        # 7e2222d = v0.0.17. Verify before bumping:
+        #   git ls-remote https://github.com/L-K-M/zai-code-review 'refs/tags/v0.0.17*'
         uses: L-K-M/zai-code-review@7e2222dd5ea9f0c36f9c3683118752ab424d2b35
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
