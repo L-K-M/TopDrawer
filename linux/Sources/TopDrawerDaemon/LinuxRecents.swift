@@ -179,6 +179,9 @@ public final class CachedRecentsProvider: RecentsProviding, @unchecked Sendable 
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var cached: [Bucket: (at: Date, limit: Int, hits: [RecentFileHit])] = [:]
+    /// Bumped by `invalidate()`. A fetch that started under an older generation may
+    /// have read pre-change state, so its result is returned but never cached.
+    private var generation: UInt64 = 0
 
     public init(wrapping wrapped: RecentsProviding, ttl: TimeInterval = 2,
                 now: @escaping @Sendable () -> Date = { Date() }) {
@@ -198,6 +201,7 @@ public final class CachedRecentsProvider: RecentsProviding, @unchecked Sendable 
     public func invalidate() {
         lock.lock()
         cached = [:]
+        generation &+= 1
         lock.unlock()
     }
 
@@ -211,13 +215,15 @@ public final class CachedRecentsProvider: RecentsProviding, @unchecked Sendable 
             lock.unlock()
             return Array(entry.hits.prefix(limit))
         }
+        let startedGeneration = generation
         lock.unlock()
         // Fetch outside the lock — a slow provider (the statx sweep) must not serialize
         // unrelated buckets. Concurrent misses may both fetch; last writer wins, which
-        // is fine: same inputs, same result.
+        // is fine: same inputs, same result. An `invalidate()` during the fetch means
+        // the inputs changed, so that result must not outlive the call.
         let hits = fetch(limit)
         lock.lock()
-        cached[bucket] = (now(), limit, hits)
+        if generation == startedGeneration { cached[bucket] = (now(), limit, hits) }
         lock.unlock()
         return hits
     }

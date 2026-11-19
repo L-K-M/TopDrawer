@@ -183,6 +183,53 @@ final class LinuxRecentsTests: XCTestCase {
         XCTAssertEqual(inner.systemCalls, 2)
     }
 
+    /// Blocks its first system fetch until released, to interleave an invalidate.
+    private final class BlockingRecents: RecentsProviding, @unchecked Sendable {
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var calls = 0
+        private var hits: [RecentFileHit]
+        init(hits: [RecentFileHit]) { self.hits = hits }
+        var callCount: Int { lock.lock(); defer { lock.unlock() }; return calls }
+        func setHits(_ newHits: [RecentFileHit]) { lock.lock(); hits = newHits; lock.unlock() }
+        func systemRecents(limit: Int) -> [RecentFileHit] {
+            lock.lock()
+            calls += 1
+            let isFirst = calls == 1
+            let snapshot = hits
+            lock.unlock()
+            if isFirst {
+                entered.signal()
+                release.wait()
+            }
+            return Array(snapshot.prefix(limit))
+        }
+        func fresh(limit: Int) -> [RecentFileHit] { [] }
+    }
+
+    func testFetchThatStartedBeforeAnInvalidateIsNotCached() {
+        let clock = Date(timeIntervalSince1970: 1_000)
+        let inner = BlockingRecents(hits: [hit("old.txt")])
+        let cache = CachedRecentsProvider(wrapping: inner, ttl: 60, now: { clock })
+        let finished = expectation(description: "slow fetch returned")
+        DispatchQueue.global().async {
+            XCTAssertEqual(cache.systemRecents(limit: 10).map(\.name), ["old.txt"])
+            finished.fulfill()
+        }
+        XCTAssertEqual(inner.entered.wait(timeout: .now() + 5), .success)
+
+        // A change lands while the slow fetch is still reading the old state.
+        cache.invalidate()
+        inner.setHits([hit("new.txt")])
+        inner.release.signal()
+        wait(for: [finished], timeout: 5)
+
+        XCTAssertEqual(cache.systemRecents(limit: 10).map(\.name), ["new.txt"],
+                       "the pre-change result must not be served after the change")
+        XCTAssertEqual(inner.callCount, 2)
+    }
+
     func testEncodeRecentsShape() {
         XCTAssertEqual(TopDrawerService.encodeRecents([]), #"{"recents":[]}"#)
         let hit = RecentFileHit(url: URL(fileURLWithPath: "/a/b.txt"), name: "b.txt",
