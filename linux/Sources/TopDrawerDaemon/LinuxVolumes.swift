@@ -47,24 +47,30 @@ public enum MountInfoParser {
 
     /// mountinfo escapes space, tab, newline and backslash in the mount point and mount
     /// source as octal `\NNN`. Reverse that so paths compare and display correctly.
+    /// Invalid octal sequences are kept literally. Escapes that decode to malformed
+    /// UTF-8 produce replacement characters.
     public static func unescape(_ field: String) -> String {
-        guard field.contains("\\") else { return field }
-        var result = ""
-        var chars = Array(field.utf8)
-        var i = 0
-        while i < chars.count {
-            if chars[i] == 0x5C, i + 3 < chars.count,          // backslash + 3 octal digits
-               let d0 = octalDigit(chars[i + 1]),
-               let d1 = octalDigit(chars[i + 2]),
-               let d2 = octalDigit(chars[i + 3]) {
-                result.unicodeScalars.append(UnicodeScalar(UInt8(d0 * 64 + d1 * 8 + d2)))
-                i += 4
+        let backslash: UInt8 = 0x5C
+        guard field.utf8.contains(backslash) else { return field }
+
+        let bytes = Array(field.utf8)
+        var decoded: [UInt8] = []
+        decoded.reserveCapacity(bytes.count)
+        var index = 0
+        while index < bytes.count {
+            if bytes[index] == backslash, index + 3 < bytes.count,
+               let first = octalDigit(bytes[index + 1]),
+               let second = octalDigit(bytes[index + 2]),
+               let third = octalDigit(bytes[index + 3]),
+               let byte = UInt8(exactly: first * 64 + second * 8 + third) {
+                decoded.append(byte)
+                index += 4
             } else {
-                result.unicodeScalars.append(UnicodeScalar(chars[i]))
-                i += 1
+                decoded.append(bytes[index])
+                index += 1
             }
         }
-        return result
+        return String(decoding: decoded, as: UTF8.self)
     }
 
     private static func octalDigit(_ byte: UInt8) -> Int? {
