@@ -434,10 +434,7 @@ final class TabController {
         wc.onDragEnded = { [weak self] in self?.endDrag(id) }
         wc.onCycle = { [weak self] direction in self?.cycleTab(from: id, direction: direction) }
         wc.model.onRequestSettings = { [weak self] in self?.onOpenSettings?(id) }
-        wc.model.onDelete = { [weak self] in
-            guard let self, let tab = self.store.tab(id: id), TabRemoval.confirm(tab) else { return }
-            self.store.removeTab(id: id)
-        }
+        wc.model.onDelete = { [weak self] in self?.removeTabAfterConfirming(id) }
         wc.model.onMoveToEdge = { [weak self] edge in self?.moveTab(id, toEdge: edge) }
         return wc
     }
@@ -1344,6 +1341,21 @@ final class TabController {
     /// drawer — invisible, while it blocks every click in the app.
     private func floatAboveDrawer(_ window: NSWindow) {
         window.level = NSWindow.Level(rawValue: preferences.tabWindowLevel.drawerWindowLevel.rawValue + 1)
+    }
+
+    /// The strip's Delete. A tab that still holds items asks first. The prompt
+    /// activates Top Drawer, so the keyboard goes back to the user's app once it
+    /// closes; with a drawer open, closing the drawer hands it back instead.
+    private func removeTabAfterConfirming(_ id: UUID) {
+        guard let tab = store.tab(id: id) else { return }
+        let previousApp = NSWorkspace.shared.frontmostApplication
+        let confirmed = TabRemoval.confirm(tab) { alert in
+            floatAboveDrawer(alert.window)
+            return ModalActivation.runOverDrawer { alert.runModal() }
+        }
+        if openTabID == nil { ModalActivation.handBackIfIdle(to: previousApp) }
+        guard confirmed else { return }
+        store.removeTab(id: id)
     }
 
     /// Renames an item via a small modal prompt, then commits it to the store.
