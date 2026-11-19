@@ -50,9 +50,26 @@ final class ClipboardHistoryStore: ObservableObject {
         guard Self.isValid(text) else { return }
 
         // Keep identity when a repeated copy moves an older entry to the front.
-        let id = entries.first { $0.text == text }?.id ?? UUID()
-        let entry = ClipboardEntry(id: id, text: text, date: date)
-        entries = [entry] + entries.filter { $0.text != text }.prefix(Self.limit - 1)
+        // Identity is the exact UTF-8 byte sequence: Swift string equality is
+        // Unicode *canonical*, so precomposed and decomposed forms of the same
+        // text would otherwise collapse into one entry and lose a copy.
+        // One pass: capture the first exact repeat's id and keep the newest
+        // `limit - 1` other entries. The bytes are compared in place, so no stored
+        // clip (up to 256 KiB each) is copied, and the scan stops as soon as both
+        // the reused id and the kept entries are settled.
+        var reusedID: UUID?
+        var kept: [ClipboardEntry] = []
+        kept.reserveCapacity(Self.limit - 1)
+        for existing in entries {
+            if reusedID != nil, kept.count == Self.limit - 1 { break }
+            if Self.hasSameBytes(existing.text, text) {
+                reusedID = reusedID ?? existing.id
+            } else if kept.count < Self.limit - 1 {
+                kept.append(existing)
+            }
+        }
+        let entry = ClipboardEntry(id: reusedID ?? UUID(), text: text, date: date)
+        entries = [entry] + kept
         scheduleSave()
     }
 
@@ -79,6 +96,18 @@ final class ClipboardHistoryStore: ObservableObject {
     private static func isValid(_ text: String) -> Bool {
         text.utf8.count <= maximumTextBytes
             && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Exact UTF-8 identity for a clip's text, the key restore de-duplicates on, so
+    /// canonically equivalent but byte-distinct copies (precomposed `é` vs `e` +
+    /// combining acute) remain separate history entries.
+    private static func identity(of text: String) -> Data { Data(text.utf8) }
+
+    /// The same rule as `identity(of:)` for a single comparison, without copying
+    /// either text: the lengths are compared first (constant time for native
+    /// strings), then the bytes until the first difference.
+    private static func hasSameBytes(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.count == rhs.utf8.count && lhs.utf8.elementsEqual(rhs.utf8)
     }
 
     private func scheduleSave() {
@@ -146,13 +175,14 @@ final class ClipboardHistoryStore: ObservableObject {
             if decoded.isEmpty, !elements.isEmpty {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            var texts = Set<String>()
+            var texts = Set<Data>()
             var ids = Set<UUID>()
             var restored: [ClipboardEntry] = []
             for entry in decoded {
                 guard restored.count < Self.limit else { break }
-                guard Self.isValid(entry.text), !texts.contains(entry.text), !ids.contains(entry.id) else { continue }
-                texts.insert(entry.text)
+                let identity = Self.identity(of: entry.text)
+                guard Self.isValid(entry.text), !texts.contains(identity), !ids.contains(entry.id) else { continue }
+                texts.insert(identity)
                 ids.insert(entry.id)
                 restored.append(entry)
             }

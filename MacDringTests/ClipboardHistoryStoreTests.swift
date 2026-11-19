@@ -42,6 +42,53 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(history.entries.first?.date, later)
     }
 
+    func testCanonicallyEquivalentCopiesStayDistinct() {
+        let history = makeHistory()
+        let precomposed = "\u{00E9}"          // é
+        let decomposed = "e\u{0301}"          // e + combining acute
+        XCTAssertEqual(precomposed, decomposed)   // Swift equality is canonical
+        history.record(precomposed)
+        history.record(decomposed)
+
+        XCTAssertEqual(history.entries.count, 2)
+        XCTAssertEqual(history.entries.map { Array($0.text.utf8) },
+                       [Array(decomposed.utf8), Array(precomposed.utf8)])
+        XCTAssertNotEqual(history.entries[0].id, history.entries[1].id)
+    }
+
+    func testExactRepeatKeepsIdentityAcrossArchive() throws {
+        let url = makeStoreURL()
+        let history = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        let text = "caf\u{00E9}"
+        history.record(text, at: Date(timeIntervalSince1970: 1))
+        let id = try XCTUnwrap(history.entries.first?.id)
+        history.saveNow()
+
+        let restored = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        XCTAssertEqual(restored.entries.count, 1)
+        restored.record(text, at: Date(timeIntervalSince1970: 2))
+        XCTAssertEqual(restored.entries.count, 1)
+        XCTAssertEqual(restored.entries.first?.id, id)
+
+        // A canonically equivalent but byte-distinct copy is still a new entry.
+        restored.record("cafe\u{0301}", at: Date(timeIntervalSince1970: 3))
+        XCTAssertEqual(restored.entries.count, 2)
+        XCTAssertEqual(restored.entries.first?.text, "cafe\u{0301}")
+    }
+
+    func testRestoredHistoryKeepsByteDistinctCanonicalVariants() throws {
+        let url = makeStoreURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let precomposed = ClipboardEntry(id: UUID(), text: "\u{00E9}", date: Date(timeIntervalSince1970: 1))
+        let decomposed = ClipboardEntry(id: UUID(), text: "e\u{0301}", date: Date(timeIntervalSince1970: 2))
+        try JSONEncoder().encode([precomposed, decomposed]).write(to: url)
+
+        let restored = ClipboardHistoryStore(storeURL: url, retention: .acrossRestarts)
+        XCTAssertEqual(restored.entries.map { Array($0.text.utf8) },
+                       [Array(precomposed.text.utf8), Array(decomposed.text.utf8)])
+        XCTAssertEqual(restored.entries.map(\.id), [precomposed.id, decomposed.id])
+    }
+
     func testEvictsOldestWhenFull() {
         let history = makeHistory()
         for index in 0...ClipboardHistoryStore.limit { history.record("entry \(index)") }
@@ -49,6 +96,22 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(history.entries.count, ClipboardHistoryStore.limit)
         XCTAssertEqual(history.entries.first?.text, "entry \(ClipboardHistoryStore.limit)")
         XCTAssertEqual(history.entries.last?.text, "entry 1")
+    }
+
+    func testRepeatingTheOldestEntryOfAFullHistoryKeepsItsIdentity() throws {
+        let history = makeHistory()
+        for index in 0..<ClipboardHistoryStore.limit { history.record("entry \(index)") }
+        let oldest = try XCTUnwrap(history.entries.last)
+        XCTAssertEqual(oldest.text, "entry 0")
+
+        // The repeat sits behind a full set of kept entries, so the scan must
+        // still reach it to reuse its id, and nothing else is evicted.
+        history.record("entry 0")
+
+        XCTAssertEqual(history.entries.count, ClipboardHistoryStore.limit)
+        XCTAssertEqual(history.entries.first?.id, oldest.id)
+        XCTAssertEqual(history.entries.last?.text, "entry 1")
+        XCTAssertEqual(Set(history.entries.map(\.text)).count, ClipboardHistoryStore.limit)
     }
 
     func testSkipsBlankAndOversizedTextWithoutTruncating() {
