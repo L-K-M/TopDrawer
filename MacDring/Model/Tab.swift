@@ -116,18 +116,18 @@ struct Tab: Codable, Identifiable, Equatable {
     }
 
     /// Decodes forward-compatibly: only `anchor` is allowed to fail the tab
-    /// (a tab without a place on screen can't exist). Every enum-like field —
-    /// where a **newer** Top Drawer may have written a raw value this build
-    /// doesn't know — degrades to its default via `decodeLenient` instead of
-    /// throwing, and one unreadable item is dropped (`FailableDrawerItem`)
+    /// (a tab without a place on screen can't exist). Every other field — an
+    /// enum where a **newer** Top Drawer may have written a raw value this build
+    /// doesn't know, or a scalar of the wrong JSON type — degrades to its default
+    /// via `decodeLenient` instead of throwing, and one unreadable item is dropped (`FailableDrawerItem`)
     /// rather than taking the whole tab — and, via `FailableTab` + the next
     /// autosave, the user's arrangement — down with it. Groups made too small
     /// by that filtering are dissolved so invalid containers don't survive.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        title = try c.decodeIfPresent(String.self, forKey: .title) ?? "Tab"
-        colorHex = try c.decodeIfPresent(String.self, forKey: .colorHex) ?? "#0A84FF"
+        id = c.decodeLenient(UUID.self, forKey: .id, fallback: UUID())
+        title = c.decodeLenient(String.self, forKey: .title, fallback: "Tab")
+        colorHex = c.decodeLenient(String.self, forKey: .colorHex, fallback: "#0A84FF")
         glyph = c.decodeLenient(TabGlyph.self, forKey: .glyph, fallback: .default)
         anchor = try c.decode(ScreenAnchor.self, forKey: .anchor)
         let decodedItems = c.decodeLenient([FailableDrawerItem].self, forKey: .items, fallback: [])
@@ -136,24 +136,24 @@ struct Tab: Codable, Identifiable, Equatable {
         behavior = c.decodeLenient(TabBehavior.self, forKey: .behavior, fallback: .default)
         hotkey = c.decodeLenient(HotkeySpec?.self, forKey: .hotkey, fallback: nil)
         gridColumns = PersistedLayoutBounds.clampedGridColumns(
-            try c.decodeIfPresent(Int.self, forKey: .gridColumns) ?? 4
+            c.decodeLenient(Int.self, forKey: .gridColumns, fallback: 4)
         )
         gridRows = PersistedLayoutBounds.clampedGridRows(
-            try c.decodeIfPresent(Int.self, forKey: .gridRows) ?? 2
+            c.decodeLenient(Int.self, forKey: .gridRows, fallback: 2)
         )
-        locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+        locked = c.decodeLenient(Bool.self, forKey: .locked, fallback: false)
         lockNewItems = c.decodeLenient(Bool.self, forKey: .lockNewItems, fallback: false)
         appearance = c.decodeLenient(DrawerAppearance.self, forKey: .appearance, fallback: .init())
         kind = c.decodeLenient(TabKind.self, forKey: .kind, fallback: .items)
         // Older documents wrote a per-tab `useGlobal` (or nothing); both fall back to
         // `.grid`, the layout the global default used to be.
         layout = c.decodeLenient(DrawerLayout.self, forKey: .layout, fallback: .grid)
-        notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        notes = c.decodeLenient(String.self, forKey: .notes, fallback: "")
         notesSize = c.decodeLenient(NotesDrawerSize?.self, forKey: .notesSize, fallback: nil)
-        folderBookmark = try c.decodeIfPresent(Data.self, forKey: .folderBookmark)
-        folderURL = try c.decodeIfPresent(URL.self, forKey: .folderURL)
+        folderBookmark = c.decodeLenient(Data?.self, forKey: .folderBookmark, fallback: nil)
+        folderURL = c.decodeLenient(URL?.self, forKey: .folderURL, fallback: nil)
         folderSort = c.decodeLenient(FolderSort.self, forKey: .folderSort, fallback: .name)
-        folderShowsHidden = try c.decodeIfPresent(Bool.self, forKey: .folderShowsHidden) ?? false
+        folderShowsHidden = c.decodeLenient(Bool.self, forKey: .folderShowsHidden, fallback: false)
         recentsSource = c.decodeLenient(RecentsSource.self, forKey: .recentsSource, fallback: .macDring)
         iconStyles = c.decodeLenient([String: IconStyle].self, forKey: .iconStyles, fallback: [:])
     }

@@ -20,6 +20,37 @@ final class LenientDecodingTests: XCTestCase {
         return #"{ "version": 1, "tabs": [ \#(tabs) ] }"#
     }
 
+    // MARK: Wrong-typed scalar fields keep the tab
+
+    func testWrongTypedScalarFieldsFallBackAndKeepTheTab() throws {
+        let fields: [(json: String, check: (Tab) -> Bool)] = [
+            // A minted id must be a real UUID that the next save writes back unchanged.
+            (#""id": 42"#, { tab in
+                let saved = try? JSONEncoder().encode(tab)
+                return saved.flatMap { try? JSONDecoder().decode(Tab.self, from: $0) }?.id == tab.id
+            }),
+            (#""colorHex": 7"#, { $0.colorHex == "#0A84FF" }),
+            (#""gridColumns": "6""#, { $0.gridColumns == 4 }),
+            (#""gridRows": [3]"#, { $0.gridRows == 2 }),
+            (#""locked": "yes""#, { !$0.locked }),
+            (#""notes": { "rich": true }"#, { $0.notes == "" }),
+            (#""folderBookmark": 5"#, { $0.folderBookmark == nil }),
+            (#""folderURL": 5"#, { $0.folderURL == nil }),
+            (#""folderShowsHidden": "no""#, { !$0.folderShowsHidden }),
+            (#""lockNewItems": "on""#, { !$0.lockNewItems }),
+            (#""items": 3"#, { $0.items.isEmpty }),
+        ]
+        for field in fields {
+            let doc = try decodeDocument(document(tabFields: field.json))
+            XCTAssertEqual(doc.tabs.count, 1, "\(field.json) must not drop the tab")
+            XCTAssertEqual(doc.tabs.first?.title, "T", field.json)
+            if let tab = doc.tabs.first { XCTAssertTrue(field.check(tab), field.json) }
+        }
+
+        let titled = #"{ "version": 1, "tabs": [ { "title": 3, \#(anchor) } ] }"#
+        XCTAssertEqual(try decodeDocument(titled).tabs.map(\.title), ["Tab"])
+    }
+
     // MARK: Unknown enum raw values keep the tab
 
     func testUnknownTabKindDegradesToItemsAndKeepsTheTab() throws {
