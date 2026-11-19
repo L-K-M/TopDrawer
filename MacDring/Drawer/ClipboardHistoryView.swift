@@ -12,20 +12,22 @@ struct ClipboardHistoryView: View {
             if let error = model.clipboardPersistenceError {
                 Text(error).font(.callout).foregroundStyle(.red)
             }
+            // One search per render: the empty check and the rows share it.
+            let results = model.clipboardSearchResults
             ScrollViewReader { proxy in
                 ScrollView {
                     if model.clipboardEntries.isEmpty {
                         Text("Copy text in any app to add it here.")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity).padding(.vertical, 22)
-                    } else if model.clipboardSearchResults.isEmpty {
+                    } else if results.isEmpty {
                         Text("No matching clipboard entries.")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity).padding(.vertical, 22)
                     } else {
                         LazyVStack(spacing: 4) {
-                            ForEach(model.clipboardSearchResults) { entry in
-                                row(entry).id(entry.id)
+                            ForEach(results) { result in
+                                row(result).id(result.id)
                             }
                         }
                     }
@@ -39,12 +41,18 @@ struct ClipboardHistoryView: View {
         }
     }
 
-    private func row(_ entry: ClipboardEntry) -> some View {
-        Button { model.onCopyClipboardEntry?(entry.id) } label: {
+    private func row(_ result: ClipboardEntry.SearchResult) -> some View {
+        let entry = result.entry
+        let excerpt = result.excerpt
+        let selected = model.selectedItemID == entry.id
+        return Button { model.onCopyClipboardEntry?(entry.id) } label: {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "doc.on.clipboard").foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(verbatim: entry.preview)
+                    (Text(verbatim: excerpt.leading)
+                     + Text(verbatim: excerpt.matched).bold()
+                         .foregroundStyle(selected ? Color.primary : Color.accentColor)
+                     + Text(verbatim: excerpt.trailing))
                         .font(.callout).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(entry.date, style: .relative)
@@ -55,10 +63,11 @@ struct ClipboardHistoryView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .background(RoundedRectangle(cornerRadius: 8)
-                .fill(model.selectedItemID == entry.id ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06)))
+                .fill(selected ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06)))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Copy \(entry.preview)")
+        .accessibilityLabel("Copy \(excerpt.text)")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
         .help("Copy to clipboard")
         .contextMenu {
             Button("Copy") { model.onCopyClipboardEntry?(entry.id) }

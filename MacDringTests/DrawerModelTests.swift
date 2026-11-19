@@ -17,6 +17,8 @@ final class DrawerModelTests: XCTestCase {
 
         XCTAssertTrue(model.isSearchable)
         XCTAssertEqual(model.clipboardSearchResults.map(\.id), Array(entries.prefix(2)).map(\.id))
+        // The row shows the match even though it lies past the plain preview.
+        XCTAssertEqual(model.clipboardSearchResults.first?.excerpt.matched, "CAFÉ")
         XCTAssertEqual(model.selectedItemID, entries[0].id)
     }
 
