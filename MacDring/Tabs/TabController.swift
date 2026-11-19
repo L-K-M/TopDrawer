@@ -1914,15 +1914,23 @@ final class TabController {
             return event
         }
         guard !model.isEditingGroupName else { return event }
-        if model.kind != .notes, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
+        // Match the physical bracket keys, not the characters they produce: on layouts
+        // where [ and ] need Option (German, French…), a character match makes ⌘[
+        // unreachable because .option then shows up in the modifier mask. ⇧⌘[ / ⇧⌘]
+        // also cycle — browsers use them for previous/next tab. Only the four chord
+        // modifiers count: Caps Lock, Fn and the keypad flag are noise here.
+        let cyclingModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if model.kind != .notes, cyclingModifiers == .command || cyclingModifiers == [.command, .shift],
            let id = openTabID {
-            if event.charactersIgnoringModifiers == "[" {
+            switch event.keyCode {
+            case UInt16(kVK_ANSI_LeftBracket):
                 cycleTab(from: id, direction: .previous)
                 return nil
-            }
-            if event.charactersIgnoringModifiers == "]" {
+            case UInt16(kVK_ANSI_RightBracket):
                 cycleTab(from: id, direction: .next)
                 return nil
+            default:
+                break
             }
         }
         // A keystroke outside the filter field — a drawer too small to show one, or a
