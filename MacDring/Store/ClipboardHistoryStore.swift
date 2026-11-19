@@ -53,15 +53,16 @@ final class ClipboardHistoryStore: ObservableObject {
         // Identity is the exact UTF-8 byte sequence: Swift string equality is
         // Unicode *canonical*, so precomposed and decomposed forms of the same
         // text would otherwise collapse into one entry and lose a copy.
-        let identity = Self.identity(of: text)
         // One pass: capture the first exact repeat's id and keep the newest
-        // `limit - 1` non-matching entries, so each stored clip's bytes are
-        // hashed once rather than twice.
+        // `limit - 1` other entries. The bytes are compared in place, so no stored
+        // clip (up to 256 KiB each) is copied, and the scan stops as soon as both
+        // the reused id and the kept entries are settled.
         var reusedID: UUID?
         var kept: [ClipboardEntry] = []
         kept.reserveCapacity(Self.limit - 1)
         for existing in entries {
-            if Self.identity(of: existing.text) == identity {
+            if reusedID != nil, kept.count == Self.limit - 1 { break }
+            if Self.hasSameBytes(existing.text, text) {
                 reusedID = reusedID ?? existing.id
             } else if kept.count < Self.limit - 1 {
                 kept.append(existing)
@@ -97,10 +98,17 @@ final class ClipboardHistoryStore: ObservableObject {
             && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Exact UTF-8 identity for a clip's text. Used for de-duplication so that
+    /// Exact UTF-8 identity for a clip's text, the key restore de-duplicates on, so
     /// canonically equivalent but byte-distinct copies (precomposed `é` vs `e` +
     /// combining acute) remain separate history entries.
     private static func identity(of text: String) -> Data { Data(text.utf8) }
+
+    /// The same rule as `identity(of:)` for a single comparison, without copying
+    /// either text: the lengths are compared first (constant time for native
+    /// strings), then the bytes until the first difference.
+    private static func hasSameBytes(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.count == rhs.utf8.count && lhs.utf8.elementsEqual(rhs.utf8)
+    }
 
     private func scheduleSave() {
         guard retention == .acrossRestarts else { return }

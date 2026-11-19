@@ -98,6 +98,22 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(history.entries.last?.text, "entry 1")
     }
 
+    func testRepeatingTheOldestEntryOfAFullHistoryKeepsItsIdentity() throws {
+        let history = makeHistory()
+        for index in 0..<ClipboardHistoryStore.limit { history.record("entry \(index)") }
+        let oldest = try XCTUnwrap(history.entries.last)
+        XCTAssertEqual(oldest.text, "entry 0")
+
+        // The repeat sits behind a full set of kept entries, so the scan must
+        // still reach it to reuse its id, and nothing else is evicted.
+        history.record("entry 0")
+
+        XCTAssertEqual(history.entries.count, ClipboardHistoryStore.limit)
+        XCTAssertEqual(history.entries.first?.id, oldest.id)
+        XCTAssertEqual(history.entries.last?.text, "entry 1")
+        XCTAssertEqual(Set(history.entries.map(\.text)).count, ClipboardHistoryStore.limit)
+    }
+
     func testSkipsBlankAndOversizedTextWithoutTruncating() {
         let history = makeHistory()
         let boundary = String(repeating: "é", count: ClipboardHistoryStore.maximumTextBytes / 2)
