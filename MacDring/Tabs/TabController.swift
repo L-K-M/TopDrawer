@@ -1925,6 +1925,25 @@ final class TabController {
                 return nil
             }
         }
+        // A keystroke outside the filter field — a drawer too small to show one, or a
+        // click took focus from it — starts or continues type-to-find instead of beeping.
+        // `isSearching` is read before the keystroke is appended: a leading Space stays
+        // Quick Look, while a Space after typing has begun is part of the query.
+        if model.kind != .notes, !(NSApp.keyWindow?.firstResponder is NSText) {
+            let hasShortcutModifier = !event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+            // Only a plain Backspace edits the query: a Delete key event carrying fn means
+            // forward delete, which a query edited from its end has no use for.
+            let isPlainBackspace = event.keyCode == UInt16(kVK_Delete)
+                && event.modifierFlags.intersection([.command, .option, .control, .function]).isEmpty
+            if isPlainBackspace, model.deleteBackwardInTypeToFind() {
+                return nil
+            }
+            if let text = DrawerSearch.typeToFindText(event.characters, hasShortcutModifier: hasShortcutModifier,
+                                                      isSearching: model.isSearching),
+               model.continueTypeToFind(text) {
+                return nil
+            }
+        }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
         // The filter field (a focused text field) handles character input and Delete
         // itself; the monitor only swallows the keys that drive result navigation so

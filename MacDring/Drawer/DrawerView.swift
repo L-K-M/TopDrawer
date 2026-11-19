@@ -37,6 +37,9 @@ struct DrawerView: View {
     /// Keyboard focus target. The filter field is focused on open (type-to-find).
     /// The notes editor is a web view and owns its own focus, so it is not a case here.
     @FocusState private var focus: Field?
+    /// Set when type-to-find began outside the filter field, so focusing the field
+    /// keeps what was typed instead of selecting it.
+    @State private var placeCaretAtEndOnFocus = false
     private enum Field { case search, groupName }
 
     private let contentSpace = "topdrawer.drawer.content"
@@ -80,7 +83,8 @@ struct DrawerView: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if model.isSearchable { searchBar }
+            // A small drawer hides the field until its first keystroke starts a search.
+            if model.isSearchable || model.isSearching { searchBar }
             bodyContent
         }
         .padding(14)
@@ -112,7 +116,25 @@ struct DrawerView: View {
         .overlay(alignment: .topLeading) { draggedOverlay }
         .onPreferenceChange(SlotFramesKey.self) { slotFrames = $0 }
         .onPreferenceChange(ExternalDropTargetFramesKey.self) { model.externalDropTargetFrames = $0 }
-        .onChange(of: focus) { model.isEditingGroupName = $0 == .groupName }
+        .onChange(of: focus) { field in
+            model.isEditingGroupName = field == .groupName
+            // Focusing a field selects its text, so the next keystroke of a search that
+            // began outside the field would replace the letters typed so far.
+            guard field == .search, placeCaretAtEndOnFocus else { return }
+            placeCaretAtEndOnFocus = false
+            DispatchQueue.main.async {
+                (NSApp.keyWindow?.firstResponder as? NSTextView)?.moveToEndOfDocument(nil)
+            }
+        }
+        .onChange(of: model.searchFocusRequest) { _ in
+            placeCaretAtEndOnFocus = true
+            guard focus == .search else { focus = .search; return }
+            // The focus state still names the field although it lost first responder
+            // (the key went to the drawer instead). Re-focus through nil so the change
+            // above fires and the caret lands after what was typed.
+            focus = nil
+            DispatchQueue.main.async { focus = .search }
+        }
         .onDisappear { model.isEditingGroupName = false }
     }
 
