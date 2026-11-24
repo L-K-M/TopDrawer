@@ -62,8 +62,8 @@ jobs:
         uses: L-K-M/zai-code-review@7e2222dd5ea9f0c36f9c3683118752ab424d2b35
         with:
           ZAI_API_KEY: ${{ env.ZAI_API_KEY }}
-          # StepFun reviews routine chunks and backs up deep reviews.
-          # GLM remains the deep reviewer and fast-tier fallback.
+          # StepFun reviews routine chunks and rate-limited deep chunks.
+          # GLM remains the deep reviewer and fast-tier backstop.
           FAST_API_KEY: ${{ secrets.STEPFUN_API_KEY }}
           FAST_API_URL: https://api.stepfun.ai/step_plan/v1/chat/completions
           FAST_MODEL: step-5-preview
